@@ -161,3 +161,45 @@ async def test_two_turn_single_fight_integration():
     assert len(fighters) == 2
     assert fighters[1].pain == 5
     assert fighters[1].status == C.STATUS_UNCONSCIOUS
+
+
+
+@pytest.mark.asyncio
+async def test_draw_after_max_turns():
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "No progress",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            "narration": "Stalemate",
+            "delta": {"A": {}, "B": {}},
+            "fight_end": False,
+            "winner": None,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+
+    with (
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert result[C.LOG_TURN] == "2"
+
