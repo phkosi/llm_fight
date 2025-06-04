@@ -132,7 +132,7 @@ memory.
 The simulation is configured using an INI file (e.g., `config.ini` - to be created, or `config.py` handles defaults). Key settings include:
 
 ```ini
-[GLOBAL]
+[General]
 model              = llama3.2  ; Ollama model to use
 max_tokens_fighter = 24000     ; Max context tokens for fighter prompts
 max_tokens_judge   = 48000       ; Max context tokens for judge prompts
@@ -266,7 +266,7 @@ Details on contributing to the project will be added here.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE.md) (assuming MIT, please update if different).
+This project is licensed under the [MIT License](LICENSE) (assuming MIT, please update if different).
 
 ---
 © 2025 LLM Fighters Project
