@@ -4,6 +4,14 @@ import configparser
 from pathlib import Path
 from .engine import constants as C
 
+# Map legacy configuration keys to their new names so older config files
+# remain compatible with the current constants. Keys are defined as
+# (section, old_key): new_key pairs.
+KEY_RENAMES = {
+    (C.CONFIG_GENERAL, "llm_model"): C.CONFIG_LLAMA_DEFAULT_MODEL,
+    (C.CONFIG_GENERAL, "temperature"): C.CONFIG_LLAMA_TEMPERATURE,
+}
+
 DEFAULTS = {
     C.CONFIG_GENERAL: {
         C.CONFIG_LLAMA_DEFAULT_MODEL: 'llama3.2',
@@ -38,6 +46,14 @@ class Config:
         # According to docs, values from files read later should take precedence.
         if self.path.exists():
             self.cp.read(self.path)
+            # Apply legacy key migrations so old config files continue to work
+            for (section, old_key), new_key in KEY_RENAMES.items():
+                if self.cp.has_option(section, old_key):
+                    value = self.cp.get(section, old_key)
+                    if not self.cp.has_section(section):
+                        self.cp.add_section(section)
+                    self.cp[section][new_key] = value
+                    self.cp.remove_option(section, old_key)
 
     # --- public API -----------------------------------------------------
     def save(self):
