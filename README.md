@@ -114,6 +114,11 @@ judge_log_window   = 9999        ; Number of recent turns for judge (effectively
 runs               = 1000        ; Number of simulation runs
 seed               = 42          ; PRNG seed for reproducibility
 mirror             = yes         ; If 'yes', runs each matchup twice, swapping A and B
+
+[FighterA]
+class       = Barbarian
+loadout     = axe and shield
+environment = dusty arena
 ```
 The `config.py` file is responsible for loading and managing these configurations.
 
@@ -180,6 +185,9 @@ class FighterState:
     buffs: list[Effect] = field(default_factory=list)
     debuffs: list[Effect] = field(default_factory=list)
     status: Literal['fighting','unconscious','dead'] = 'fighting'
+    class_: str = 'Generic Fighter'
+    loadout: str = 'their bare fists and wits'
+    environment: str = 'an open arena'
 ```
 Body part presets like `humanoid` and `quadruped` are defined in `src/engine/anatomy.py`.
 

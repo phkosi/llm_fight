@@ -22,6 +22,11 @@ DEFAULTS = {
         C.CONFIG_RUNS: '1000',
         C.CONFIG_SEED: '42',
         C.CONFIG_MIRROR: 'yes',
+    },
+    C.CONFIG_DEFAULTS: {
+        C.CONFIG_FIGHTER_CLASS: 'Generic Fighter',
+        C.CONFIG_FIGHTER_LOADOUT: 'their bare fists and wits',
+        C.CONFIG_FIGHTER_ENVIRONMENT: 'an open arena',
     }
 }
 
@@ -99,6 +104,29 @@ class Config:
         if not self.cp.has_section(section):
             self.cp.add_section(section)
         self.cp[section][key] = str(value)
+
+    def get_fighter_settings(self, fighter_id: str) -> dict:
+        """Return class, loadout, and environment for a fighter."""
+        return {
+            'class_': self.get(
+                fighter_id,
+                C.CONFIG_FIGHTER_CLASS,
+                str,
+                fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_CLASS, str),
+            ),
+            'loadout': self.get(
+                fighter_id,
+                C.CONFIG_FIGHTER_LOADOUT,
+                str,
+                fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_LOADOUT, str),
+            ),
+            'environment': self.get(
+                fighter_id,
+                C.CONFIG_FIGHTER_ENVIRONMENT,
+                str,
+                fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_ENVIRONMENT, str),
+            ),
+        }
 
 # convenience singleton
 CONFIG = Config()
