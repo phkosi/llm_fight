@@ -20,6 +20,7 @@ pydantic==2.11.5
 pydantic_core==2.33.2
 Pygments==2.19.1
 pytest==8.4.0
+pytest-asyncio==1.0.0
 referencing==0.36.2
 rich==14.0.0
 rpds-py==0.25.1
