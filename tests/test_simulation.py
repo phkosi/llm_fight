@@ -9,15 +9,6 @@ from src.state import FighterState # Keep for spec
 from src.engine import constants as C
 from src.config import CONFIG
 
-# create_mock_fighter_state might not be used if we are creating MagicMocks directly in the test
-# For now, let it be, or remove if truly unused by the final version of the test.
-def create_mock_fighter_state(id_char):
-    # This function's previous logic of patching PRESETS is not directly
-    # relevant if FighterState.from_preset is fully mocked in the test itself.
-    # However, if other tests use it, it should be kept or refactored.
-    # For this test, we are bypassing its direct use for the instances inside _single_fight.
-    pass # Placeholder if we decide to remove/change its use
-
 @pytest.mark.asyncio
 @patch('src.simulation.get_fighter_attempt', new_callable=AsyncMock)
 @patch('src.simulation.judge_phase1', new_callable=AsyncMock)
