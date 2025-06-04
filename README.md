@@ -137,10 +137,9 @@ llm_fight/
 │   └── engine/               # Tests for the engine components
 ├── .gitignore                # Specifies intentionally untracked files
 ├── config.py                 # Configuration loader and migration
-├── Design_doc.md             # Detailed design document
-├── improve.md                # (Assumed) Document for tracking improvements
 ├── docs/
 │   └── DEVELOPMENT_PLAN.md   # Ongoing development roadmap
+│   └── Design_doc.md         # Detailed design document
 ├── README.md                 # This file
 └── run.py                    # (Assumed) A script to run/launch the application
 ```
