@@ -75,6 +75,9 @@ def mock_fighter_state():
     fighter.heat = 5
     fighter.buffs = [Effect(name="Strength Buff", magnitude=1, ttl=2, on_apply="Stronger")]
     fighter.debuffs = [Effect(name="Weakness Debuff", magnitude=1, ttl=1, on_apply="Weaker")]
+    fighter.class_ = "Barbarian"
+    fighter.loadout = "axe and shield"
+    fighter.environment = "dusty arena"
     return fighter
 
 @pytest.fixture
@@ -133,12 +136,12 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         expected_exhaustion_desc = describe_exhaustion(mock_fighter_state.exhaustion)
         expected_heat_desc = describe_heat(mock_fighter_state.heat)
         expected_effects_list = "Strength Buff, Weakness Debuff"
-        expected_loadout = "their bare fists and wits"
+        expected_loadout = mock_fighter_state.loadout
         
         expected_system_content = FIGHTER_SYSTEM_PROMPT.format(
             name=mock_fighter_state.id,
-            class_="Generic Fighter", 
-            environment="an open arena",
+            class_=mock_fighter_state.class_,
+            environment=mock_fighter_state.environment,
             pain_desc=expected_pain_desc,
             exhaustion_desc=expected_exhaustion_desc,
             heat_desc=expected_heat_desc,
@@ -181,15 +184,16 @@ async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_
 # Minimal FighterState for testing
 class MockFighterState(FighterState):
     def __init__(self, id, pain=0, exhaustion=0, heat=0, buffs=None, debuffs=None):
-        super().__init__(id, {"body": {}}, [], []) # Provide minimal valid anatomy and move list
-        self.id = id
-        self.pain = pain
-        self.exhaustion = exhaustion
-        self.heat = heat
-        self.buffs = buffs if buffs is not None else []
-        self.debuffs = debuffs if debuffs is not None else []
-        # Add other attributes if fighter.py directly uses them and they are not covered by base init
-        self.status = "conscious"
+        super().__init__(
+            id=id,
+            parts={"body": {}},
+            pain=pain,
+            exhaustion=exhaustion,
+            heat=heat,
+            buffs=buffs if buffs is not None else [],
+            debuffs=debuffs if debuffs is not None else [],
+            status="conscious",
+        )
 
 
 @pytest.mark.asyncio

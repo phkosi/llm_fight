@@ -9,6 +9,7 @@ from .rng import rand, choice # Use project's seeded RNG and added choice import
 from .anatomy import BodyPart, TissueLayer, PRESETS
 from .engine import constants as C # Added import
 from .engine.logger import logger # Import the logger
+from .config import CONFIG
 
 @dataclass
 class Effect:
@@ -38,14 +39,26 @@ class FighterState:
     buffs: List[Effect] = field(default_factory=list)
     debuffs: List[Effect] = field(default_factory=list)
     status: Literal[C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD] = C.STATUS_FIGHTING # Changed to use constants
+    class_: str = "Generic Fighter"
+    loadout: str = "their bare fists and wits"
+    environment: str = "an open arena"
 
     @classmethod
     def from_preset(cls, id_: str, preset_name: str) -> FighterState:
         """Creates a FighterState instance from a predefined anatomical preset."""
         preset = PRESETS[preset_name]
-        # Use deepcopy to ensure that BodyPart and TissueLayer objects are new instances
-        # and not shared across different FighterState instances or modified in the PRESET itself.
-        return cls(id=id_, parts=copy.deepcopy(preset.parts))
+        # Use deepcopy so presets aren't mutated across fighters
+        parts_copy = copy.deepcopy(preset.parts)
+
+        settings = CONFIG.get_fighter_settings(id_)
+
+        return cls(
+            id=id_,
+            parts=parts_copy,
+            class_=settings['class_'],
+            loadout=settings['loadout'],
+            environment=settings['environment'],
+        )
 
     # ------------------ utilities --------------------------------------
     def to_json(self) -> Dict[str, Any]:

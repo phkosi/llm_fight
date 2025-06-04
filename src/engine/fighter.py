@@ -43,8 +43,7 @@ async def get_fighter_attempt(fighter: FighterState, opponent: FighterState, rec
     heat_desc = describe_heat(fighter.heat)
     effects_list = ", ".join([e.name for e in fighter.buffs + fighter.debuffs]) or "none"
     
-    # TODO: Implement actual loadout system. For now, placeholder.
-    loadout = "their bare fists and wits"
+    loadout = fighter.loadout
     
     # If turn_window is not explicitly passed, try to get it from config, else default.
     # This allows _single_fight to control it, or use a global default.
@@ -55,9 +54,9 @@ async def get_fighter_attempt(fighter: FighterState, opponent: FighterState, rec
     current_recent_log = recent_log if recent_log else "The fight has just begun! Nothing to report yet."
 
     system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
-        name=fighter.id, 
-        class_="Generic Fighter", # Placeholder, to be dynamic later (e.g. from FighterState)
-        environment="an open arena", # Placeholder, to be dynamic later (e.g. from simulation settings)
+        name=fighter.id,
+        class_=fighter.class_,
+        environment=fighter.environment,
         pain_desc=pain_desc,
         exhaustion_desc=exhaustion_desc,
         heat_desc=heat_desc,

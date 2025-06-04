@@ -14,6 +14,8 @@ temperature = 0.75
 [FighterA]
 name = Arnold
 class = Barbarian
+loadout = axe and shield
+environment = dusty arena
 
 [NonExistentSection]
 key = value
@@ -39,6 +41,12 @@ def test_config_loading_correct_values(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int) == 5
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float) == 0.75
     assert temp_config_instance.get("FighterA", "name", str) == "Arnold"
+
+def test_get_fighter_settings(temp_config_instance):
+    settings = temp_config_instance.get_fighter_settings("FighterA")
+    assert settings["class_"] == "Barbarian"
+    assert settings["loadout"] == "axe and shield"
+    assert settings["environment"] == "dusty arena"
 
 def test_config_get_with_type_conversion(temp_config_instance):
     assert isinstance(temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int), int)

@@ -4,7 +4,6 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 
 ## Outstanding Tasks
 
-- **Dynamic Loadouts, Classes, and Environments**: Allow fighters and environments to be defined via configuration files so matches can vary.
 - **LLM Interaction Robustness**: Continue refining prompts, response parsing, and error handling to better cope with unexpected LLM outputs.
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
 
@@ -20,4 +19,5 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - Configuration Loading Tests Passing
 - Async Batch Concurrency Introduced
 - Structured Combat Log Implemented
+- Dynamic Loadouts, Classes, and Environments
 - Initial improvements for LLM Interaction Robustness: Judge Phase1 now receives recent combat log context

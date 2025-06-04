@@ -133,6 +133,9 @@ CONFIG_MIRROR = "mirror" # Added config key
 CONFIG_MAX_TURNS = "max_turns" # Added config key for simulation
 CONFIG_CONCURRENT_RUNS = "concurrent_runs" # New config key controlling async concurrency
 CONFIG_DEFAULTS = "DEFAULTS" # For configparser default section
+CONFIG_FIGHTER_CLASS = "class"  # Per-fighter class
+CONFIG_FIGHTER_LOADOUT = "loadout"  # Per-fighter starting gear
+CONFIG_FIGHTER_ENVIRONMENT = "environment"  # Fighting environment
 
 # Prompting
 CONTEXT_PAIN_DESCRIPTION = "pain_description"
