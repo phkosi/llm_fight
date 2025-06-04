@@ -107,25 +107,53 @@ This command will execute the number of simulation runs specified in the configu
 
 ## Discord Bot
 
-The project includes a lightweight Discord bot for running fights in a Discord channel. To use it you first need a Discord application with a bot token. Create one at <https://discord.com/developers>, invite it to your server and copy the token. Configure the bot in your INI file:
+This project ships with a simple Discord bot that lets you host fights in a
+Discord server. The steps below walk through creating the bot application,
+configuring `llmfight`, and running the bot. No prior Discord experience is
+assumed.
 
-```ini
-[DISCORD]
-discord_token = your-bot-token       ; required
-discord_channel = channel-name-or-id ; optional, limit commands to this channel
-```
+1. **Create a Discord application and bot token**
+   1. Visit <https://discord.com/developers/applications> and log in.
+   2. Click **New Application**, give it a name, and confirm.
+   3. In the sidebar choose **Bot** and click **Add Bot**. Use the **Reset
+      Token** button to reveal the token and copy it somewhere safe. This token
+      allows the bot to log in – keep it private.
 
-`discord_channel` is optional. When provided, the bot only responds to commands
-from that channel.
+2. **Invite the bot to your server**
+   1. In the developer portal open **OAuth2 → URL Generator**.
+   2. Under **Scopes** tick `bot` and `applications.commands`.
+   3. Under **Bot Permissions** select at minimum **Send Messages** and **Use
+      Application Commands**.
+   4. Copy the generated URL and open it in your browser to invite the bot to a
+      server where you have permission to add members.
 
-```bash
-python -m src.discord_bot
-```
+3. **Install project dependencies** (if you have not done so already):
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-When running, the bot registers the `/fight` command group in your server.
-Use `/fight start` to begin a new fight session, `/fight status` to check the
-current session, and `/fight stop` to end it. The bot keeps a single session in
-memory.
+4. **Configure `llmfight.ini`**
+   Create a file named `llmfight.ini` in the project root (or edit the existing
+   one) and add the following section:
+
+   ```ini
+   [DISCORD]
+   discord_token = your-bot-token       ; required
+   discord_channel = channel-name-or-id ; optional, limit commands to this channel
+   ```
+
+   The `discord_channel` option is optional. When provided, the bot only
+   responds to commands issued from that channel.
+
+5. **Run the bot**
+   ```bash
+   python -m src.discord_bot
+   ```
+
+   On first start Discord may take a minute to register the slash commands.
+   Once ready, use `/fight start` to begin a session, `/fight status` to check
+   on it, and `/fight stop` to end it. Only one fight session is kept in memory
+   at a time.
 
 ## Configuration
 
