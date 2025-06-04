@@ -78,11 +78,23 @@ config.py          # INI loader & migration
     python -m venv .venv
     source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
     ```
-3.  Install dependencies (assuming a `requirements.txt` will be added):
+3.  Install runtime dependencies:
     ```bash
     pip install -r requirements.txt
     ```
-    *(If `requirements.txt` is not yet available, you may need to manually install libraries like `typer`, `jsonschema`, etc.)*
+4.  For development and testing, install the additional dev requirements:
+    ```bash
+    pip install -r requirements-dev.txt
+    ```
+
+### Running Tests
+
+With the dev dependencies installed you can execute the test suite using
+`pytest`:
+
+```bash
+pytest -q
+```
 
 ## Running the Simulation
 
@@ -257,4 +269,4 @@ Details on contributing to the project will be added here.
 This project is licensed under the [MIT License](LICENSE.md) (assuming MIT, please update if different).
 
 ---
-© 2025 LLM Fighters Project 
+© 2025 LLM Fighters Project
