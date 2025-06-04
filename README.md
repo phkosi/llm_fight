@@ -139,9 +139,10 @@ llm_fight/
 ├── config.py                 # Configuration loader and migration
 ├── Design_doc.md             # Detailed design document
 ├── improve.md                # (Assumed) Document for tracking improvements
+├── docs/
+│   └── DEVELOPMENT_PLAN.md   # Ongoing development roadmap
 ├── README.md                 # This file
-├── run.py                    # (Assumed) A script to run/launch the application
-└── TODO.md                   # (Assumed) Todo list for development tasks
+└── run.py                    # (Assumed) A script to run/launch the application
 ```
 
 ## Data Model
