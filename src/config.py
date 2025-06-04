@@ -22,6 +22,7 @@ DEFAULTS = {
         C.CONFIG_RUNS: '1000',
         C.CONFIG_SEED: '42',
         C.CONFIG_MIRROR: 'yes',
+        C.CONFIG_CONCURRENT_RUNS: '1',
     }
 }
 

@@ -15,6 +15,7 @@ from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
 
 RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
+CONCURRENT_RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
 async def _single_fight() -> Dict[str, str]:
     """
@@ -142,8 +143,15 @@ async def run_batch():
         The Path object for the created CSV file.
     """
     res = []
-    for _ in range(RUNS):
-        res.append(await _single_fight())
+    sem = asyncio.Semaphore(CONCURRENT_RUNS)
+
+    async def sem_fight():
+        async with sem:
+            return await _single_fight()
+
+    tasks = [asyncio.create_task(sem_fight()) for _ in range(RUNS)]
+    for coro in asyncio.as_completed(tasks):
+        res.append(await coro)
     # write CSV
     path = Path('sim_results.csv')
     with path.open('w', newline='') as fp:
