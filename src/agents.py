@@ -1,13 +1,25 @@
 """Async wrappers for calling Ollama chat completions."""
 import aiohttp
 import asyncio
+import os
 from typing import List, Dict, Any
 
 from .config import CONFIG
 from .engine import constants as C
 from .engine.logger import logger
 
-OLLAMA_URL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str, fallback='http://localhost:11434/v1/chat/completions')
+def get_ollama_url() -> str:
+    """Return the Ollama endpoint, falling back to config if the API_URL env
+    variable is not set."""
+    return os.environ.get(
+        "API_URL",
+        CONFIG.get(
+            C.CONFIG_GENERAL,
+            C.CONFIG_LLAMA_API_URL,
+            str,
+            fallback="http://localhost:11434/v1/chat/completions",
+        ),
+    )
 
 HEADERS = {
     C.CONTENT_TYPE: C.APPLICATION_JSON
@@ -22,7 +34,7 @@ BEST_OF_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 async def _post_json(payload: Dict[str, Any]):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(OLLAMA_URL, json=payload, headers=HEADERS, timeout=300) as resp:
+            async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
                 return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
@@ -30,7 +42,7 @@ async def _post_json(payload: Dict[str, Any]):
         logger.error(f"Ollama API request failed with status {e.status}: {e.message}. Payload: {payload}")
         raise
     except aiohttp.ClientConnectionError as e:
-        logger.error(f"Ollama API connection error: {e}. Is Ollama running at {OLLAMA_URL}?")
+        logger.error(f"Ollama API connection error: {e}. Is Ollama running at {get_ollama_url()}?")
         raise
     except aiohttp.ContentTypeError as e:
         logger.error(f"Ollama API response content type error: {e}. Expected JSON. Payload: {payload}")

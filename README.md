@@ -203,6 +203,15 @@ discord_channel = channel-name-or-id ; optional, limit commands to this channel
 ```
 The `config.py` file is responsible for loading and managing these configurations.
 
+To connect to a remote Ollama instance (for example, if you're tunneling
+the service with ngrok), set the `API_URL` environment variable to the full
+API endpoint before running the application:
+
+```bash
+export API_URL="https://your-ngrok-url.ngrok-free.app/v1/chat/completions"
+```
+
+
 ## Directory Structure
 
 ```
