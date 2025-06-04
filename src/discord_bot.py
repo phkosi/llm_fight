@@ -57,7 +57,17 @@ bot.tree.add_command(fight_group)
 
 
 def run_bot() -> None:
-    token = CONFIG.get(C.CONFIG_DISCORD, C.CONFIG_DISCORD_TOKEN, str, fallback="")
+    token = CONFIG.get(C.CONFIG_DISCORD, C.CONFIG_DISCORD_TOKEN, str, fallback="").strip()
+    channel = CONFIG.get(C.CONFIG_DISCORD, C.CONFIG_DISCORD_CHANNEL, str, fallback="").strip()
+
     if not token:
         raise RuntimeError("Discord token not configured")
-    bot.run(token)
+
+    if not channel:
+        raise RuntimeError("Discord channel not configured")
+
+    try:
+        bot.run(token)
+    except Exception as e:  # Catch discord.py startup errors
+        logger.error("Failed to start Discord bot", exc_info=True)
+        raise RuntimeError(f"Failed to start Discord bot: {e}") from e
