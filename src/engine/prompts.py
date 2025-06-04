@@ -12,9 +12,9 @@ Respond with ONE sentence describing what you attempt next. ≤ 30 words.
 (No outcome narration. Raw text only.)
 """
 
-# Note: Judge P1 Schema was updated based on improve.md's implications.
+# Note: Judge P1 Schema was updated based on design discussions.
 # This prompt reflects the schema in validation.py (judgement_text, attempt_A_valid, attempt_A_prob, etc.)
-# It combines the role from Design_doc.md with the specific schema requirements.
+# It combines the role from docs/Design_doc.md with the specific schema requirements.
 JUDGE_P1_SYSTEM_PROMPT = """
 You are an impartial combat arbiter. Analyze the attempts from Fighter A and Fighter B.
 Your role is to determine the validity of each attempt and the probability of its success.
