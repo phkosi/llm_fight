@@ -1,0 +1,221 @@
+import pytest
+from src.engine.fighter import describe_pain, describe_exhaustion, describe_heat
+import asyncio
+from unittest.mock import patch, AsyncMock, ANY, MagicMock
+from src.engine.fighter import get_fighter_attempt
+from src.engine.prompts import FIGHTER_SYSTEM_PROMPT # To verify prompt formatting
+from src.engine import constants as C
+from src.state import FighterState, Effect # For creating mock states
+
+# Tests for describe_pain
+@pytest.mark.parametrize("pain_level, expected_description", [
+    (0, "no pain"),
+    (5, "minor aches"),
+    (10, "noticeable pain"), # Boundary value for < 30
+    (29, "noticeable pain"),
+    (30, "moderate pain, distracting"), # Boundary value for < 50
+    (49, "moderate pain, distracting"),
+    (50, "severe pain, hard to focus"), # Boundary value for < 70
+    (69, "severe pain, hard to focus"),
+    (70, "crippling pain"), # Boundary value for < 90
+    (89, "crippling pain"),
+    (90, "unbearable agony"),
+    (100, "unbearable agony"),
+    (-5, "no pain") # Handles below 0
+])
+def test_describe_pain(pain_level, expected_description):
+    assert describe_pain(pain_level) == expected_description
+
+# Tests for describe_exhaustion
+@pytest.mark.parametrize("exhaustion_level, expected_description", [
+    (0, "fully rested"),
+    (5, "slightly winded"),
+    (10, "feeling tired"),
+    (29, "feeling tired"),
+    (30, "heavily fatigued"),
+    (49, "heavily fatigued"),
+    (50, "exhausted, movement is a struggle"),
+    (69, "exhausted, movement is a struggle"),
+    (70, "utterly spent"),
+    (89, "utterly spent"),
+    (90, "on the verge of collapse"),
+    (100, "on the verge of collapse"),
+    (-10, "fully rested")
+])
+def test_describe_exhaustion(exhaustion_level, expected_description):
+    assert describe_exhaustion(exhaustion_level) == expected_description
+
+# Tests for describe_heat
+@pytest.mark.parametrize("heat_level, expected_description", [
+    (0, "normal body temperature"),
+    (5, "slightly warm"),
+    (10, "feeling hot"),
+    (29, "feeling hot"),
+    (30, "sweating profusely, very hot"),
+    (49, "sweating profusely, very hot"),
+    (50, "overheating, dizziness sets in"),
+    (69, "overheating, dizziness sets in"),
+    (70, "dangerously overheated, nearing heatstroke"),
+    (89, "dangerously overheated, nearing heatstroke"),
+    (90, "critical heat levels, system failure imminent"),
+    (100, "critical heat levels, system failure imminent"),
+    (-1, "normal body temperature")
+])
+def test_describe_heat(heat_level, expected_description):
+    assert describe_heat(heat_level) == expected_description
+
+@pytest.fixture
+def mock_fighter_state():
+    # Create a FighterState with minimal valid fields for testing get_fighter_attempt prompt generation
+    # The actual body parts don't critically affect the prompt formatting being tested, 
+    # beyond their existence for a valid FighterState.
+    fighter = FighterState(id="FighterA", parts={}) # Simplified: empty parts dict
+    fighter.pain = 25
+    fighter.exhaustion = 40
+    fighter.heat = 5
+    fighter.buffs = [Effect(name="Strength Buff", magnitude=1, ttl=2, on_apply="Stronger")]
+    fighter.debuffs = [Effect(name="Weakness Debuff", magnitude=1, ttl=1, on_apply="Weaker")]
+    return fighter
+
+@pytest.fixture
+def mock_opponent_state():
+    opponent = FighterState(id="FighterB", parts={}) # Simplified
+    return opponent
+
+@pytest.mark.asyncio
+async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_state):
+    mock_chat_response = "I charge forward and punch! "
+    expected_stripped_response = "I charge forward and punch!"
+    recent_log_input = "FighterB cast a spell."
+    turn_window_input = 3
+    
+    # Mock config values that get_fighter_attempt uses
+    mock_config_get = MagicMock()
+    config_values = {
+        (C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, 5): turn_window_input, # fallback is 5 if not passed
+        (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, 256): 150,
+        (C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, 1): 1,
+    }
+    # Define a side_effect for mock_config_get
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        return config_values.get((section, key, cast_type, fallback), fallback)
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (patch('src.engine.fighter.chat', new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
+          patch('src.engine.fighter.CONFIG.get', mock_config_get)): 
+        
+        actual_response = await get_fighter_attempt(
+            fighter=mock_fighter_state, 
+            opponent=mock_opponent_state, 
+            recent_log=recent_log_input,
+            turn_window=turn_window_input # Explicitly pass turn_window
+        )
+        
+        assert actual_response == expected_stripped_response
+        mock_chat_func.assert_called_once()
+        
+        # Verify chat arguments
+        call_args = mock_chat_func.call_args[0][0] # Messages list
+        call_kwargs = mock_chat_func.call_args[1]
+        
+        assert call_kwargs['max_tokens'] == 150
+        assert call_kwargs['best_of'] == 1
+        
+        assert len(call_args) == 2
+        system_message = call_args[0]
+        user_message = call_args[1]
+        
+        assert system_message[C.AGENT_ROLE] == C.AGENT_SYSTEM
+        assert user_message[C.AGENT_ROLE] == C.AGENT_USER
+        
+        # Verify system prompt content (the more complex part)
+        expected_pain_desc = describe_pain(mock_fighter_state.pain)
+        expected_exhaustion_desc = describe_exhaustion(mock_fighter_state.exhaustion)
+        expected_heat_desc = describe_heat(mock_fighter_state.heat)
+        expected_effects_list = "Strength Buff, Weakness Debuff"
+        expected_loadout = "their bare fists and wits"
+        
+        expected_system_content = FIGHTER_SYSTEM_PROMPT.format(
+            name=mock_fighter_state.id,
+            class_="Generic Fighter", 
+            environment="an open arena",
+            pain_desc=expected_pain_desc,
+            exhaustion_desc=expected_exhaustion_desc,
+            heat_desc=expected_heat_desc,
+            effects_list=expected_effects_list,
+            turn_window=turn_window_input,
+            recent_log=recent_log_input,
+            loadout=expected_loadout
+        )
+        assert system_message[C.AGENT_CONTENT] == expected_system_content
+        
+        expected_user_content = f"It's your turn to act, {mock_fighter_state.id}. Opponent {mock_opponent_state.id} is visible. What do you do?"
+        assert user_message[C.AGENT_CONTENT] == expected_user_content
+
+@pytest.mark.asyncio
+async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_opponent_state):
+    # Test when turn_window is NOT passed to get_fighter_attempt, so it uses config
+    mock_chat_response = "I wait."
+    default_config_turn_window = 7
+
+    mock_config_get = MagicMock()
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_CONTEXT and key == C.CONFIG_FIGHTER_LOG_WINDOW and cast_type == int:
+            return default_config_turn_window
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 100
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+    mock_config_get.side_effect = config_get_side_effect
+    
+    with (patch('src.engine.fighter.chat', new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
+          patch('src.engine.fighter.CONFIG.get', mock_config_get)):
+
+        await get_fighter_attempt(fighter=mock_fighter_state, opponent=mock_opponent_state, recent_log="Nothing happened.")
+        
+        system_message_content = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
+        # Check if the turn_window from config was used in the prompt
+        assert f"Last {default_config_turn_window} turns:" in system_message_content 
+
+# Minimal FighterState for testing
+class MockFighterState(FighterState):
+    def __init__(self, id, pain=0, exhaustion=0, heat=0, buffs=None, debuffs=None):
+        super().__init__(id, {"body": {}}, [], []) # Provide minimal valid anatomy and move list
+        self.id = id
+        self.pain = pain
+        self.exhaustion = exhaustion
+        self.heat = heat
+        self.buffs = buffs if buffs is not None else []
+        self.debuffs = debuffs if debuffs is not None else []
+        # Add other attributes if fighter.py directly uses them and they are not covered by base init
+        self.status = "conscious"
+
+
+@pytest.mark.asyncio
+@patch('src.engine.fighter.chat', new_callable=AsyncMock) # Patching chat in the correct module
+async def test_get_fighter_attempt_calls_chat(mock_chat):
+    fighter_a = MockFighterState(id="FighterA")
+    fighter_b = MockFighterState(id="FighterB")
+    
+    mock_chat.return_value = "FighterA attacks FighterB" # Mocked chat response
+
+    await get_fighter_attempt(fighter_a, fighter_b, recent_log="Some log", turn_window=3)
+
+    mock_chat.assert_called_once()
+    call_args = mock_chat.call_args[0][0] # Get the first argument (the list of messages)
+    
+    # Check system prompt structure (more detailed checks can be added)
+    assert len(call_args) == 2
+    assert call_args[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
+    assert "FighterA" in call_args[0][C.AGENT_CONTENT]
+    assert "no pain" in call_args[0][C.AGENT_CONTENT] # Default pain
+    assert "fully rested" in call_args[0][C.AGENT_CONTENT] # Default exhaustion
+    assert "normal body temperature" in call_args[0][C.AGENT_CONTENT] # Default heat
+    assert "none" in call_args[0][C.AGENT_CONTENT] # Default effects
+    assert f"Last {3} turns:\nSome log" in call_args[0][C.AGENT_CONTENT]
+
+    # Check user prompt
+    assert call_args[1][C.AGENT_ROLE] == C.AGENT_USER
+    assert "FighterA" in call_args[1][C.AGENT_CONTENT]
+    assert "FighterB" in call_args[1][C.AGENT_CONTENT] 

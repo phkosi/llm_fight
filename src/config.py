@@ -1,0 +1,90 @@
+"""Configuration loader and writer for LLM Fight Engine (INI‑style)."""
+from __future__ import annotations
+import configparser
+from pathlib import Path
+from .engine import constants as C
+
+DEFAULTS = {
+    C.CONFIG_GENERAL: {
+        C.CONFIG_LLAMA_DEFAULT_MODEL: 'llama3.2',
+        C.CONFIG_MAX_TOKENS_FIGHTER: '24000',
+        C.CONFIG_MAX_TOKENS_JUDGE: '48000',
+        C.CONFIG_LLAMA_TEMPERATURE: '0.8',
+        C.CONFIG_BEST_OF_FIGHTER: '3',
+        C.CONFIG_BEST_OF_JUDGE: '2',
+        C.CONFIG_MAX_RETRIES: '2',
+    },
+    C.CONFIG_CONTEXT: {
+        C.CONFIG_FIGHTER_LOG_WINDOW: '10',
+        C.CONFIG_JUDGE_LOG_WINDOW: '9999',
+    },
+    C.CONFIG_SIMULATION: {
+        C.CONFIG_RUNS: '1000',
+        C.CONFIG_SEED: '42',
+        C.CONFIG_MIRROR: 'yes',
+    }
+}
+
+class Config:
+    """Simple wrapper around configparser with migration helpers."""
+    def __init__(self, path: Path | str = 'llmfight.ini'):
+        self.path = Path(path)
+        self.cp = configparser.ConfigParser()
+
+        # Load DEFAULTS first using read_dict.
+        self.cp.read_dict(DEFAULTS)
+        
+        # Then, load the user's file if it exists. 
+        # According to docs, values from files read later should take precedence.
+        if self.path.exists():
+            self.cp.read(self.path)
+
+    # --- public API -----------------------------------------------------
+    def save(self):
+        with self.path.open('w') as fp:
+            self.cp.write(fp)
+
+    def get(self, section: str, key: str, cast=str, fallback=None):
+        has_section = self.cp.has_section(section)
+        has_option = self.cp.has_option(section, key) if has_section else False
+
+        if cast is bool:
+            try:
+                # If key/section is missing, getboolean will raise NoOptionError/NoSectionError
+                # These are caught below if fallback is None.
+                if not has_option and fallback is not None:
+                    return bool(fallback)
+                return self.cp.getboolean(section, key)
+            except ValueError: # Raised by getboolean for invalid boolean string for an existing key
+                if fallback is not None: return bool(fallback)
+                original_value = "<not found>"
+                if has_option: # Should always be true if ValueError from getboolean on existing key
+                    original_value = self.cp.get(section, key)
+                raise ValueError(f"Value for '{key}' in section '{section}' ('{original_value}') is not a valid boolean and no fallback provided.")
+            except (configparser.NoSectionError, configparser.NoOptionError):
+                if fallback is not None: return bool(fallback) # Should have been caught by `not has_option` already
+                raise # Re-raise if no fallback
+
+        # For other types
+        if not has_option: # Key or section missing
+            if fallback is not None:
+                return fallback
+            # Re-raise the specific error if no fallback
+            if not has_section:
+                raise configparser.NoSectionError(section)
+            else: # Section exists, but option doesn't
+                raise configparser.NoOptionError(key, section)
+
+        val_str = self.cp.get(section, key)
+        try:
+            return cast(val_str)
+        except ValueError as e:
+            raise ValueError(f"Failed to cast value '{val_str}' for key '{key}' in section '{section}' to {cast.__name__}: {e}") from e
+
+    def set(self, section: str, key: str, value):
+        if not self.cp.has_section(section):
+            self.cp.add_section(section)
+        self.cp[section][key] = str(value)
+
+# convenience singleton
+CONFIG = Config()
