@@ -2,7 +2,7 @@
 import asyncio
 import csv
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 from .state import FighterState
 from .rng import seed
@@ -12,6 +12,7 @@ from .config import CONFIG
 from .engine.fighter import get_fighter_attempt
 from .engine import constants as C
 from .engine.logger import logger
+from .engine.combat_log import CombatLog, CombatTurn
 
 RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
 
@@ -32,7 +33,7 @@ async def _single_fight() -> Dict[str, str]:
     B = FighterState.from_preset('B', 'humanoid')
     turn = 0
     outcome = None
-    combat_log: List[str] = [] # Initialize combat log
+    combat_log = CombatLog()
     fighter_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
     judge_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999) # For Judge P2
 
@@ -40,8 +41,7 @@ async def _single_fight() -> Dict[str, str]:
         turn += 1
 
         # Prepare recent log for fighters
-        start_index = max(0, len(combat_log) - fighter_log_window)
-        recent_log_snippet = "\n".join(combat_log[start_index:])
+        recent_log_snippet = combat_log.to_summary(last_n=fighter_log_window)
 
         # Fighters propose actions concurrently
         attemptA, attemptB = await asyncio.gather(
@@ -72,12 +72,11 @@ async def _single_fight() -> Dict[str, str]:
             # rolls['B'] remains False
         
         # Pass the judgement text to P2 for narration context, full states, and combat log
-        log_for_judge_start_index = max(0, len(combat_log) - judge_log_window)
-        judge_recent_log = "\n".join(combat_log[log_for_judge_start_index:])
+        judge_recent_log = combat_log.to_summary(last_n=judge_log_window)
 
         p2_input_state = {
-            'fighter_A': A.to_json(), 
-            'fighter_B': B.to_json(), 
+            'fighter_A': A.to_json(),
+            'fighter_B': B.to_json(),
             'p1_judgement': p1.get('judgement_text', ''),
             'p1_explanation': p1.get('explanation', ''),
             'combat_log_turns': len(combat_log),
@@ -85,18 +84,29 @@ async def _single_fight() -> Dict[str, str]:
         }
         p2 = await judge_phase2(p2_input_state, rolls)
 
-        # Add narration to combat log
-        if 'narration' in p2 and p2['narration']:
-            combat_log.append(f"Turn {turn}: {p2['narration']}")
+        turn_entry = CombatTurn(
+            turn=turn,
+            attempt_A=attemptA,
+            attempt_B=attemptB,
+            judge_p1=p1,
+            judge_p2=p2,
+            state_A_before=p2_input_state['fighter_A'],
+            state_B_before=p2_input_state['fighter_B'],
+        )
 
         # Apply deltas to fighter states
         if 'delta' in p2 and isinstance(p2['delta'], dict):
             A.apply_delta(p2['delta'].get('A', {}))
             B.apply_delta(p2['delta'].get('B', {}))
-        
+
         # Tick effects for both fighters AFTER deltas are applied for the turn
         A.apply_effects()
         B.apply_effects()
+
+        turn_entry.state_A_after = A.to_json()
+        turn_entry.state_B_after = B.to_json()
+
+        combat_log.append(turn_entry)
 
         # Check for fight end conditions
         if p2.get('fight_end', False):
