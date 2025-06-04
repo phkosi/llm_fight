@@ -86,6 +86,10 @@ config.py          # INI loader & migration
     ```bash
     pip install -r requirements-dev.txt
     ```
+5.  Copy the example configuration and customize as needed:
+    ```bash
+    cp llmfight.ini.example llmfight.ini
+    ```
 
 ### Running Tests
 
@@ -135,16 +139,17 @@ memory.
 
 ## Configuration
 
-The simulation is configured using an INI file (e.g., `config.ini` - to be created, or `config.py` handles defaults). Key settings include:
+The simulation is configured using `llmfight.ini`. Start by copying `llmfight.ini.example` to `llmfight.ini` and editing values as needed. Key settings include:
 
 ```ini
 [General]
-model              = llama3.2  ; Ollama model to use
-max_tokens_fighter = 24000     ; Max context tokens for fighter prompts
-max_tokens_judge   = 48000       ; Max context tokens for judge prompts
-best_of_fighter    = 3           ; Number of speculative completions for fighter actions
-best_of_judge      = 2           ; Number of speculative completions for judge phases
-max_retries        = 2           ; Max retries for LLM calls on validation failure
+ollama_default_model = llama3.2  ; Ollama model to use
+max_tokens_fighter   = 24000     ; Max context tokens for fighter prompts
+max_tokens_judge     = 48000     ; Max context tokens for judge prompts
+ollama_temperature   = 0.8       ; Temperature for Ollama completions
+best_of_fighter      = 3         ; Number of speculative completions for fighter actions
+best_of_judge        = 2         ; Number of speculative completions for judge phases
+max_retries          = 2         ; Max retries for LLM calls on validation failure
 
 [CONTEXT]
 fighter_log_window = 10          ; Number of recent turns to include in fighter's context
