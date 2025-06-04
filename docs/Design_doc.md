@@ -35,18 +35,22 @@ Key features:
 ## 2  High‑Level Architecture
 
 ```
-engine/            # core logic
-├─ anatomy.py      # presets & tissue constants
-├─ state.py        # FighterState dataclasses + delta apply
-├─ prompts.py      # verbatim system templates
-├─ agents.py       # async Ollama client
-├─ judge.py        # phase‑1 & phase‑2 orchestration
-├─ fighter.py      # builds fighter context & queries LLM
-├─ validation.py   # JSON‑schema + guarded_call()
-├─ rng.py          # central PRNG
-└─ simulation.py   # batch self‑play harness
-cli.py             # Typer runner (play / simulate / add‑char)
-config.py          # INI loader & migration
+src/
+├── anatomy.py      # presets & tissue constants
+├── agents.py       # async Ollama client
+├── cli.py          # Typer runner (play / simulate / add‑char)
+├── config.py       # INI loader & migration
+├── engine/         # helper modules
+│   ├─ combat_log.py
+│   ├─ constants.py
+│   ├─ fighter.py
+│   ├─ logger.py
+│   └─ prompts.py
+├── judge.py        # phase‑1 & phase‑2 orchestration
+├── rng.py          # central PRNG
+├── simulation.py   # batch self‑play harness
+├── state.py        # FighterState dataclasses + delta apply
+└── validation.py   # JSON‑schema + guarded_call()
 ```
 
 ### 2.1  Turn Flow (simultaneous proposals)
