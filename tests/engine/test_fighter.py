@@ -87,7 +87,7 @@ def mock_opponent_state():
 
 @pytest.mark.asyncio
 async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_state):
-    mock_chat_response = "I charge forward and punch! "
+    mock_chat_response = ["I charge forward and punch! "]
     expected_stripped_response = "I charge forward and punch!"
     recent_log_input = "FighterB cast a spell."
     turn_window_input = 3
@@ -158,7 +158,7 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
 @pytest.mark.asyncio
 async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_opponent_state):
     # Test when turn_window is NOT passed to get_fighter_attempt, so it uses config
-    mock_chat_response = "I wait."
+    mock_chat_response = ["I wait."]
     default_config_turn_window = 7
 
     mock_config_get = MagicMock()
@@ -202,7 +202,7 @@ async def test_get_fighter_attempt_calls_chat(mock_chat):
     fighter_a = MockFighterState(id="FighterA")
     fighter_b = MockFighterState(id="FighterB")
     
-    mock_chat.return_value = "FighterA attacks FighterB" # Mocked chat response
+    mock_chat.return_value = ["FighterA attacks FighterB"]  # Mocked chat response
 
     await get_fighter_attempt(fighter_a, fighter_b, recent_log="Some log", turn_window=3)
 

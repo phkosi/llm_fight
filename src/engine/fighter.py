@@ -73,9 +73,10 @@ async def get_fighter_attempt(fighter: FighterState, opponent: FighterState, rec
     
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
     
-    txt = await chat(
-        [system, user], 
+    texts = await chat(
+        [system, user],
         max_tokens=CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256),
         best_of=CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1)
     )
-    return txt.strip() 
+    txt = texts[0]
+    return txt.strip()
