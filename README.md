@@ -109,6 +109,12 @@ python -m src.cli simulate
 ```
 This command will execute the number of simulation runs specified in the configuration file (see below) and output results to `sim_results.csv`.
 
+To run a single fight and display the winner:
+
+```bash
+python -m src.cli play
+```
+
 ## Discord Bot
 
 The project includes a lightweight Discord bot for running fights in a Discord channel. To use it you first need a Discord application with a bot token. Create one at <https://discord.com/developers>, invite it to your server and copy the token. Configure the bot in your INI file:
@@ -271,7 +277,7 @@ Details on contributing to the project will be added here.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE.md) (assuming MIT, please update if different).
+This project is licensed under the [MIT License](LICENSE) (assuming MIT, please update if different).
 
 ---
 © 2025 LLM Fighters Project

@@ -36,7 +36,9 @@ async def test_chat_single_call_success():
     mock_session_instance.__aenter__.return_value = mock_session_instance
     
     # Configure the .post method on the session instance
-    mock_session_instance.post = AsyncMock(return_value=mock_post_context_manager) 
+    # `aiohttp.ClientSession.post` returns a context manager directly,
+    # so use a regular MagicMock rather than AsyncMock.
+    mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
     # Patch aiohttp.ClientSession class.
     # When ClientSession() is called, it should return an object that is an async context manager.
@@ -90,8 +92,9 @@ async def test_chat_best_of_n_calls_success():
     # 3. Session instance mock
     mock_session_instance = AsyncMock()
     mock_session_instance.__aenter__.return_value = mock_session_instance
-    # session.post will be called N times, its .return_value (result of await) will be one of the context managers
-    mock_session_instance.post = AsyncMock(side_effect=mock_post_context_managers)
+    # session.post will be called N times and should return the context manager
+    # directly each time
+    mock_session_instance.post = MagicMock(side_effect=mock_post_context_managers)
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance) as mock_ClientSession_constructor:
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=best_of_n)
@@ -138,7 +141,7 @@ async def test_chat_http_error_raises_exception():
     # 3. Session instance mock
     mock_session_instance = AsyncMock()
     mock_session_instance.__aenter__.return_value = mock_session_instance
-    mock_session_instance.post = AsyncMock(return_value=mock_post_context_manager)
+    mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
         with pytest.raises(aiohttp.ClientResponseError):
@@ -153,7 +156,7 @@ async def test_chat_connection_error_raises_exception():
     mock_session_instance = AsyncMock()
     mock_session_instance.__aenter__.return_value = mock_session_instance # Returns itself on entering context
     # The post method itself raises the error
-    mock_session_instance.post = AsyncMock(side_effect=aiohttp.ClientConnectionError("Cannot connect"))
+    mock_session_instance.post = MagicMock(side_effect=aiohttp.ClientConnectionError("Cannot connect"))
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
         with pytest.raises(aiohttp.ClientConnectionError):
@@ -168,7 +171,7 @@ async def test_chat_timeout_error_raises_exception():
     mock_session_instance = AsyncMock()
     mock_session_instance.__aenter__.return_value = mock_session_instance
     # The post method itself raises the error
-    mock_session_instance.post = AsyncMock(side_effect=asyncio.TimeoutError())
+    mock_session_instance.post = MagicMock(side_effect=asyncio.TimeoutError())
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
         with pytest.raises(asyncio.TimeoutError):
@@ -183,7 +186,7 @@ async def test_chat_unexpected_error_raises_exception():
     mock_session_instance = AsyncMock()
     mock_session_instance.__aenter__.return_value = mock_session_instance
     # The post method itself raises the error
-    mock_session_instance.post = AsyncMock(side_effect=ValueError("Unexpected issue"))
+    mock_session_instance.post = MagicMock(side_effect=ValueError("Unexpected issue"))
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
         with pytest.raises(ValueError):

@@ -22,7 +22,7 @@ BEST_OF_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 async def _post_json(payload: Dict[str, Any]):
     try:
         async with aiohttp.ClientSession() as session:
-            async with await session.post(OLLAMA_URL, json=payload, headers=HEADERS, timeout=300) as resp:
+            async with session.post(OLLAMA_URL, json=payload, headers=HEADERS, timeout=300) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
                 return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]

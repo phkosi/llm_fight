@@ -180,7 +180,7 @@ Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future
 ## 7  Configuration (INI excerpt)
 
 ```ini
-[GLOBAL]
+[General]
 model              = llama3.2
 max_tokens_fighter = 24000
 max_tokens_judge   = 48000
