@@ -28,6 +28,10 @@ DEFAULTS = {
         C.CONFIG_FIGHTER_LOADOUT: 'their bare fists and wits',
         C.CONFIG_FIGHTER_ENVIRONMENT: 'an open arena',
         C.CONFIG_CONCURRENT_RUNS: '1',
+    },
+    C.CONFIG_DISCORD: {
+        C.CONFIG_DISCORD_TOKEN: '',
+        C.CONFIG_DISCORD_CHANNEL: '',
     }
 }
 
