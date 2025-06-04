@@ -9,9 +9,14 @@ from .engine import constants as C
 from .engine.logger import logger
 
 def get_ollama_url() -> str:
-    """Return the Ollama endpoint, falling back to config if the API_URL env
-    variable is not set."""
-    return os.environ.get(
+    """Return the Ollama chat completions endpoint.
+
+    If ``API_URL`` is provided via environment variable, ensure it points to the
+    ``/v1/chat/completions`` endpoint. This makes it easier to override the
+    base URL without needing to specify the full path.
+    """
+
+    url = os.environ.get(
         "API_URL",
         CONFIG.get(
             C.CONFIG_GENERAL,
@@ -20,6 +25,11 @@ def get_ollama_url() -> str:
             fallback="http://localhost:11434/v1/chat/completions",
         ),
     )
+
+    if not url.endswith("/v1/chat/completions"):
+        url = url.rstrip("/") + "/v1/chat/completions"
+
+    return url
 
 HEADERS = {
     C.CONTENT_TYPE: C.APPLICATION_JSON
@@ -33,7 +43,10 @@ BEST_OF_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 # -------------- helper ---------------------------------------------
 async def _post_json(payload: Dict[str, Any]):
     try:
-        async with aiohttp.ClientSession() as session:
+        # Allow aiohttp to respect proxy-related environment variables
+        # like HTTPS_PROXY so network-restricted environments can
+        # successfully connect to remote APIs.
+        async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
