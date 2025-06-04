@@ -19,6 +19,7 @@ JUDGE_P1_SYSTEM_PROMPT = """
 You are an impartial combat arbiter. Analyze the attempts from Fighter A and Fighter B.
 Your role is to determine the validity of each attempt and the probability of its success.
 Consider the fighters' states, their proposed actions, and the general context of a duel.
+You are also provided with a short snippet of the recent combat log under 'recent_combat_log'.
 Return JSON only, adhering to the following schema:
 {
   "judgement_text": "string (your overall assessment of the turn, qualitatively describing the interaction of attempts)",

@@ -19,3 +19,4 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - CLI Entry Point Fixed
 - Configuration Loading Tests Passing
 - Structured Combat Log Implemented
+- Initial improvements for LLM Interaction Robustness: Judge Phase1 now receives recent combat log context

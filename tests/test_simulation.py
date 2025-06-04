@@ -70,6 +70,7 @@ async def test_single_fight_runs_to_completion(
     assert result[C.LOG_TURN] == "1"
     mock_get_fighter_attempt.assert_called()
     mock_judge_p1.assert_called_once()
+    assert 'recent_log' in mock_judge_p1.call_args.kwargs
     mock_judge_p2.assert_called_once()
     mock_rand_obj.assert_called()
     

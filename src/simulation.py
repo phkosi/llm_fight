@@ -48,8 +48,9 @@ async def _single_fight() -> Dict[str, str]:
             get_fighter_attempt(A, B, recent_log=recent_log_snippet, turn_window=fighter_log_window),
             get_fighter_attempt(B, A, recent_log=recent_log_snippet, turn_window=fighter_log_window),
         )
-        # TODO: Provide more context to judge_phase1, like recent log entries
-        p1 = await judge_phase1({'A': A.to_json(), 'B': B.to_json()}, attemptA, attemptB)
+        # Provide recent combat log context to judge_phase1
+        p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
+        p1 = await judge_phase1({'A': A.to_json(), 'B': B.to_json()}, attemptA, attemptB, recent_log=p1_recent_log)
         
         # Determine success of attempts based on probabilities from Judge P1
         rolls = {'A': False, 'B': False}
