@@ -41,13 +41,10 @@ async def _single_fight() -> Dict[str, str]:
     while not outcome:
         turn += 1
 
-        # Prepare recent log for fighters
-        recent_log_snippet = combat_log.to_summary(last_n=fighter_log_window)
-
-        # Fighters propose actions concurrently
+        # Fighters propose actions concurrently, each receiving the combat log
         attemptA, attemptB = await asyncio.gather(
-            get_fighter_attempt(A, B, recent_log=recent_log_snippet, turn_window=fighter_log_window),
-            get_fighter_attempt(B, A, recent_log=recent_log_snippet, turn_window=fighter_log_window),
+            get_fighter_attempt(A, B, combat_log=combat_log, turn_window=fighter_log_window),
+            get_fighter_attempt(B, A, combat_log=combat_log, turn_window=fighter_log_window),
         )
         # Provide recent combat log context to judge_phase1
         p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)

@@ -3,6 +3,7 @@ from src.engine.fighter import describe_pain, describe_exhaustion, describe_heat
 import asyncio
 from unittest.mock import patch, AsyncMock, ANY, MagicMock
 from src.engine.fighter import get_fighter_attempt
+from src.engine.combat_log import CombatLog, CombatTurn
 from src.engine.prompts import FIGHTER_SYSTEM_PROMPT # To verify prompt formatting
 from src.engine import constants as C
 from src.state import FighterState, Effect # For creating mock states
@@ -108,10 +109,10 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
           patch('src.engine.fighter.CONFIG.get', mock_config_get)): 
         
         actual_response = await get_fighter_attempt(
-            fighter=mock_fighter_state, 
-            opponent=mock_opponent_state, 
-            recent_log=recent_log_input,
-            turn_window=turn_window_input # Explicitly pass turn_window
+            fighter=mock_fighter_state,
+            opponent=mock_opponent_state,
+            combat_log=recent_log_input,
+            turn_window=turn_window_input  # Explicitly pass turn_window
         )
         
         assert actual_response == expected_stripped_response
@@ -175,7 +176,8 @@ async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_
     with (patch('src.engine.fighter.chat', new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
           patch('src.engine.fighter.CONFIG.get', mock_config_get)):
 
-        await get_fighter_attempt(fighter=mock_fighter_state, opponent=mock_opponent_state, recent_log="Nothing happened.")
+        await get_fighter_attempt(fighter=mock_fighter_state, opponent=mock_opponent_state, combat_log="Nothing happened.")
+
         
         system_message_content = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
         # Check if the turn_window from config was used in the prompt
@@ -204,7 +206,7 @@ async def test_get_fighter_attempt_calls_chat(mock_chat):
     
     mock_chat.return_value = ["FighterA attacks FighterB"]  # Mocked chat response
 
-    await get_fighter_attempt(fighter_a, fighter_b, recent_log="Some log", turn_window=3)
+    await get_fighter_attempt(fighter_a, fighter_b, combat_log="Some log", turn_window=3)
 
     mock_chat.assert_called_once()
     call_args = mock_chat.call_args[0][0] # Get the first argument (the list of messages)
@@ -222,4 +224,40 @@ async def test_get_fighter_attempt_calls_chat(mock_chat):
     # Check user prompt
     assert call_args[1][C.AGENT_ROLE] == C.AGENT_USER
     assert "FighterA" in call_args[1][C.AGENT_CONTENT]
-    assert "FighterB" in call_args[1][C.AGENT_CONTENT] 
+    assert "FighterB" in call_args[1][C.AGENT_CONTENT]
+
+
+@pytest.mark.asyncio
+async def test_get_fighter_attempt_with_combatlog_summary(mock_fighter_state, mock_opponent_state):
+    log = CombatLog()
+    log.append(CombatTurn(turn=1, judge_p2={C.NARRATION: "A slashes"}))
+    log.append(CombatTurn(turn=2, judge_p2={C.NARRATION: "B kicks"}))
+
+    mock_chat_response = ["I parry."]
+
+    mock_config_get = MagicMock()
+    config_values = {
+        (C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, 5): 2,
+        (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, 256): 64,
+        (C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, 1): 1,
+    }
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        return config_values.get((section, key, cast_type, fallback), fallback)
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("src.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
+        patch("src.engine.fighter.CONFIG.get", mock_config_get),
+    ):
+        await get_fighter_attempt(
+            fighter=mock_fighter_state,
+            opponent=mock_opponent_state,
+            combat_log=log,
+            turn_window=2,
+        )
+
+        system_content = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
+        assert "Turn 1: A slashes" in system_content
+        assert "Turn 2: B kicks" in system_content
