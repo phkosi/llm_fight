@@ -1,6 +1,6 @@
 # LLM Fighters Combat Engine
 
-A turn-based duel between two LLM agents (the *Fighters*) adjudicated by a third LLM (*Judge/Narrator*). This project uses Python for randomness, persistence, and retries, with all models running locally through Ollama.
+A turn-based duel between two LLM agents (the *Fighters*) adjudicated by a third LLM (*Judge/Narrator*). This project uses Python for randomness, persistence, and retries, with all models running locally through Ollama. For a detailed specification see the [design document](docs/Design.md).
 
 ## Overview
 
@@ -137,7 +137,8 @@ llm_fight/
 │   └── engine/               # Tests for the engine components
 ├── .gitignore                # Specifies intentionally untracked files
 ├── config.py                 # Configuration loader and migration
-├── Design_doc.md             # Detailed design document
+├── docs/                     # Project documentation
+│   └── Design.md             # Detailed design document
 ├── improve.md                # (Assumed) Document for tracking improvements
 ├── README.md                 # This file
 ├── run.py                    # (Assumed) A script to run/launch the application
