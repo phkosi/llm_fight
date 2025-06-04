@@ -240,4 +240,4 @@ Details on contributing to the project will be added here.
 This project is licensed under the [MIT License](LICENSE.md) (assuming MIT, please update if different).
 
 ---
-© 2025 LLM Fighters Project 
+© 2025 LLM Fighters Project
