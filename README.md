@@ -183,6 +183,27 @@ class FighterState:
 ```
 Body part presets like `humanoid` and `quadruped` are defined in `src/engine/anatomy.py`.
 
+## Combat Log
+
+Each fight records its history using a `CombatLog` object.  Every turn is
+stored as a `CombatTurn` with fields like the fighter attempts, judge outputs
+and the resulting narration.  Logs can be queried for the most recent turns or
+converted into a plain-text summary.
+
+```python
+from src.engine.combat_log import CombatLog, CombatTurn
+
+log = CombatLog()
+log.append(CombatTurn(turn=1, judge_p2={"narration": "A strikes B"}))
+print(log.to_summary())
+```
+
+The example above would output:
+
+```
+Turn 1: A strikes B
+```
+
 ## Future Work
 
 1.  **Discord Bot:** Implement a Discord bot using Ollama's OpenAI-compatible endpoint for per-channel fight sessions.
