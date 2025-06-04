@@ -93,6 +93,28 @@ python -m src.cli simulate
 ```
 This command will execute the number of simulation runs specified in the configuration file (see below) and output results to `sim_results.csv`.
 
+## Discord Bot
+
+The project includes a lightweight Discord bot for running fights in a Discord channel. To use it you first need a Discord application with a bot token. Create one at <https://discord.com/developers>, invite it to your server and copy the token. Configure the bot in your INI file:
+
+```ini
+[DISCORD]
+discord_token = your-bot-token       ; required
+discord_channel = channel-name-or-id ; optional, limit commands to this channel
+```
+
+`discord_channel` is optional. When provided, the bot only responds to commands
+from that channel.
+
+```bash
+python -m src.discord_bot
+```
+
+When running, the bot registers the `/fight` command group in your server.
+Use `/fight start` to begin a new fight session, `/fight status` to check the
+current session, and `/fight stop` to end it. The bot keeps a single session in
+memory.
+
 ## Configuration
 
 The simulation is configured using an INI file (e.g., `config.ini` - to be created, or `config.py` handles defaults). Key settings include:
@@ -120,6 +142,13 @@ concurrent_runs    = 1           ; Number of fights to execute simultaneously
 class       = Barbarian
 loadout     = axe and shield
 environment = dusty arena
+```
+You can also configure the Discord bot:
+
+```ini
+[DISCORD]
+discord_token = your-bot-token       ; required
+discord_channel = channel-name-or-id ; optional, limit commands to this channel
 ```
 The `config.py` file is responsible for loading and managing these configurations.
 
