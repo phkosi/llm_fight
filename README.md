@@ -137,10 +137,11 @@ llm_fight/
 │   └── engine/               # Tests for the engine components
 ├── .gitignore                # Specifies intentionally untracked files
 ├── config.py                 # Configuration loader and migration
-├── docs/Design_doc.md        # Detailed design document
+├── docs/
+│   └── DEVELOPMENT_PLAN.md   # Ongoing development roadmap
+│   └── Design_doc.md         # Detailed design document
 ├── README.md                 # This file
-├── run.py                    # (Assumed) A script to run/launch the application
-└── TODO.md                   # (Assumed) Todo list for development tasks
+└── run.py                    # (Assumed) A script to run/launch the application
 ```
 
 ## Data Model
