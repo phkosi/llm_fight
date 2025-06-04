@@ -18,4 +18,5 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - Comprehensive Testing Suite Established (Unit, Integration, End-to-End)
 - CLI Entry Point Fixed
 - Configuration Loading Tests Passing
+- Async Batch Concurrency Introduced
 - Structured Combat Log Implemented

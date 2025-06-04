@@ -131,6 +131,7 @@ CONFIG_RUNS = "runs" # Added config key
 CONFIG_SEED = "seed" # Added config key
 CONFIG_MIRROR = "mirror" # Added config key
 CONFIG_MAX_TURNS = "max_turns" # Added config key for simulation
+CONFIG_CONCURRENT_RUNS = "concurrent_runs" # New config key controlling async concurrency
 CONFIG_DEFAULTS = "DEFAULTS" # For configparser default section
 
 # Prompting
