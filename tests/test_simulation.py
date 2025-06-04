@@ -98,7 +98,10 @@ async def test_run_batch_concurrency(tmp_path):
         return {C.WINNER: 'A', C.LOG_TURN: '1'}
 
     with patch.object(sim_module, '_single_fight', side_effect=fake_fight):
-        with patch.object(sim_module, 'RUNS', 4), patch.object(sim_module, 'CONCURRENT_RUNS', 2), patch.object(sim_module, 'Path', lambda p: tmp_path / p):
-            await sim_module.run_batch()
+        with patch.object(sim_module, 'RUNS', 4), patch.object(sim_module, 'CONCURRENT_RUNS', 2):
+            out_file = tmp_path / "result.csv"
+            ret = await sim_module.run_batch(out_file)
 
     assert max_running == 2
+    assert ret == out_file
+    assert out_file.exists()

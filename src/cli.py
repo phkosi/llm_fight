@@ -6,12 +6,19 @@ app = typer.Typer()
 from pathlib import Path
 
 @app.command()
-def simulate():
+def simulate(
+    output_csv: Path = typer.Option(
+        Path("sim_results.csv"),
+        "--output-csv",
+        "-o",
+        help="Path for the simulation CSV output",
+    )
+):
     """Run self‑play batch using config.ini parameters."""
     import asyncio
     from .simulation import run_batch
 
-    path = asyncio.run(run_batch())
+    path = asyncio.run(run_batch(output_csv))
     typer.echo(f"Simulation saved to {path}")
 
 @app.command()

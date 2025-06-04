@@ -130,15 +130,23 @@ async def _single_fight() -> Dict[str, str]:
     logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
     return {C.WINNER: outcome, C.LOG_TURN: str(turn)}
 
-async def run_batch():
-    """
-    Runs a batch of simulations as defined by 'RUNS' in the configuration.
+async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
+    """Run a batch of simulations and write the results to ``output_csv``.
 
-    Results of each fight (winner, turns) are collected and written to a CSV file
-    named 'sim_results.csv' in the current working directory.
+    ``RUNS`` and ``CONCURRENT_RUNS`` are read from the configuration.  The
+    resulting CSV contains one row per fight with columns matching the return
+    value of :func:`_single_fight`.
 
-    Returns:
-        The Path object for the created CSV file.
+    Parameters
+    ----------
+    output_csv:
+        File path for the CSV output.  Defaults to ``"sim_results.csv"`` in the
+        current working directory.
+
+    Returns
+    -------
+    Path
+        Path object for the created CSV file.
     """
     res = []
     sem = asyncio.Semaphore(CONCURRENT_RUNS)
@@ -150,10 +158,11 @@ async def run_batch():
     tasks = [asyncio.create_task(sem_fight()) for _ in range(RUNS)]
     for coro in asyncio.as_completed(tasks):
         res.append(await coro)
-    # write CSV
-    path = Path('sim_results.csv')
-    with path.open('w', newline='') as fp:
-        w = csv.DictWriter(fp, fieldnames=res[0].keys())
-        w.writeheader()
-        w.writerows(res)
-    return path
+
+    csv_path = Path(output_csv)
+    with csv_path.open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=res[0].keys())
+        writer.writeheader()
+        writer.writerows(res)
+
+    return csv_path
