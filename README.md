@@ -105,6 +105,20 @@ python -m src.cli simulate
 ```
 This command will execute the number of simulation runs specified in the configuration file (see below) and output results to `sim_results.csv`.
 
+## Discord Bot
+
+The project includes a lightweight Discord bot for running fights in a channel. Configure it in your INI file and launch it:
+
+```ini
+[DISCORD]
+discord_token = your-bot-token
+discord_channel = channel-name-or-id
+```
+
+```bash
+python -m src.discord_bot
+```
+
 ## Configuration
 
 The simulation is configured using an INI file (e.g., `config.ini` - to be created, or `config.py` handles defaults). Key settings include:
@@ -132,6 +146,13 @@ concurrent_runs    = 1           ; Number of fights to execute simultaneously
 class       = Barbarian
 loadout     = axe and shield
 environment = dusty arena
+```
+You can also configure the Discord bot:
+
+```ini
+[DISCORD]
+discord_token = your-bot-token
+discord_channel = channel-name-or-id
 ```
 The `config.py` file is responsible for loading and managing these configurations.
 
