@@ -1,0 +1,27 @@
+[General]
+ollama_default_model = llama3.2
+max_tokens_fighter = 24000
+max_tokens_judge = 48000
+ollama_temperature = 0.8
+best_of_fighter = 3
+best_of_judge = 2
+max_retries = 2
+
+[CONTEXT]
+fighter_log_window = 10
+judge_log_window = 9999
+
+[SIMULATION]
+runs = 1000
+seed = 42
+mirror = yes
+
+[DEFAULTS]
+class = Generic Fighter
+loadout = their bare fists and wits
+environment = an open arena
+concurrent_runs = 1
+
+[DISCORD]
+discord_token =
+discord_channel =
