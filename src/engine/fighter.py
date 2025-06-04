@@ -1,12 +1,13 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
-from ..state import FighterState # Relative import from parent package
+from ..state import FighterState  # Relative import from parent package
 from ..agents import chat
 from ..config import CONFIG
-from .prompts import FIGHTER_SYSTEM_PROMPT # Import the detailed prompt
-from . import constants as C # Added import
+from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
+from . import constants as C  # Added import
+from .combat_log import CombatLog
 
 def describe_pain(pain_level: int) -> str:
     if pain_level <= 0: return "no pain"
@@ -35,8 +36,21 @@ def describe_heat(heat_level: int) -> str:
     if heat_level < 90: return "dangerously overheated, nearing heatstroke"
     return "critical heat levels, system failure imminent"
 
-async def get_fighter_attempt(fighter: FighterState, opponent: FighterState, recent_log: str = "", turn_window: int = 0) -> str:
-    """Generates a fighter's attempted action for the current turn."""
+async def get_fighter_attempt(
+    fighter: FighterState,
+    opponent: FighterState,
+    combat_log: Union[CombatLog, str, None] = None,
+    turn_window: int = 0,
+) -> str:
+    """Generates a fighter's attempted action for the current turn.
+
+    Args:
+        fighter: Acting fighter state.
+        opponent: Opposing fighter state.
+        combat_log: Either a ``CombatLog`` instance or a pre-formatted string
+            summarising recent turns.
+        turn_window: Number of recent turns to include in the prompt.
+    """
     
     pain_desc = describe_pain(fighter.pain)
     exhaustion_desc = describe_exhaustion(fighter.exhaustion)
@@ -50,8 +64,11 @@ async def get_fighter_attempt(fighter: FighterState, opponent: FighterState, rec
     if turn_window == 0:
         turn_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
 
-    # TODO: Integrate actual combat log. For now, use passed 'recent_log' or placeholder.
-    current_recent_log = recent_log if recent_log else "The fight has just begun! Nothing to report yet."
+    # Determine what snippet of combat history to include in the prompt
+    if isinstance(combat_log, CombatLog):
+        current_recent_log = combat_log.to_summary(last_n=turn_window)
+    else:
+        current_recent_log = str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
 
     system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
         name=fighter.id,
