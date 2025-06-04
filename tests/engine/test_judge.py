@@ -31,7 +31,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
         return await call_func()
     mock_guarded_call.side_effect = mock_gc_logic
 
-    await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B)
+    await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B, recent_log="Turn 1")
 
     mock_chat.assert_called_once()
     chat_call_args = mock_chat.call_args[0][0]
@@ -44,6 +44,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert user_payload[f'fighter_{C.FIGHTER_B}_state_summary'] == MOCK_FIGHTER_B_STATE
     assert user_payload[f'{C.ATTEMPT}_{C.FIGHTER_A}'] == MOCK_ATTEMPT_A
     assert user_payload[f'{C.ATTEMPT}_{C.FIGHTER_B}'] == MOCK_ATTEMPT_B
+    assert user_payload['recent_combat_log'] == "Turn 1"
     
     mock_guarded_call.assert_called_once()
     assert mock_guarded_call.call_args[0][1] == JudgeP1Schema

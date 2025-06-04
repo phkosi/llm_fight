@@ -15,6 +15,7 @@ from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
 
 RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
+CONCURRENT_RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
 async def _single_fight() -> Dict[str, str]:
     """
@@ -48,8 +49,9 @@ async def _single_fight() -> Dict[str, str]:
             get_fighter_attempt(A, B, recent_log=recent_log_snippet, turn_window=fighter_log_window),
             get_fighter_attempt(B, A, recent_log=recent_log_snippet, turn_window=fighter_log_window),
         )
-        # TODO: Provide more context to judge_phase1, like recent log entries
-        p1 = await judge_phase1({'A': A.to_json(), 'B': B.to_json()}, attemptA, attemptB)
+        # Provide recent combat log context to judge_phase1
+        p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
+        p1 = await judge_phase1({'A': A.to_json(), 'B': B.to_json()}, attemptA, attemptB, recent_log=p1_recent_log)
         
         # Determine success of attempts based on probabilities from Judge P1
         rolls = {'A': False, 'B': False}
@@ -142,8 +144,15 @@ async def run_batch():
         The Path object for the created CSV file.
     """
     res = []
-    for _ in range(RUNS):
-        res.append(await _single_fight())
+    sem = asyncio.Semaphore(CONCURRENT_RUNS)
+
+    async def sem_fight():
+        async with sem:
+            return await _single_fight()
+
+    tasks = [asyncio.create_task(sem_fight()) for _ in range(RUNS)]
+    for coro in asyncio.as_completed(tasks):
+        res.append(await coro)
     # write CSV
     path = Path('sim_results.csv')
     with path.open('w', newline='') as fp:

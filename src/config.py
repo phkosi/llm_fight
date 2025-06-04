@@ -27,6 +27,7 @@ DEFAULTS = {
         C.CONFIG_FIGHTER_CLASS: 'Generic Fighter',
         C.CONFIG_FIGHTER_LOADOUT: 'their bare fists and wits',
         C.CONFIG_FIGHTER_ENVIRONMENT: 'an open arena',
+        C.CONFIG_CONCURRENT_RUNS: '1',
     }
 }
 

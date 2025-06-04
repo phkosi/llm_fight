@@ -17,5 +17,7 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - Comprehensive Testing Suite Established (Unit, Integration, End-to-End)
 - CLI Entry Point Fixed
 - Configuration Loading Tests Passing
+- Async Batch Concurrency Introduced
 - Structured Combat Log Implemented
 - Dynamic Loadouts, Classes, and Environments
+- Initial improvements for LLM Interaction Robustness: Judge Phase1 now receives recent combat log context

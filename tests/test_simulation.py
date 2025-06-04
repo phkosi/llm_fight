@@ -70,9 +70,35 @@ async def test_single_fight_runs_to_completion(
     assert result[C.LOG_TURN] == "1"
     mock_get_fighter_attempt.assert_called()
     mock_judge_p1.assert_called_once()
+    assert 'recent_log' in mock_judge_p1.call_args.kwargs
     mock_judge_p2.assert_called_once()
     mock_rand_obj.assert_called()
     
     fighter_b_mock.apply_delta.assert_called_with({C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS})
     assert fighter_b_mock.status == C.STATUS_UNCONSCIOUS
-    assert fighter_a_mock.status == C.STATUS_FIGHTING # A should be unchanged 
+    assert fighter_a_mock.status == C.STATUS_FIGHTING # A should be unchanged
+
+
+@pytest.mark.asyncio
+async def test_run_batch_concurrency(tmp_path):
+
+    running = 0
+    max_running = 0
+    lock = asyncio.Lock()
+
+    async def fake_fight():
+        nonlocal running, max_running
+        async with lock:
+            running += 1
+            if running > max_running:
+                max_running = running
+        await asyncio.sleep(0.01)
+        async with lock:
+            running -= 1
+        return {C.WINNER: 'A', C.LOG_TURN: '1'}
+
+    with patch.object(sim_module, '_single_fight', side_effect=fake_fight):
+        with patch.object(sim_module, 'RUNS', 4), patch.object(sim_module, 'CONCURRENT_RUNS', 2), patch.object(sim_module, 'Path', lambda p: tmp_path / p):
+            await sim_module.run_batch()
+
+    assert max_running == 2
