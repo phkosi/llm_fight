@@ -16,7 +16,7 @@ BEST_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 
 # -------------------------------------------------------------------
 
-async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str) -> Dict[str, Any]:
+async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> Dict[str, Any]:
     """ 
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
 
@@ -24,6 +24,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str) -> D
         state: Dictionary containing summaries of fighter A and B's states.
         attemptA: String describing fighter A's attempted action.
         attemptB: String describing fighter B's attempted action.
+        recent_log: Text summary of the most recent turns from the combat log.
 
     Returns:
         A dictionary conforming to JudgeP1Schema, including judgement text,
@@ -42,6 +43,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str) -> D
         },
         f'{C.ATTEMPT}_{C.FIGHTER_A}': attemptA,
         f'{C.ATTEMPT}_{C.FIGHTER_B}': attemptB,
+        'recent_combat_log': recent_log,
     }
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
     async def _call():
