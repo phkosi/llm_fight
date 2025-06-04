@@ -38,6 +38,20 @@ class Config:
         # According to docs, values from files read later should take precedence.
         if self.path.exists():
             self.cp.read(self.path)
+            self._migrate_old_keys()
+
+    def _migrate_old_keys(self):
+        """Handle legacy option names for backwards compatibility."""
+        aliases = {
+            (C.CONFIG_GENERAL, 'llm_model'): C.CONFIG_LLAMA_DEFAULT_MODEL,
+            (C.CONFIG_GENERAL, 'temperature'): C.CONFIG_LLAMA_TEMPERATURE,
+        }
+
+        for (section, old_key), new_key in aliases.items():
+            if self.cp.has_option(section, old_key):
+                value = self.cp.get(section, old_key)
+                self.cp.set(section, new_key, value)
+                self.cp.remove_option(section, old_key)
 
     # --- public API -----------------------------------------------------
     def save(self):
