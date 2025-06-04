@@ -1,6 +1,7 @@
 import pytest
 import asyncio
 import aiohttp
+import os
 from unittest.mock import AsyncMock, MagicMock, patch, call # Added MagicMock
 
 from src.agents import chat
@@ -43,7 +44,8 @@ async def test_chat_single_call_success():
     # Patch aiohttp.ClientSession class.
     # When ClientSession() is called, it should return an object that is an async context manager.
     # Let ClientSession() itself return mock_session_instance, which is already configured as an async context manager.
-    with patch('aiohttp.ClientSession', return_value=mock_session_instance) as mock_ClientSession_constructor:
+    with patch('aiohttp.ClientSession', return_value=mock_session_instance) as mock_ClientSession_constructor, \
+         patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=1)
     
     assert responses == [mock_response_content]
@@ -96,7 +98,8 @@ async def test_chat_best_of_n_calls_success():
     # directly each time
     mock_session_instance.post = MagicMock(side_effect=mock_post_context_managers)
 
-    with patch('aiohttp.ClientSession', return_value=mock_session_instance) as mock_ClientSession_constructor:
+    with patch('aiohttp.ClientSession', return_value=mock_session_instance) as mock_ClientSession_constructor, \
+         patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=best_of_n)
     
     assert responses == mock_responses_content
