@@ -31,23 +31,16 @@ def get_ollama_url() -> str:
 
     return url
 
-HEADERS = {
-    C.CONTENT_TYPE: C.APPLICATION_JSON
-}
-
-MODEL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
-TEMP = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
-BEST_OF_F = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int)
-BEST_OF_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 
 # -------------- helper ---------------------------------------------
 async def _post_json(payload: Dict[str, Any]):
+    headers = {C.CONTENT_TYPE: C.APPLICATION_JSON}
     try:
         # Allow aiohttp to respect proxy-related environment variables
         # like HTTPS_PROXY so network-restricted environments can
         # successfully connect to remote APIs.
         async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
+            async with session.post(get_ollama_url(), json=payload, headers=headers, timeout=300) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
                 return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
@@ -69,10 +62,12 @@ async def _post_json(payload: Dict[str, Any]):
 
 async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1) -> List[str]:
     tasks = []
+    model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
+    temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
     for _ in range(best_of):
         payload = {
-            C.AGENT_MODEL: MODEL,
-            C.TEMPERATURE: TEMP,
+            C.AGENT_MODEL: model,
+            C.TEMPERATURE: temp,
             C.AGENT_MAX_TOKENS: max_tokens,
             C.AGENT_MESSAGES: messages,
         }
