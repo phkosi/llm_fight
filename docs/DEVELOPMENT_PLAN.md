@@ -7,9 +7,24 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - **LLM Interaction Robustness**: Continue refining prompts, response parsing, and error handling to better cope with unexpected LLM outputs.
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
 - **Test Suite Enhancements**:
-  - Property-based tests for `FighterState.apply_delta` to cover a wider range of deltas.
-  - Simulated failure scenarios for `_single_fight` and `run_batch` to verify graceful error handling.
-  - Negative CLI option tests to check validation and error messages.
+  1. **Property-based tests for `FighterState.apply_delta`**
+     - Use `hypothesis` strategies to generate random combinations of deltas for
+       pain, exhaustion and heat adjustments.
+     - Randomly construct wound payloads that target existing and non-existent
+       body parts and ensure invariants (e.g. HP never increases).
+     - Generate effect addition/removal data and verify that permanent effects
+       are not duplicated and TTL logic is respected.
+  2. **Simulated failure scenarios for `_single_fight` and `run_batch`**
+     - Monkeypatch `agents.guarded_call` to raise exceptions to mimic
+       communication failures with the LLM backend.
+     - Ensure both functions catch these errors, log the failure and continue
+       without crashing the test run.
+     - Validate that partial results are returned when a subset of fights fail.
+  3. **Negative CLI option tests**
+     - Invoke the CLI entry point with invalid options using `CliRunner`.
+     - Check that invalid model names or configuration paths produce helpful
+       error messages and non-zero exit codes.
+     - Cover mutually exclusive options and missing required parameters.
 
 ## Completed Milestones
 
