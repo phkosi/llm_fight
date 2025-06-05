@@ -100,6 +100,16 @@ With the dev dependencies installed you can execute the test suite using
 pytest -q
 ```
 
+When calling the async functions in `src/agents.py` within standalone scripts
+or tests, ensure the underlying aiohttp session is closed:
+
+```python
+import asyncio
+from src.agents import close_session
+
+asyncio.run(close_session())
+```
+
 ## Running the Simulation
 
 The simulation harness can be run via the command-line interface.
