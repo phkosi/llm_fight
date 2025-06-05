@@ -18,22 +18,26 @@ LLM Fighters is a combat simulator where AI agents, powered by local Large Langu
 
 ## High-Level Architecture
 
-The core logic resides in the `src/engine/` directory.
+The core modules live in the `src/` directory.
 
 ```
 src/
-├── engine/            # core logic
-│   ├── anatomy.py      # presets & tissue constants
-│   ├── state.py        # FighterState dataclasses + delta apply
-│   ├── prompts.py      # verbatim system templates
-│   ├── agents.py       # async Ollama client
-│   ├── judge.py        # phase‑1 & phase‑2 orchestration
-│   ├── fighter.py      # builds fighter context & queries LLM
-│   ├── validation.py   # JSON‑schema + guarded_call()
-│   ├── rng.py          # central PRNG
-│   └── simulation.py   # batch self‑play harness
-└── cli.py             # Typer runner (play / simulate / add‑char)
-config.py          # INI loader & migration
+├── engine/            # shared helpers
+│   ├── combat_log.py  # CombatLog container
+│   ├── constants.py   # game constants
+│   ├── fighter.py     # low-level fighter operations
+│   ├── logger.py      # logging helpers
+│   └── prompts.py     # system prompt templates
+├── agents.py          # async Ollama client
+├── anatomy.py         # presets & tissue constants
+├── config.py          # INI loader & migration
+├── discord_bot.py     # Discord integration
+├── judge.py           # phase-1 & phase-2 orchestration
+├── rng.py             # central PRNG
+├── simulation.py      # batch self-play harness
+├── state.py           # FighterState dataclasses + delta apply
+├── validation.py      # JSON schema + guarded_call()
+└── cli.py             # Typer runner (play / simulate)
 ```
 
 ### Turn Flow (Simultaneous Proposals)
@@ -63,8 +67,7 @@ config.py          # INI loader & migration
 ### Prerequisites
 
 *   Python 3.x
-*   Ollama installed and running with the `llama3.2:latest` model (or as configured).
-    *   Ensure Ollama is accessible and the specified model is pulled.
+*   Ollama installed and running with the `llama3.2:latest` model (or as configured). Ensure the service is accessible and the model is pulled.
 
 ### Installation
 
@@ -252,26 +255,37 @@ Use the resulting public ngrok URL with `API_URL` as shown above.
 ```
 llm_fight/
 ├── src/                      # Source code
-│   ├── engine/               # Core combat engine logic
-│   │   ├── anatomy.py        # Body part presets and tissue constants
-│   │   ├── state.py          # FighterState dataclasses and state update logic
-│   │   ├── prompts.py        # System prompt templates for LLMs
-│   │   ├── agents.py         # Asynchronous Ollama client
-│   │   ├── judge.py          # Judge LLM orchestration (Phase 1 & 2)
-│   │   ├── fighter.py        # Fighter LLM interaction logic
-│   │   ├── validation.py     # JSON schema validation and guarded LLM calls
-│   │   ├── rng.py            # Centralized Pseudo-Random Number Generator
-│   │   └── simulation.py     # Batch simulation harness
+│   ├── engine/               # Logging and helper modules
+│   │   ├── combat_log.py
+│   │   ├── constants.py
+│   │   ├── fighter.py
+│   │   ├── logger.py
+│   │   └── prompts.py
+│   ├── agents.py             # Asynchronous Ollama client
+│   ├── anatomy.py            # Body part presets and tissue constants
+│   ├── config.py             # Configuration loader and migration
+│   ├── discord_bot.py        # Discord bot entry point
+│   ├── judge.py              # Judge orchestration logic
+│   ├── rng.py                # Centralized Pseudo-Random Number Generator
+│   ├── simulation.py         # Batch simulation harness
+│   ├── state.py              # FighterState dataclasses and update logic
+│   ├── validation.py         # JSON schema validation and guarded LLM calls
 │   └── cli.py                # Command Line Interface (Typer based)
 ├── tests/                    # Unit and integration tests
 │   └── engine/               # Tests for the engine components
 ├── .gitignore                # Specifies intentionally untracked files
-├── config.py                 # Configuration loader and migration
+├── AGENTS.md                 # Codex contribution guidelines
 ├── docs/
-│   └── DEVELOPMENT_PLAN.md   # Ongoing development roadmap
-│   └── Design_doc.md         # Detailed design document
+│   ├── DEVELOPMENT_PLAN.md         # Ongoing development roadmap
+│   ├── Design_doc.md               # Detailed design document
+│   └── Design_doc_archived_2025.md # Archived design document
+├── llmfight.ini.example      # Example configuration file
+├── pyproject.toml            # Project metadata
+├── requirements.txt          # Runtime dependencies
+├── requirements-dev.txt      # Development dependencies
+├── LICENSE                   # License text
 ├── README.md                 # This file
-└── run.py                    # (Assumed) A script to run/launch the application
+└── run.py                    # Entry point script
 ```
 
 ## Data Model
@@ -314,7 +328,7 @@ class FighterState:
     loadout: str = 'their bare fists and wits'
     environment: str = 'an open arena'
 ```
-Body part presets like `humanoid` and `quadruped` are defined in `src/engine/anatomy.py`.
+Body part presets like `humanoid` and `quadruped` are defined in `src/anatomy.py`.
 
 ## Combat Log
 
@@ -339,9 +353,10 @@ Turn 1: A strikes B
 
 ## Future Work
 
-1.  **Discord Bot:** Implement a Discord bot using Ollama's OpenAI-compatible endpoint for per-channel fight sessions.
-2.  **Visualizer:** Develop a Godot-based visualizer to replay combat logs with sprite limb masking.
-3.  **Advanced Modifiers:** Introduce infection and weather modifiers after the MVP is stable.
+1. **Visualizer:** Develop a Godot-based tool to replay combat logs with sprite limb masking.
+2. **Advanced Modifiers:** Introduce infection and weather modifiers once the MVP is stable.
+3. **LLM Robustness & Scalability:** Continue refining prompts, error handling and batch execution for large numbers of simulations.
+4. **Test Suite Enhancements:** Add property-based tests for `FighterState.apply_delta` and CLI option validation.
 
 ## Contributing
 
@@ -349,7 +364,7 @@ Details on contributing to the project will be added here.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE) (assuming MIT, please update if different).
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 © 2025 LLM Fighters Project
