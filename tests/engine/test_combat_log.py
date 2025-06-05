@@ -16,3 +16,11 @@ def test_combat_log_basic_usage():
     assert last[0].narration == "B dodges"
 
     assert log.to_summary(last_n=1) == "Turn 2: B dodges"
+
+
+def test_to_summary_zero_last_n():
+    log = CombatLog()
+    log.append(CombatTurn(turn=1, judge_p2={C.NARRATION: "A swings"}))
+    log.append(CombatTurn(turn=2, judge_p2={C.NARRATION: "B dodges"}))
+
+    assert log.to_summary(last_n=0) == ""
