@@ -259,5 +259,3 @@ def test_judge_p2_schema_invalid_delta_fighter_key():
         C.WINNER: None
     }
     _validate_against_schema(invalid_data, JudgeP2Schema, False)
-
-# Remove TODOs for individual schemas as they are now added 
