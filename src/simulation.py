@@ -148,6 +148,8 @@ async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
     Path
         Path object for the created CSV file.
     """
+    seed(CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
+
     res = []
     sem = asyncio.Semaphore(CONCURRENT_RUNS)
 
