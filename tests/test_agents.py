@@ -194,4 +194,30 @@ async def test_chat_unexpected_error_raises_exception():
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
         with pytest.raises(ValueError):
-            await chat(messages=messages, max_tokens=max_tokens, best_of=1) 
+            await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+
+
+def test_get_ollama_url_no_env(monkeypatch):
+    """When API_URL is unset, default config fallback is used."""
+    monkeypatch.delenv("API_URL", raising=False)
+    from src.agents import get_ollama_url
+
+    assert get_ollama_url() == BASE_OLLAMA_URL
+
+
+def test_get_ollama_url_missing_suffix(monkeypatch):
+    """API_URL without the completions suffix should be amended."""
+    custom_base = "http://example.com"
+    monkeypatch.setenv("API_URL", custom_base)
+    from src.agents import get_ollama_url
+
+    assert get_ollama_url() == custom_base + "/v1/chat/completions"
+
+
+def test_get_ollama_url_complete(monkeypatch):
+    """If API_URL already ends with the suffix it should remain unchanged."""
+    complete = "http://host:1234/v1/chat/completions"
+    monkeypatch.setenv("API_URL", complete)
+    from src.agents import get_ollama_url
+
+    assert get_ollama_url() == complete
