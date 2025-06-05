@@ -137,4 +137,8 @@ def test_global_config_instance_loads():
         # Also check that get with fallback doesn't raise an error for a missing key
         CONFIG.get(C.CONFIG_GENERAL, "some_dummy_key_for_global_test", str, fallback="dummy")
     except Exception as e:
-        pytest.fail(f"Global CONFIG instance failed to load or be accessed: {e}") 
+        pytest.fail(f"Global CONFIG instance failed to load or be accessed: {e}")
+
+
+def test_default_max_turns_loaded(temp_config_instance):
+    assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 100

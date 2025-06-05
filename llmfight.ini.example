@@ -16,6 +16,7 @@ judge_log_window = 9999
 runs = 1000
 seed = 42
 concurrent_runs = 1
+max_turns = 100
 
 [DEFAULTS]
 class = Generic Fighter
