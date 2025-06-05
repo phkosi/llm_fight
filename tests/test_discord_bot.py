@@ -1,7 +1,16 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.discord_bot import FightSession, session, fight_start, fight_status, fight_stop, run_bot, bot
+import src.discord_bot as discord_bot
+from src.discord_bot import (
+    FightSession,
+    session,
+    fight_start,
+    fight_status,
+    fight_stop,
+    run_bot,
+    bot,
+)
 from src.engine import constants as C
 
 class DummyResponse:
@@ -9,8 +18,15 @@ class DummyResponse:
         self.send_message = AsyncMock()
 
 class DummyInteraction:
-    def __init__(self):
+    def __init__(self, channel_name="general"):
         self.response = DummyResponse()
+        self.channel = DummyChannel(channel_name)
+
+
+class DummyChannel:
+    def __init__(self, name):
+        self.name = name
+        self.id = name
 
 
 def test_fight_session_start_stop():
@@ -40,6 +56,24 @@ async def test_command_flow():
     i3.response.send_message.assert_called_with("Fight stopped")
 
 
+@pytest.mark.asyncio
+async def test_channel_restriction(monkeypatch):
+    session.stop()
+    monkeypatch.setattr("src.discord_bot.ALLOWED_CHANNEL", "allowed")
+
+    wrong = DummyInteraction("other")
+    await fight_start.callback(wrong)
+    wrong.response.send_message.assert_called_with(
+        "Commands are restricted to allowed", ephemeral=True
+    )
+    assert not session.active
+
+    right = DummyInteraction("allowed")
+    await fight_start.callback(right)
+    assert session.active
+    right.response.send_message.assert_called_with("Fight started")
+
+
 def _patch_config(monkeypatch, token: str, channel: str):
     def fake_get(section, key, cast=str, fallback=None):
         if key == C.CONFIG_DISCORD_TOKEN:
@@ -51,6 +85,7 @@ def _patch_config(monkeypatch, token: str, channel: str):
     monkeypatch.setattr("src.discord_bot.CONFIG.get", fake_get)
 
 
+
 def test_run_bot_missing_token(monkeypatch):
     _patch_config(monkeypatch, token="", channel="mychan")
     with pytest.raises(RuntimeError, match="Discord token not configured"):
@@ -59,8 +94,9 @@ def test_run_bot_missing_token(monkeypatch):
 
 def test_run_bot_missing_channel(monkeypatch):
     _patch_config(monkeypatch, token="token", channel="")
-    with pytest.raises(RuntimeError, match="Discord channel not configured"):
-        run_bot()
+    monkeypatch.setattr(bot, "run", MagicMock())
+    run_bot()
+    bot.run.assert_called_once_with("token")
 
 
 def test_run_bot_start_failure(monkeypatch):
@@ -68,3 +104,4 @@ def test_run_bot_start_failure(monkeypatch):
     monkeypatch.setattr(bot, "run", MagicMock(side_effect=ValueError("boom")))
     with pytest.raises(RuntimeError, match="Failed to start Discord bot: boom"):
         run_bot()
+    assert discord_bot.ALLOWED_CHANNEL == "chan"

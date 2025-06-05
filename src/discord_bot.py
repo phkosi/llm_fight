@@ -41,19 +41,49 @@ fight_group = app_commands.Group(name="fight", description="Fight control")
 
 @fight_group.command(name="start")
 async def fight_start(interaction: discord.Interaction):
+    if not _check_channel(interaction):
+        await interaction.response.send_message(
+            f"Commands are restricted to {ALLOWED_CHANNEL}", ephemeral=True
+        )
+        return
     session.start()
     await interaction.response.send_message("Fight started")
 
 @fight_group.command(name="status")
 async def fight_status(interaction: discord.Interaction):
+    if not _check_channel(interaction):
+        await interaction.response.send_message(
+            f"Commands are restricted to {ALLOWED_CHANNEL}", ephemeral=True
+        )
+        return
     await interaction.response.send_message(session.status())
 
 @fight_group.command(name="stop")
 async def fight_stop(interaction: discord.Interaction):
+    if not _check_channel(interaction):
+        await interaction.response.send_message(
+            f"Commands are restricted to {ALLOWED_CHANNEL}", ephemeral=True
+        )
+        return
     session.stop()
     await interaction.response.send_message("Fight stopped")
 
 bot.tree.add_command(fight_group)
+
+# channel name or id allowed to invoke commands; set in run_bot()
+ALLOWED_CHANNEL: str = ""
+
+
+def _check_channel(interaction: discord.Interaction) -> bool:
+    """Return True if commands are allowed in this interaction's channel."""
+    if not ALLOWED_CHANNEL:
+        return True
+    channel = getattr(interaction, "channel", None)
+    if channel is None:
+        return False
+    name = getattr(channel, "name", None)
+    cid = getattr(channel, "id", None)
+    return str(name) == ALLOWED_CHANNEL or str(cid) == ALLOWED_CHANNEL
 
 
 def run_bot() -> None:
@@ -63,8 +93,8 @@ def run_bot() -> None:
     if not token:
         raise RuntimeError("Discord token not configured")
 
-    if not channel:
-        raise RuntimeError("Discord channel not configured")
+    global ALLOWED_CHANNEL
+    ALLOWED_CHANNEL = channel
 
     try:
         bot.run(token)
