@@ -9,14 +9,17 @@ logger.setLevel(logging.DEBUG)  # Set the default logging level
 
 # Create a handler for console output
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.DEBUG) # Set level for this handler
+console_handler.setLevel(logging.DEBUG)  # Set level for this handler
 
 # Create a formatter and set it for the handler
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 console_handler.setFormatter(formatter)
 
-# Add the handler to the logger
-logger.addHandler(console_handler)
+# Add the handler to the logger if none are attached yet
+if not logger.hasHandlers():
+    logger.addHandler(console_handler)
 
 # Prevent the logger from propagating to the root logger if it's not desired (optional)
 # logger.propagate = False
