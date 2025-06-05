@@ -105,3 +105,19 @@ async def test_run_batch_concurrency(tmp_path):
     assert max_running == 2
     assert ret == out_file
     assert out_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_run_batch_exact_runs(tmp_path):
+    calls = 0
+
+    async def fake_fight():
+        nonlocal calls
+        calls += 1
+        return {C.WINNER: 'A', C.LOG_TURN: '1'}
+
+    with patch.object(sim_module, '_single_fight', side_effect=fake_fight):
+        with patch.object(sim_module, 'RUNS', 3), patch.object(sim_module, 'CONCURRENT_RUNS', 1):
+            await sim_module.run_batch(tmp_path / 'result.csv')
+
+    assert calls == 3

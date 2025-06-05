@@ -196,7 +196,6 @@ judge_log_window   = 9999
 [SIMULATION]
 runs               = 1000
 seed               = 42
-mirror             = yes
 ```
 
 ---
