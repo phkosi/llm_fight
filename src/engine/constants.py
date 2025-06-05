@@ -120,7 +120,6 @@ CONFIG_FIGHTER_LOG_WINDOW = "fighter_log_window"
 CONFIG_JUDGE_LOG_WINDOW = "judge_log_window"
 CONFIG_LLAMA_API_URL = "ollama_api_url"
 CONFIG_LLAMA_DEFAULT_MODEL = "ollama_default_model"
-CONFIG_LLAMA_BEST_OF_N = "ollama_best_of_n"
 CONFIG_LLAMA_TEMPERATURE = "ollama_temperature"
 CONFIG_MAX_TOKENS_FIGHTER = "max_tokens_fighter" # Added config key
 CONFIG_MAX_TOKENS_JUDGE = "max_tokens_judge" # Added config key
