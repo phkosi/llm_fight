@@ -404,5 +404,3 @@ def test_apply_delta_max_pain_induces_death(humanoid_fighter: FighterState):
 
 # All major functionality of state.py seems covered now.
 
-if __name__ == '__main__':
-    pytest.main() 
