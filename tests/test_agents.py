@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import aiohttp
 import os
-from unittest.mock import AsyncMock, MagicMock, patch, call # Added MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch, call
 
 from src.agents import chat
 from src.engine import constants as C
@@ -29,21 +29,18 @@ async def test_chat_single_call_success():
     mock_post_context_manager = AsyncMock()
     mock_post_context_manager.__aenter__.return_value = mock_actual_response
     
-    # 3. The session instance, returned by ClientSession().__aenter__()
-    # This instance must itself be an async context manager.
-    # Its `post` method must be an AsyncMock (to simulate `async def post`)
-    # and this AsyncMock, when called and awaited, returns mock_post_context_manager.
-    mock_session_instance = AsyncMock() 
-    mock_session_instance.__aenter__.return_value = mock_session_instance
+    # 3. The session instance returned by ClientSession()
+    # Its `post` method should return the context manager defined above.
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
     
     # Configure the .post method on the session instance
     # `aiohttp.ClientSession.post` returns a context manager directly,
     # so use a regular MagicMock rather than AsyncMock.
     mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
-    # Patch aiohttp.ClientSession class.
-    # When ClientSession() is called, it should return an object that is an async context manager.
-    # Let ClientSession() itself return mock_session_instance, which is already configured as an async context manager.
+    # Patch aiohttp.ClientSession so our module-level session uses the mock.
     with patch('aiohttp.ClientSession', return_value=mock_session_instance) as mock_ClientSession_constructor, \
          patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=1)
@@ -51,7 +48,6 @@ async def test_chat_single_call_success():
     assert responses == [mock_response_content]
     
     mock_ClientSession_constructor.assert_called_once()
-    mock_session_instance.__aenter__.assert_called_once() # Session context manager was entered
     
     # Check that session.post was called (it is now an AsyncMock itself)
     mock_session_instance.post.assert_called_once_with(
@@ -91,9 +87,10 @@ async def test_chat_best_of_n_calls_success():
         ctx_mgr.__aenter__.return_value = actual_resp
         mock_post_context_managers.append(ctx_mgr)
     
-    # 3. Session instance mock
-    mock_session_instance = AsyncMock()
-    mock_session_instance.__aenter__.return_value = mock_session_instance
+    # 3. Session instance mock reused for all calls
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
     # session.post will be called N times and should return the context manager
     # directly each time
     mock_session_instance.post = MagicMock(side_effect=mock_post_context_managers)
@@ -103,7 +100,7 @@ async def test_chat_best_of_n_calls_success():
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=best_of_n)
     
     assert responses == mock_responses_content
-    assert mock_ClientSession_constructor.call_count == best_of_n # One session per call in _post_json
+    assert mock_ClientSession_constructor.call_count == 1
     assert mock_session_instance.post.call_count == best_of_n
     
     expected_payload = {
@@ -142,8 +139,9 @@ async def test_chat_http_error_raises_exception():
     mock_post_context_manager.__aenter__.return_value = mock_actual_response
 
     # 3. Session instance mock
-    mock_session_instance = AsyncMock()
-    mock_session_instance.__aenter__.return_value = mock_session_instance
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
     mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
@@ -156,8 +154,9 @@ async def test_chat_connection_error_raises_exception():
     max_tokens = 10
 
     # Session instance mock
-    mock_session_instance = AsyncMock()
-    mock_session_instance.__aenter__.return_value = mock_session_instance # Returns itself on entering context
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
     # The post method itself raises the error
     mock_session_instance.post = MagicMock(side_effect=aiohttp.ClientConnectionError("Cannot connect"))
 
@@ -171,8 +170,9 @@ async def test_chat_timeout_error_raises_exception():
     max_tokens = 10
 
     # Session instance mock
-    mock_session_instance = AsyncMock()
-    mock_session_instance.__aenter__.return_value = mock_session_instance
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
     # The post method itself raises the error
     mock_session_instance.post = MagicMock(side_effect=asyncio.TimeoutError())
 
@@ -186,8 +186,9 @@ async def test_chat_unexpected_error_raises_exception():
     max_tokens = 10
 
     # Session instance mock
-    mock_session_instance = AsyncMock()
-    mock_session_instance.__aenter__.return_value = mock_session_instance
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
     # The post method itself raises the error
     mock_session_instance.post = MagicMock(side_effect=ValueError("Unexpected issue"))
 

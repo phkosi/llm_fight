@@ -2,7 +2,7 @@
 import aiohttp
 import asyncio
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from .config import CONFIG
 from .engine import constants as C
@@ -31,6 +31,31 @@ def get_ollama_url() -> str:
 
     return url
 
+HEADERS = {
+    C.CONTENT_TYPE: C.APPLICATION_JSON
+}
+
+_session: Optional[aiohttp.ClientSession] = None
+
+MODEL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
+TEMP = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
+BEST_OF_F = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int)
+BEST_OF_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
+
+# -------------- session management ---------------------------------
+def _get_session() -> aiohttp.ClientSession:
+    """Return a module-level :class:`ClientSession`, creating it if needed."""
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession(trust_env=True)
+    return _session
+
+async def close_session() -> None:
+    """Close the module-level session if it exists."""
+    global _session
+    if _session is not None and not _session.closed:
+        await _session.close()
+    _session = None
 
 # -------------- helper ---------------------------------------------
 async def _post_json(payload: Dict[str, Any]):
@@ -39,11 +64,12 @@ async def _post_json(payload: Dict[str, Any]):
         # Allow aiohttp to respect proxy-related environment variables
         # like HTTPS_PROXY so network-restricted environments can
         # successfully connect to remote APIs.
-        async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.post(get_ollama_url(), json=payload, headers=headers, timeout=300) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+        session = _get_session()
+        async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+            return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+
     except aiohttp.ClientResponseError as e:
         logger.error(f"Ollama API request failed with status {e.status}: {e.message}. Payload: {payload}")
         raise
@@ -61,6 +87,8 @@ async def _post_json(payload: Dict[str, Any]):
         raise
 
 async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1) -> List[str]:
+    # Ensure the session is created before spawning tasks to avoid race conditions
+    _get_session()
     tasks = []
     model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
     temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
