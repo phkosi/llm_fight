@@ -1,5 +1,5 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
-from typing import Union
+from typing import Union, Optional
 
 from ..state import FighterState  # Relative import from parent package
 from ..agents import chat
@@ -39,7 +39,7 @@ async def get_fighter_attempt(
     fighter: FighterState,
     opponent: FighterState,
     combat_log: Union[CombatLog, str, None] = None,
-    turn_window: int = 0,
+    turn_window: Optional[int] = None,
 ) -> str:
     """Generates a fighter's attempted action for the current turn.
 
@@ -60,14 +60,17 @@ async def get_fighter_attempt(
     
     # If turn_window is not explicitly passed, try to get it from config, else default.
     # This allows _single_fight to control it, or use a global default.
-    if turn_window == 0:
+    if turn_window is None:
         turn_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
 
     # Determine what snippet of combat history to include in the prompt
     if isinstance(combat_log, CombatLog):
-        current_recent_log = combat_log.to_summary(last_n=turn_window)
+        current_recent_log = "" if turn_window == 0 else combat_log.to_summary(last_n=turn_window)
     else:
-        current_recent_log = str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
+        if turn_window == 0:
+            current_recent_log = ""
+        else:
+            current_recent_log = str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
 
     system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
         name=fighter.id,
