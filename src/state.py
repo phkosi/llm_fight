@@ -2,13 +2,12 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Literal, Any
-import copy # Added import for deepcopy
-# import random as rand # This was added by mistake, use project's rng
-from .rng import choice  # Use project's seeded RNG
+import copy
+from .rng import choice
 
 from .anatomy import BodyPart, PRESETS
-from .engine import constants as C # Added import
-from .engine.logger import logger # Import the logger
+from .engine import constants as C
+from .engine.logger import logger
 from .config import CONFIG
 
 @dataclass
@@ -38,7 +37,7 @@ class FighterState:
     heat: int = 0
     buffs: List[Effect] = field(default_factory=list)
     debuffs: List[Effect] = field(default_factory=list)
-    status: Literal[C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD] = C.STATUS_FIGHTING # Changed to use constants
+    status: Literal[C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD] = C.STATUS_FIGHTING
     class_: str = "Generic Fighter"
     loadout: str = "their bare fists and wits"
     environment: str = "an open arena"
@@ -68,7 +67,7 @@ class FighterState:
     def apply_damage_to_part(self, part_name: str, damage_amount: int, damage_type: str):
         """Applies damage to a specific body part and its tissue layers."""
         if part_name not in self.parts:
-            logger.warning(f"Attempted to damage non-existent part: {part_name} for fighter {self.id}") # Replaced print with logger.warning
+            logger.warning(f"Attempted to damage non-existent part: {part_name} for fighter {self.id}")
             return
 
         part = self.parts[part_name]
@@ -76,7 +75,7 @@ class FighterState:
 
         # If part is already severed or destroyed, no more damage can be applied to its layers
         if part.severed or part.status == C.IS_DESTROYED:
-            logger.debug(f"Attempted to damage already severed/destroyed part: {part_name} for fighter {self.id}") # Replaced print with logger.debug
+            logger.debug(f"Attempted to damage already severed/destroyed part: {part_name} for fighter {self.id}")
             # Optionally, apply pain or other effects even if part is gone/destroyed
             self.pain += damage_amount // 2 # Reduced pain for hitting a gone part
             return
@@ -88,7 +87,7 @@ class FighterState:
             dealt_to_layer = min(remaining_damage, layer.max_hp) # Cannot deal more damage than current HP
             layer.max_hp -= dealt_to_layer
             remaining_damage -= dealt_to_layer
-            logger.debug(f"Dealt {dealt_to_layer} {damage_type} to {self.id}:{part_name}.{layer.name}, HP now {layer.max_hp}") # Replaced print with logger.debug
+            logger.debug(f"Dealt {dealt_to_layer} {damage_type} to {self.id}:{part_name}.{layer.name}, HP now {layer.max_hp}")
 
         # Basic pain update - can be refined
         self.pain += damage_amount
@@ -98,18 +97,18 @@ class FighterState:
             if part.can_be_severed: 
                 part.status = C.STATUS_SEVERED 
                 part.severed = True
-                logger.info(f"{self.id}:{part_name} has been severed!") # Replaced print with logger.info
+                logger.info(f"{self.id}:{part_name} has been severed!")
                 # Add a generic "SeveredPart" effect or similar if desired
                 self.debuffs.append(Effect(name=f"{part_name} {C.STATUS_SEVERED}", magnitude=1, ttl=-1, on_apply=f"{part_name} was severed from the body.", on_tick=None, metadata={C.TARGETED_PART: part_name})) 
                 self.pain += 20 # Extra pain for severing
             else:
                 part.status = C.IS_DESTROYED 
-            logger.info(f"{self.id}:{part_name} has been {part.status}.") # Replaced print with logger.info
+            logger.info(f"{self.id}:{part_name} has been {part.status}.")
             if part.is_vital:
                 self.status = C.STATUS_UNCONSCIOUS 
 
         # Apply bleeding or burning effects based on damage type
-        if damage_type == C.DAMAGE_TYPE_FIRE: # Was C.EFFECT_BURNING, changed to C.DAMAGE_TYPE_FIRE for consistency
+        if damage_type == C.DAMAGE_TYPE_FIRE:
             existing_burning = next((eff for eff in self.debuffs if eff.name == C.EFFECT_BURNING and eff.metadata.get(C.TARGETED_PART) == part_name), None) 
             if not existing_burning:
                 self.debuffs.append(Effect(
@@ -121,7 +120,7 @@ class FighterState:
                     metadata={C.TARGETED_PART: part_name} 
                 ))
                 logger.debug(f"{self.id}:{part_name} is now burning.")
-        elif damage_type == C.DAMAGE_TYPE_PIERCING or damage_type == C.DAMAGE_TYPE_SLASHING: # Changed to use constants
+        elif damage_type == C.DAMAGE_TYPE_PIERCING or damage_type == C.DAMAGE_TYPE_SLASHING:
             existing_bleeding = next((eff for eff in self.debuffs if eff.name == C.EFFECT_BLEEDING and eff.metadata.get(C.TARGETED_PART) == part_name), None) 
             if not existing_bleeding and part.bleed_rate > 0: 
                  self.debuffs.append(Effect(
@@ -147,21 +146,21 @@ class FighterState:
             self.apply_damage_to_part(
                 part_name=wound_data[C.TARGETED_PART], 
                 damage_amount=wound_data[C.VALUE], 
-                damage_type=wound_data.get(C.TYPE, C.DAMAGE_TYPE_GENERIC) # Changed to use constant for default
+                damage_type=wound_data.get(C.TYPE, C.DAMAGE_TYPE_GENERIC)
             )
 
         if C.EFFECTS_ADDED in delta:
             for eff_data in delta[C.EFFECTS_ADDED]:
                 effect_name = eff_data.get(C.NAME) 
                 if not effect_name:
-                    logger.warning(f"Effect data missing '{C.NAME}' for fighter {self.id}: {eff_data}") # Replaced print with logger.warning
+                    logger.warning(f"Effect data missing '{C.NAME}' for fighter {self.id}: {eff_data}")
                     continue
                 
                 is_duplicate = False
                 for existing_eff_list in (self.buffs, self.debuffs):
                     for eff in existing_eff_list:
-                        if eff.name == effect_name and eff.ttl == -1: 
-                            logger.debug(f"Prevented adding duplicate permanent effect: {effect_name} for fighter {self.id}") # Replaced print with logger.debug
+                        if eff.name == effect_name and eff.ttl == -1:
+                            logger.debug(f"Prevented adding duplicate permanent effect: {effect_name} for fighter {self.id}")
                             is_duplicate = True
                             break
                     if is_duplicate: break
@@ -182,17 +181,17 @@ class FighterState:
                 logger.info(f"Effect '{new_effect.name}' added to {self.id}. TTL: {new_effect.ttl}, Magnitude: {new_effect.magnitude:.2f}")
 
         if C.EFFECTS_REMOVED in delta:
-            names_to_remove = set(delta[C.EFFECTS_REMOVED]) # Use a set for efficient lookup
+            names_to_remove = set(delta[C.EFFECTS_REMOVED])
             self.buffs = [eff for eff in self.buffs if eff.name not in names_to_remove]
             self.debuffs = [eff for eff in self.debuffs if eff.name not in names_to_remove]
-            for name_removed in names_to_remove: # Optional: log removal
+            for name_removed in names_to_remove:
                  logger.debug(f"Effect '{name_removed}' removed from {self.id} via delta.")
 
         if C.STATUS_CHANGE in delta:
             self.status = delta[C.STATUS_CHANGE]
 
         # Check for status changes due to pain
-        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.STATUS_FIGHTING: # Use constant
+        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.STATUS_FIGHTING:
             logger.info(f"{self.id} fell unconscious due to pain: {self.pain}. Current status: {self.status}") 
             self.status = C.STATUS_UNCONSCIOUS
             logger.info(f"{self.id} status is now {self.status}")
@@ -228,32 +227,31 @@ class FighterState:
         for eff_list_name in [C.BUFFS, C.DEBUFFS]: 
             eff_list = getattr(self, eff_list_name)
             for eff in list(eff_list): 
-                if eff.name == C.EFFECT_BURNING: 
-                    # self.pain += int(eff.magnitude * 2) # Removed: Pain is handled by apply_damage_to_part
-                    self.heat += int(eff.magnitude * 5)   
+                if eff.name == C.EFFECT_BURNING:
+                    self.heat += int(eff.magnitude * 5)
                     affected_part_name = eff.metadata.get(C.TARGETED_PART) 
                     if affected_part_name and affected_part_name in self.parts:
                         target_part = self.parts[affected_part_name]
                         if target_part.status not in [C.IS_DESTROYED, C.STATUS_SEVERED] and target_part.layers:
                             active_layers = [layer for layer in target_part.layers if layer.max_hp > 0]
                             if active_layers:
-                                random_layer_to_burn = choice(active_layers) # Changed to use rng.choice
+                                random_layer_to_burn = choice(active_layers)
                                 burn_damage = max(1, int(eff.magnitude)) 
-                                logger.debug(f"{self.id} takes {burn_damage} burn damage to {affected_part_name}.{random_layer_to_burn.name} from '{C.EFFECT_BURNING}' effect.") # Replaced print with logger.debug
+                                logger.debug(f"{self.id} takes {burn_damage} burn damage to {affected_part_name}.{random_layer_to_burn.name} from '{C.EFFECT_BURNING}' effect.")
                                 self.apply_damage_to_part(affected_part_name, burn_damage, C.EFFECT_FIRE_FROM_EFFECT)
                     else:
-                        logger.debug(f"'{eff.name}' effect on {self.id} has no specific target part ('{affected_part_name}') or target is gone.") # Replaced print with logger.debug
+                        logger.debug(f"'{eff.name}' effect on {self.id} has no specific target part ('{affected_part_name}') or target is gone.")
 
                 elif eff.name == C.EFFECT_BLEEDING: 
                     self.pain += int(eff.magnitude * 1) 
                     self.exhaustion += int(eff.magnitude * 0.5) 
                     affected_part_name = eff.metadata.get(C.TARGETED_PART) 
-                    logger.debug(f"{self.id}'s '{affected_part_name}' is bleeding (magnitude {eff.magnitude:.2f}) due to '{C.EFFECT_BLEEDING}' effect.") # Replaced print with logger.debug
+                    logger.debug(f"{self.id}'s '{affected_part_name}' is bleeding (magnitude {eff.magnitude:.2f}) due to '{C.EFFECT_BLEEDING}' effect.")
 
                 if eff.on_tick:
-                    logger.debug(f"Effect tick on {self.id}: {eff.on_tick} (Effect: {eff.name}) - TTL: {eff.ttl}") # Replaced print with logger.debug
+                    logger.debug(f"Effect tick on {self.id}: {eff.on_tick} (Effect: {eff.name}) - TTL: {eff.ttl}")
                 
                 expired = eff.tick() 
                 if expired:
-                    logger.info(f"Effect {eff.name} on {self.id} expired.") # Replaced print with logger.info
+                    logger.info(f"Effect {eff.name} on {self.id} expired.")
                     eff_list.remove(eff)
