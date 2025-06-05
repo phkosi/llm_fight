@@ -22,12 +22,12 @@ DEFAULTS = {
     C.CONFIG_SIMULATION: {
         C.CONFIG_RUNS: '1000',
         C.CONFIG_SEED: '42',
+        C.CONFIG_CONCURRENT_RUNS: '1',
     },
     C.CONFIG_DEFAULTS: {
         C.CONFIG_FIGHTER_CLASS: 'Generic Fighter',
         C.CONFIG_FIGHTER_LOADOUT: 'their bare fists and wits',
         C.CONFIG_FIGHTER_ENVIRONMENT: 'an open arena',
-        C.CONFIG_CONCURRENT_RUNS: '1',
     },
     C.CONFIG_DISCORD: {
         C.CONFIG_DISCORD_TOKEN: '',
@@ -36,7 +36,11 @@ DEFAULTS = {
 }
 
 class Config:
-    """Simple wrapper around configparser with migration helpers."""
+    """Simple wrapper around configparser with migration helpers.
+
+    Default values are seeded from :data:`DEFAULTS`. The
+    ``concurrent_runs`` option lives under the ``[SIMULATION]`` section.
+    """
     def __init__(self, path: Path | str = 'llmfight.ini'):
         self.path = Path(path)
         self.cp = configparser.ConfigParser()

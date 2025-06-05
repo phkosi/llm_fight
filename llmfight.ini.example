@@ -15,12 +15,12 @@ judge_log_window = 9999
 [SIMULATION]
 runs = 1000
 seed = 42
+concurrent_runs = 1
 
 [DEFAULTS]
 class = Generic Fighter
 loadout = their bare fists and wits
 environment = an open arena
-concurrent_runs = 1
 
 [DISCORD]
 discord_token =
