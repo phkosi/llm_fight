@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 from .config import CONFIG
 from .engine import constants as C
 from .engine.logger import logger
+from .transcripts import log_exchange
 
 
 def get_ollama_url() -> str:
@@ -95,4 +96,5 @@ async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1
             }
             tasks.append(_post_json(session, payload))
         responses = await asyncio.gather(*tasks)
+    log_exchange(messages, responses)
     return responses
