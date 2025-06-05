@@ -21,7 +21,6 @@ DEFAULTS = {
     C.CONFIG_SIMULATION: {
         C.CONFIG_RUNS: '1000',
         C.CONFIG_SEED: '42',
-        C.CONFIG_MIRROR: 'yes',
     },
     C.CONFIG_DEFAULTS: {
         C.CONFIG_FIGHTER_CLASS: 'Generic Fighter',

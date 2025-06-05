@@ -196,7 +196,6 @@ judge_log_window   = 9999        ; Number of recent turns for judge (effectively
 [SIMULATION]
 runs               = 1000        ; Number of simulation runs
 seed               = 42          ; PRNG seed for reproducibility
-mirror             = yes         ; If 'yes', runs each matchup twice, swapping A and B
 concurrent_runs    = 1           ; Number of fights to execute simultaneously
 
 [FighterA]
