@@ -58,6 +58,48 @@ def test_cli_invalid_path():
     assert "invalid path" in result.output
 
 
+def test_cli_simulate_with_config(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "alt.ini"
+    cfg.write_text("[SIMULATION]\nseed = 77\n")
+
+    async def fake_run_batch(output_csv):
+        from src.config import CONFIG
+
+        assert CONFIG.path == cfg
+        assert CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int) == 77
+        return Path("dummy.csv")
+
+    from src import config as config_mod
+
+    original = config_mod.CONFIG
+    with patch("src.simulation.run_batch", new=AsyncMock(side_effect=fake_run_batch)):
+        result = runner.invoke(app, ["simulate", "--config", str(cfg)])
+    assert result.exit_code == 0
+    config_mod.CONFIG = original
+
+
+def test_cli_play_with_config(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "alt.ini"
+    cfg.write_text("[General]\nmax_retries = 9\n")
+
+    async def fake_fight():
+        from src.config import CONFIG
+
+        assert CONFIG.path == cfg
+        assert CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int) == 9
+        return {C.WINNER: "B", C.LOG_TURN: "1"}
+
+    from src import config as config_mod
+
+    original = config_mod.CONFIG
+    with patch("src.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)):
+        result = runner.invoke(app, ["play", "--config", str(cfg)])
+    assert result.exit_code == 0
+    config_mod.CONFIG = original
+
+
 def test_cli_unexpected_argument():
     runner = CliRunner()
     result = runner.invoke(app, ["play", "extra"])

@@ -135,6 +135,7 @@ The simulation harness can be run via the command-line interface.
 python -m src.cli simulate
 ```
 This command will execute the number of simulation runs specified in the configuration file (see below) and output results to `sim_results.csv` by default. Use `--output-csv PATH` to change the file location.
+Both `simulate` and `play` accept `--config PATH` to load an alternate configuration file.
 
 To run a single fight and display the winner:
 
