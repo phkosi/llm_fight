@@ -81,13 +81,14 @@ src/
     python -m venv .venv
     source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
     ```
-3.  Install runtime dependencies (FastAPI >=0.111, Pydantic 2.x):
+3.  Install the package and its runtime dependencies:
     ```bash
-    pip install -r requirements.txt
+    pip install .
     ```
-4.  For development and testing, install the additional dev requirements:
+4.  For development and testing, install the dev requirements and use editable mode:
     ```bash
     pip install -r requirements-dev.txt
+    pip install -e .
     ```
 5.  Copy the example configuration and customize as needed:
     ```bash

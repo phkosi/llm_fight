@@ -46,9 +46,10 @@ async def test_chat_single_call_success():
     mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
     # Patch aiohttp.ClientSession so our module-level session uses the mock.
-    with patch(
-        "aiohttp.ClientSession", return_value=mock_session_instance
-    ) as mock_ClientSession_constructor, patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
+    with (
+        patch("aiohttp.ClientSession", return_value=mock_session_instance) as mock_ClientSession_constructor,
+        patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}),
+    ):
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=1)
 
     assert responses == [mock_response_content]
@@ -104,9 +105,10 @@ async def test_chat_best_of_n_calls_success():
     # directly each time
     mock_session_instance.post = MagicMock(side_effect=mock_post_context_managers)
 
-    with patch(
-        "aiohttp.ClientSession", return_value=mock_session_instance
-    ) as mock_ClientSession_constructor, patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
+    with (
+        patch("aiohttp.ClientSession", return_value=mock_session_instance) as mock_ClientSession_constructor,
+        patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}),
+    ):
         responses = await chat(messages=messages, max_tokens=max_tokens, best_of=best_of_n)
 
     assert responses == mock_responses_content
