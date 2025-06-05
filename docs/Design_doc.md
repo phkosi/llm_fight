@@ -182,6 +182,7 @@ Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future
 ```ini
 [General]
 model              = llama3.2
+ollama_api_url     = http://localhost:11434/v1/chat/completions
 max_tokens_fighter = 24000
 max_tokens_judge   = 48000
 best_of_fighter    = 3

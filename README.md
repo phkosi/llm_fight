@@ -182,6 +182,7 @@ The simulation is configured using `llmfight.ini`. Start by copying `llmfight.in
 ```ini
 [General]
 ollama_default_model = llama3.2  ; Ollama model to use
+ollama_api_url      = http://localhost:11434/v1/chat/completions ; Local Ollama endpoint
 max_tokens_fighter   = 24000     ; Max context tokens for fighter prompts
 max_tokens_judge     = 48000     ; Max context tokens for judge prompts
 ollama_temperature   = 0.8       ; Temperature for Ollama completions
@@ -213,9 +214,10 @@ discord_channel = channel-name-or-id ; optional, limit commands to this channel
 ```
 The `config.py` file is responsible for loading and managing these configurations.
 
-To connect to a remote Ollama instance (for example, if you're tunneling
-the service with ngrok), set the `API_URL` environment variable to the full
-API endpoint before running the application:
+The Ollama endpoint defaults to `http://localhost:11434/v1/chat/completions`.
+You can change this in `llmfight.ini` using `ollama_api_url` or override it at
+runtime with the `API_URL` environment variable (useful when tunneling a remote
+service with ngrok):
 
 ```bash
 export API_URL="https://your-ngrok-url.ngrok-free.app/v1/chat/completions"
