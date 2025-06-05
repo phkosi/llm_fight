@@ -141,3 +141,25 @@ async def test_run_batch_handles_errors(tmp_path):
     assert len(rows) == 2
     assert all(row[C.WINNER] == 'error' for row in rows)
     assert mock_exc.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_run_batch_zero_runs(tmp_path):
+    out_file = tmp_path / "empty.csv"
+
+    with (
+        patch.object(sim_module, "_single_fight", side_effect=RuntimeError("should not run")) as mock_fight,
+        patch.object(sim_module, "RUNS", 0),
+        patch.object(sim_module, "CONCURRENT_RUNS", 1),
+    ):
+        path = await sim_module.run_batch(out_file)
+
+    assert path == out_file
+    assert out_file.exists()
+    with open(out_file, newline="") as fp:
+        reader = csv.DictReader(fp)
+        rows = list(reader)
+
+    assert reader.fieldnames == [C.WINNER, C.LOG_TURN]
+    assert rows == []
+    mock_fight.assert_not_called()

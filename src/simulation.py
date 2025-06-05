@@ -165,6 +165,13 @@ async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
         res.append(await coro)
 
     csv_path = Path(output_csv)
+    if not res:
+        # When RUNS is zero we still create the CSV but with only headers
+        with csv_path.open("w", newline="") as fp:
+            writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
+            writer.writeheader()
+        return csv_path
+
     with csv_path.open("w", newline="") as fp:
         writer = csv.DictWriter(fp, fieldnames=res[0].keys())
         writer.writeheader()
