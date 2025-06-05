@@ -93,6 +93,23 @@ other_val = something
         bool_config.get("Booleans", "other_val", bool)
     assert bool_config.get("Booleans", "other_val", bool, fallback=True) is True # With fallback
 
+def test_config_get_boolean_string_fallback(tmp_path, temp_config_instance):
+    bool_ini_content = """
+[Booleans]
+other_val = something
+    """
+    config_file = tmp_path / "bool_fallback.ini"
+    with open(config_file, "w") as f:
+        f.write(bool_ini_content)
+
+    cfg = Config(str(config_file))
+
+    assert cfg.get("Booleans", "other_val", bool, fallback="False") is False
+    assert cfg.get("Booleans", "other_val", bool, fallback="0") is False
+
+    assert temp_config_instance.get("MissingSection", "missing_bool", bool, fallback="False") is False
+    assert temp_config_instance.get("MissingSection", "missing_bool", bool, fallback="0") is False
+
 def test_config_get_raises_error_if_no_fallback_and_missing(temp_config_instance):
     with pytest.raises(configparser.NoSectionError): # Section missing
         temp_config_instance.get("VeryMissingSection", "key", str)

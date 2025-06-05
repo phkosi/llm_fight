@@ -73,21 +73,37 @@ class Config:
         has_option = self.cp.has_option(section, key) if has_section else False
 
         if cast is bool:
+            def _parse_bool(value):
+                if isinstance(value, bool):
+                    return value
+                lowered = str(value).strip().lower()
+                if lowered in configparser.ConfigParser.BOOLEAN_STATES:
+                    return configparser.ConfigParser.BOOLEAN_STATES[lowered]
+                raise ValueError(f"'{value}' is not a valid boolean")
+
             try:
-                # If key/section is missing, getboolean will raise NoOptionError/NoSectionError
-                # These are caught below if fallback is None.
-                if not has_option and fallback is not None:
-                    return bool(fallback)
+                if not has_option:
+                    if fallback is not None:
+                        return _parse_bool(fallback)
+                    if not has_section:
+                        raise configparser.NoSectionError(section)
+                    else:
+                        raise configparser.NoOptionError(key, section)
+
                 return self.cp.getboolean(section, key)
-            except ValueError: # Raised by getboolean for invalid boolean string for an existing key
-                if fallback is not None: return bool(fallback)
+            except ValueError:
+                if fallback is not None:
+                    return _parse_bool(fallback)
                 original_value = "<not found>"
-                if has_option: # Should always be true if ValueError from getboolean on existing key
+                if has_option:
                     original_value = self.cp.get(section, key)
-                raise ValueError(f"Value for '{key}' in section '{section}' ('{original_value}') is not a valid boolean and no fallback provided.")
+                raise ValueError(
+                    f"Value for '{key}' in section '{section}' ('{original_value}') is not a valid boolean and no fallback provided."
+                )
             except (configparser.NoSectionError, configparser.NoOptionError):
-                if fallback is not None: return bool(fallback) # Should have been caught by `not has_option` already
-                raise # Re-raise if no fallback
+                if fallback is not None:
+                    return _parse_bool(fallback)
+                raise
 
         # For other types
         if not has_option: # Key or section missing
