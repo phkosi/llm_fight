@@ -1,4 +1,3 @@
-import pytest
 from src.anatomy import compose_humanoid, PRESETS, BodyPart
 
 

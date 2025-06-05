@@ -1,7 +1,5 @@
 import pytest
 from src import rng # Import the module itself to access its functions
-from src.config import CONFIG # To potentially check the default seed if needed
-from src.engine import constants as C
 
 # Note: src.rng is seeded from CONFIG when it's first imported.
 # Tests need to be mindful of this initial state or explicitly re-seed.

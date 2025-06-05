@@ -1,5 +1,4 @@
 import csv
-import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import pytest
 

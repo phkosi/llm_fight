@@ -59,7 +59,6 @@ async def close_session() -> None:
 
 # -------------- helper ---------------------------------------------
 async def _post_json(payload: Dict[str, Any]):
-    headers = {C.CONTENT_TYPE: C.APPLICATION_JSON}
     try:
         # Allow aiohttp to respect proxy-related environment variables
         # like HTTPS_PROXY so network-restricted environments can

@@ -7,6 +7,10 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
   ```bash
   pytest -q
   ```
+- A lightweight **flake8** configuration checks for unused imports. Run:
+  ```bash
+  flake8
+  ```
 - Ensure all tests pass before committing.
 
 ## Project layout

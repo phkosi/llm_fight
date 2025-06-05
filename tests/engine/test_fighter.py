@@ -1,7 +1,6 @@
 import pytest
 from src.engine.fighter import describe_pain, describe_exhaustion, describe_heat
-import asyncio
-from unittest.mock import patch, AsyncMock, ANY, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from src.engine.fighter import get_fighter_attempt
 from src.engine.combat_log import CombatLog, CombatTurn
 from src.engine.prompts import FIGHTER_SYSTEM_PROMPT # To verify prompt formatting

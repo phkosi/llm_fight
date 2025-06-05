@@ -1,6 +1,6 @@
 import pytest
 from src.state import FighterState, Effect
-from src.anatomy import PRESETS, BodyPart, TissueLayer # PRESETS is used by humanoid_fighter
+# PRESETS import ensures presets are loaded when FighterState.from_preset runs
 from src.engine import constants as C
 
 # Fixture to create a fresh humanoid fighter state for each test
