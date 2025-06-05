@@ -2,6 +2,9 @@ import pytest
 import json
 from jsonschema import ValidationError, validate
 from typing import Any, Dict, List
+from unittest.mock import AsyncMock, patch
+
+from src.judge import judge_phase1, judge_phase2
 
 from src.validation import guarded_call, ActionSchema, JudgeP1Schema, JudgeP2Schema, DeltaSchema
 from src.engine import constants as C
@@ -343,3 +346,36 @@ async def test_guarded_call_negative_max_retries(monkeypatch):
 
     with pytest.raises(RuntimeError, match="Guarded call failed without specific error"):
         await guarded_call(dummy, {"type": "object"})
+
+
+@pytest.mark.asyncio
+@patch("src.judge.guarded_call")
+@patch("src.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase1_passes_schema_to_chat(mock_chat, mock_guarded_call):
+    mock_chat.return_value = [json.dumps({"judgement_text": "ok"})]
+
+    async def passthrough(func, schema):
+        return await func()
+
+    mock_guarded_call.side_effect = passthrough
+    state = {C.FIGHTER_A: {}, C.FIGHTER_B: {}}
+    await judge_phase1(state, "a", "b")
+
+    assert mock_chat.call_args.kwargs["schema"] == JudgeP1Schema
+
+
+@pytest.mark.asyncio
+@patch("src.judge.guarded_call")
+@patch("src.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_passes_schema_to_chat(mock_chat, mock_guarded_call):
+    mock_chat.return_value = [json.dumps({"narration": "", "delta": {}, "fight_end": False, "winner": None})]
+
+    async def passthrough(func, schema):
+        return await func()
+
+    mock_guarded_call.side_effect = passthrough
+    p2_input = {"recent_combat_log": "", "combat_log_turns": 0}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    await judge_phase2(p2_input, rolls)
+
+    assert mock_chat.call_args.kwargs["schema"] == JudgeP2Schema
