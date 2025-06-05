@@ -37,11 +37,6 @@ HEADERS = {
 
 _session: Optional[aiohttp.ClientSession] = None
 
-MODEL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
-TEMP = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
-BEST_OF_F = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int)
-BEST_OF_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
-
 # -------------- session management ---------------------------------
 def _get_session() -> aiohttp.ClientSession:
     """Return a module-level :class:`ClientSession`, creating it if needed."""
