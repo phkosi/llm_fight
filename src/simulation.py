@@ -1,4 +1,5 @@
 """Batch self‑play simulation harness."""
+
 import asyncio
 import csv
 from pathlib import Path
@@ -16,6 +17,7 @@ from .engine.combat_log import CombatLog, CombatTurn
 RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
 CONCURRENT_RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
+
 async def _single_fight() -> Dict[str, str]:
     """
     Simulates a single fight between two AI fighters (A and B).
@@ -29,13 +31,13 @@ async def _single_fight() -> Dict[str, str]:
     Returns:
         A dictionary containing the 'winner' (fighter ID or 'draw') and 'turns' taken.
     """
-    A = FighterState.from_preset('A', 'humanoid')
-    B = FighterState.from_preset('B', 'humanoid')
+    A = FighterState.from_preset("A", "humanoid")
+    B = FighterState.from_preset("B", "humanoid")
     turn = 0
     outcome = None
     combat_log = CombatLog()
     fighter_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
-    judge_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999) # For Judge P2
+    judge_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)  # For Judge P2
 
     while not outcome:
         turn += 1
@@ -47,38 +49,42 @@ async def _single_fight() -> Dict[str, str]:
         )
         # Provide recent combat log context to judge_phase1
         p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
-        p1 = await judge_phase1({'A': A.to_json(), 'B': B.to_json()}, attemptA, attemptB, recent_log=p1_recent_log)
-        
+        p1 = await judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, recent_log=p1_recent_log)
+
         # Determine success of attempts based on probabilities from Judge P1
-        rolls = {'A': False, 'B': False}
+        rolls = {"A": False, "B": False}
         try:
             prob_a_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_prob", "0.0")
             prob_a = float(prob_a_str) if prob_a_str else 0.0
             if p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_valid", False):
-                rolls['A'] = rand() < prob_a
+                rolls["A"] = rand() < prob_a
         except ValueError:
-            logger.warning(f"Could not parse probability string for Fighter A: '{prob_a_str}'. Defaulting to 0.0 probability.")
+            logger.warning(
+                f"Could not parse probability string for Fighter A: '{prob_a_str}'. Defaulting to 0.0 probability."
+            )
             # rolls['A'] remains False
-        
+
         try:
             prob_b_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_prob", "0.0")
             prob_b = float(prob_b_str) if prob_b_str else 0.0
             if p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_valid", False):
-                rolls['B'] = rand() < prob_b
+                rolls["B"] = rand() < prob_b
         except ValueError:
-            logger.warning(f"Could not parse probability string for Fighter B: '{prob_b_str}'. Defaulting to 0.0 probability.")
+            logger.warning(
+                f"Could not parse probability string for Fighter B: '{prob_b_str}'. Defaulting to 0.0 probability."
+            )
             # rolls['B'] remains False
-        
+
         # Pass the judgement text to P2 for narration context, full states, and combat log
         judge_recent_log = combat_log.to_summary(last_n=judge_log_window)
 
         p2_input_state = {
-            'fighter_A': A.to_json(),
-            'fighter_B': B.to_json(),
-            'p1_judgement': p1.get('judgement_text', ''),
-            'p1_explanation': p1.get('explanation', ''),
-            'combat_log_turns': len(combat_log),
-            'recent_combat_log': judge_recent_log
+            "fighter_A": A.to_json(),
+            "fighter_B": B.to_json(),
+            "p1_judgement": p1.get("judgement_text", ""),
+            "p1_explanation": p1.get("explanation", ""),
+            "combat_log_turns": len(combat_log),
+            "recent_combat_log": judge_recent_log,
         }
         p2 = await judge_phase2(p2_input_state, rolls)
 
@@ -88,14 +94,14 @@ async def _single_fight() -> Dict[str, str]:
             attempt_B=attemptB,
             judge_p1=p1,
             judge_p2=p2,
-            state_A_before=p2_input_state['fighter_A'],
-            state_B_before=p2_input_state['fighter_B'],
+            state_A_before=p2_input_state["fighter_A"],
+            state_B_before=p2_input_state["fighter_B"],
         )
 
         # Apply deltas to fighter states
-        if 'delta' in p2 and isinstance(p2['delta'], dict):
-            A.apply_delta(p2['delta'].get('A', {}))
-            B.apply_delta(p2['delta'].get('B', {}))
+        if "delta" in p2 and isinstance(p2["delta"], dict):
+            A.apply_delta(p2["delta"].get("A", {}))
+            B.apply_delta(p2["delta"].get("B", {}))
 
         # Tick effects for both fighters AFTER deltas are applied for the turn
         A.apply_effects()
@@ -107,27 +113,30 @@ async def _single_fight() -> Dict[str, str]:
         combat_log.append(turn_entry)
 
         # Check for fight end conditions
-        if p2.get('fight_end', False):
-            winner_id = p2.get('winner')
-            if winner_id == 'A':
+        if p2.get("fight_end", False):
+            winner_id = p2.get("winner")
+            if winner_id == "A":
                 outcome = A.id
-            elif winner_id == 'B':
+            elif winner_id == "B":
                 outcome = B.id
-            elif winner_id is None: # Could be a draw declared by judge
-                outcome = 'draw' 
-            else: # Unspecified winner but fight_end is true, could be a mutual kill or environmental factor
-                outcome = 'ended_no_clear_winner' 
+            elif winner_id is None:  # Could be a draw declared by judge
+                outcome = "draw"
+            else:  # Unspecified winner but fight_end is true, could be a mutual kill or environmental factor
+                outcome = "ended_no_clear_winner"
         elif A.status == C.STATUS_DEAD or A.status == C.STATUS_UNCONSCIOUS:
-            outcome = B.id # B wins if A is out
+            outcome = B.id  # B wins if A is out
         elif B.status == C.STATUS_DEAD or B.status == C.STATUS_UNCONSCIOUS:
-            outcome = A.id # A wins if B is out
-        elif turn >= CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100): # Max turn limit, used constant
+            outcome = A.id  # A wins if B is out
+        elif turn >= CONFIG.get(
+            C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100
+        ):  # Max turn limit, used constant
             outcome = C.DRAW
         # else: outcome remains None, loop continues
 
     logger.info(f"Fight ended. Outcome: {outcome}, Turns: {turn}")
     logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
     return {C.WINNER: outcome, C.LOG_TURN: str(turn)}
+
 
 async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
     """Run a batch of simulations and write the results to ``output_csv``.

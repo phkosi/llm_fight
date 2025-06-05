@@ -1,4 +1,5 @@
 """Schema validation and retry helpers using jsonschema."""
+
 import json
 from typing import Any, Callable, Dict
 from jsonschema import validate, ValidationError
@@ -35,10 +36,10 @@ JudgeP1Schema: Dict[str, Any] = {
         f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
         f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
         f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-        "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING}
+        "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
     },
     C.SCHEMA_REQUIRED: ["judgement_text", f"{C.ATTEMPT}_{C.FIGHTER_A}_valid", f"{C.ATTEMPT}_{C.FIGHTER_B}_valid"],
-    C.SCHEMA_ADDITIONAL_PROPERTIES: True
+    C.SCHEMA_ADDITIONAL_PROPERTIES: True,
 }
 
 DeltaSchema = {
@@ -54,16 +55,19 @@ DeltaSchema = {
                 C.SCHEMA_PROPERTIES: {
                     C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
                     C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER},
-                    C.TYPE: {C.SCHEMA_TYPE: C.SCHEMA_STRING}
+                    C.TYPE: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
                 },
-                C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE]
-            }
+                C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE],
+            },
         },
         C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_OBJECT}},
         C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
-        C.STATUS_CHANGE: {C.SCHEMA_TYPE: C.SCHEMA_STRING, C.SCHEMA_ENUM: [C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD]},
+        C.STATUS_CHANGE: {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_ENUM: [C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD],
+        },
     },
-    C.SCHEMA_ADDITIONAL_PROPERTIES: False
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
 }
 
 JudgeP2Schema = {
@@ -72,34 +76,35 @@ JudgeP2Schema = {
         C.NARRATION: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
         C.DELTA: {
             C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-            C.SCHEMA_PATTERN_PROPERTIES: {
-                f"^[{C.FIGHTER_A}{C.FIGHTER_B}]$": DeltaSchema
-            },
+            C.SCHEMA_PATTERN_PROPERTIES: {f"^[{C.FIGHTER_A}{C.FIGHTER_B}]$": DeltaSchema},
             C.SCHEMA_MIN_PROPERTIES: 0,
             C.SCHEMA_MAX_PROPERTIES: 2,
-            C.SCHEMA_ADDITIONAL_PROPERTIES: False
+            C.SCHEMA_ADDITIONAL_PROPERTIES: False,
         },
         C.FIGHT_END: {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        C.WINNER: {C.SCHEMA_TYPE: [C.SCHEMA_STRING, C.SCHEMA_NULL], C.SCHEMA_ENUM: [C.FIGHTER_A, C.FIGHTER_B, None]}
+        C.WINNER: {C.SCHEMA_TYPE: [C.SCHEMA_STRING, C.SCHEMA_NULL], C.SCHEMA_ENUM: [C.FIGHTER_A, C.FIGHTER_B, None]},
     },
-    C.SCHEMA_REQUIRED: [C.NARRATION, C.DELTA, C.FIGHT_END]
+    C.SCHEMA_REQUIRED: [C.NARRATION, C.DELTA, C.FIGHT_END],
 }
 
 # generic validate wrapper ------------------------------------------------
+
 
 async def guarded_call(func: Callable[[], Any], schema: dict) -> Any:
     """Call func() async until schema validates or retries exhausted."""
     last_error = None
     for attempt in range(MAX_RETRIES + 1):
         try:
-            data = await func() # Await func() as it's an async callable (e.g. _call in judge.py)
+            data = await func()  # Await func() as it's an async callable (e.g. _call in judge.py)
             validate(data, schema)
             return data
-        except (ValidationError, json.JSONDecodeError) as e: # Catch JSONDecodeError here too
+        except (ValidationError, json.JSONDecodeError) as e:  # Catch JSONDecodeError here too
             last_error = e
             if attempt >= MAX_RETRIES:
                 # After all retries, raise the last encountered error
-                raise RuntimeError(f"Validation/JSON parsing failed after {MAX_RETRIES + 1} attempts: {last_error}") from last_error
+                raise RuntimeError(
+                    f"Validation/JSON parsing failed after {MAX_RETRIES + 1} attempts: {last_error}"
+                ) from last_error
             # Optionally log the error for this attempt before retrying
             logger.debug(f"Attempt {attempt + 1} failed during guarded_call: {e}. Retrying...")
     # This part should not be reached if MAX_RETRIES >= 0, due to the raise in the loop.

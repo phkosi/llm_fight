@@ -18,6 +18,7 @@ def test_logger_level_respected(monkeypatch, tmp_path):
         logger_module.logger.removeHandler(h)
 
     import src.config as config_module
+
     monkeypatch.setattr(config_module, "CONFIG", custom_cfg)
     importlib.reload(logger_module)
 

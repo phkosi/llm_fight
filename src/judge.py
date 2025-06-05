@@ -1,4 +1,5 @@
 """Judge orchestration (Phase‑1 probability, RNG, Phase‑2 narration)."""
+
 import json
 from typing import Dict, Any
 
@@ -13,8 +14,9 @@ BEST_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 
 # -------------------------------------------------------------------
 
+
 async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> Dict[str, Any]:
-    """ 
+    """
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
 
     Args:
@@ -30,29 +32,32 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     system_prompt_content = JUDGE_P1_SYSTEM_PROMPT
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
     user_content = {
-        f'fighter_{C.FIGHTER_A}_state_summary': {
+        f"fighter_{C.FIGHTER_A}_state_summary": {
             C.STATUS: state.get(C.FIGHTER_A, {}).get(C.STATUS),
-            C.PAIN: state.get(C.FIGHTER_A, {}).get(C.PAIN)
+            C.PAIN: state.get(C.FIGHTER_A, {}).get(C.PAIN),
         },
-        f'fighter_{C.FIGHTER_B}_state_summary': {
+        f"fighter_{C.FIGHTER_B}_state_summary": {
             C.STATUS: state.get(C.FIGHTER_B, {}).get(C.STATUS),
-            C.PAIN: state.get(C.FIGHTER_B, {}).get(C.PAIN)
+            C.PAIN: state.get(C.FIGHTER_B, {}).get(C.PAIN),
         },
-        f'{C.ATTEMPT}_{C.FIGHTER_A}': attemptA,
-        f'{C.ATTEMPT}_{C.FIGHTER_B}': attemptB,
-        'recent_combat_log': recent_log,
+        f"{C.ATTEMPT}_{C.FIGHTER_A}": attemptA,
+        f"{C.ATTEMPT}_{C.FIGHTER_B}": attemptB,
+        "recent_combat_log": recent_log,
     }
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
+
     async def _call():
         response_texts = await chat([system, user], max_tokens=MAX_TOK_J, best_of=BEST_J)
         for txt in response_texts:
             try:
                 return json.loads(txt)
             except json.JSONDecodeError:
-                continue # Try next response
-        raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0) # All failed
+                continue  # Try next response
+        raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
+
     result = await guarded_call(_call, JudgeP1Schema)
     return result
+
 
 async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
     """
@@ -79,8 +84,8 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
             try:
                 return json.loads(txt)
             except json.JSONDecodeError:
-                continue # Try next response
-        raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0) # All failed
+                continue  # Try next response
+        raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
 
     result = await guarded_call(_call, JudgeP2Schema)
     return result

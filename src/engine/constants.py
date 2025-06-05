@@ -24,8 +24,8 @@ WOUNDS = "wounds"
 DEBUFFS = "debuffs"
 BUFFS = "buffs"
 LOADOUT = "loadout"
-EQUIPMENT = "equipment" # Part of loadout
-ITEMS = "items" # Part of loadout
+EQUIPMENT = "equipment"  # Part of loadout
+ITEMS = "items"  # Part of loadout
 
 # Body Parts & Anatomy
 BODY_PARTS = "body_parts"
@@ -37,14 +37,14 @@ BURN_RATE = "burn_rate"
 STATUS_FIGHTING = "fighting"
 STATUS_UNCONSCIOUS = "unconscious"
 STATUS_DEAD = "dead"
-STATUS_SEVERED = "severed" # for body parts
-MAX_PAIN_THRESHOLD = 100 # Threshold for unconsciousness (already implicitly used)
-MAX_PAIN_BEFORE_DEATH = 200 # New constant for death by pain
+STATUS_SEVERED = "severed"  # for body parts
+MAX_PAIN_THRESHOLD = 100  # Threshold for unconsciousness (already implicitly used)
+MAX_PAIN_BEFORE_DEATH = 200  # New constant for death by pain
 
 # Effects
 EFFECT_ON_APPLY = "on_apply"
 EFFECT_ON_TICK = "on_tick"
-EFFECT_TTL = "ttl" # Time To Live
+EFFECT_TTL = "ttl"  # Time To Live
 EFFECT_BLEEDING = "bleeding"
 EFFECT_BURNING = "burning"
 EFFECT_STUNNED = "stunned"
@@ -52,7 +52,7 @@ EFFECT_STUNNED = "stunned"
 # Damage Types (new section)
 DAMAGE_TYPE_PIERCING = "piercing"
 DAMAGE_TYPE_SLASHING = "slashing"
-DAMAGE_TYPE_FIRE = "fire" # Consistent with C.EFFECT_BURNING usage elsewhere
+DAMAGE_TYPE_FIRE = "fire"  # Consistent with C.EFFECT_BURNING usage elsewhere
 DAMAGE_TYPE_GENERIC = "generic"
 
 # Judge & Simulation
@@ -69,7 +69,7 @@ EXHAUSTION_INCREASE = "exhaustion_increase"
 HEAT_INCREASE = "heat_increase"
 EFFECTS_ADDED = "effects_added"
 EFFECTS_REMOVED = "effects_removed"
-STATUS_CHANGE = "status_change" # For overall fighter status
+STATUS_CHANGE = "status_change"  # For overall fighter status
 
 # Schema related
 SCHEMA_TYPE = "type"
@@ -103,14 +103,14 @@ AGENT_CONTENT = "content"
 AGENT_SYSTEM = "system"
 AGENT_USER = "user"
 AGENT_ASSISTANT = "assistant"
-AGENT_RESPONSE = "response" # Key for Ollama's response content
+AGENT_RESPONSE = "response"  # Key for Ollama's response content
 METADATA = "metadata"
-OLLAMA_CHOICES = "choices" # Added for Ollama specific response
-OLLAMA_MESSAGE = "message" # Added for Ollama specific response
-TEMPERATURE = "temperature" # Added for payload key
-AGENT_MAX_TOKENS = "max_tokens" # Added for payload key
-CONTENT_TYPE = "Content-Type" # Added for headers
-APPLICATION_JSON = "application/json" # Added for headers
+OLLAMA_CHOICES = "choices"  # Added for Ollama specific response
+OLLAMA_MESSAGE = "message"  # Added for Ollama specific response
+TEMPERATURE = "temperature"  # Added for payload key
+AGENT_MAX_TOKENS = "max_tokens"  # Added for payload key
+CONTENT_TYPE = "Content-Type"  # Added for headers
+APPLICATION_JSON = "application/json"  # Added for headers
 
 # Config file keys
 CONFIG_GENERAL = "General"
@@ -121,17 +121,17 @@ CONFIG_JUDGE_LOG_WINDOW = "judge_log_window"
 CONFIG_LLAMA_API_URL = "ollama_api_url"
 CONFIG_LLAMA_DEFAULT_MODEL = "ollama_default_model"
 CONFIG_LLAMA_TEMPERATURE = "ollama_temperature"
-CONFIG_MAX_TOKENS_FIGHTER = "max_tokens_fighter" # Added config key
-CONFIG_MAX_TOKENS_JUDGE = "max_tokens_judge" # Added config key
-CONFIG_BEST_OF_FIGHTER = "best_of_fighter" # Added config key
-CONFIG_BEST_OF_JUDGE = "best_of_judge" # Added config key
-CONFIG_MAX_RETRIES = "max_retries" # Added config key
+CONFIG_MAX_TOKENS_FIGHTER = "max_tokens_fighter"  # Added config key
+CONFIG_MAX_TOKENS_JUDGE = "max_tokens_judge"  # Added config key
+CONFIG_BEST_OF_FIGHTER = "best_of_fighter"  # Added config key
+CONFIG_BEST_OF_JUDGE = "best_of_judge"  # Added config key
+CONFIG_MAX_RETRIES = "max_retries"  # Added config key
 CONFIG_LOG_LEVEL = "log_level"  # New config key for logger level
-CONFIG_RUNS = "runs" # Added config key
-CONFIG_SEED = "seed" # Added config key
-CONFIG_MAX_TURNS = "max_turns" # Added config key for simulation
-CONFIG_CONCURRENT_RUNS = "concurrent_runs" # Simulation option controlling async concurrency
-CONFIG_DEFAULTS = "DEFAULTS" # For configparser default section
+CONFIG_RUNS = "runs"  # Added config key
+CONFIG_SEED = "seed"  # Added config key
+CONFIG_MAX_TURNS = "max_turns"  # Added config key for simulation
+CONFIG_CONCURRENT_RUNS = "concurrent_runs"  # Simulation option controlling async concurrency
+CONFIG_DEFAULTS = "DEFAULTS"  # For configparser default section
 CONFIG_FIGHTER_CLASS = "class"  # Per-fighter class
 CONFIG_FIGHTER_LOADOUT = "loadout"  # Per-fighter starting gear
 CONFIG_FIGHTER_ENVIRONMENT = "environment"  # Fighting environment
@@ -146,8 +146,8 @@ CONTEXT_HEAT_DESCRIPTION = "heat_description"
 CONTEXT_ENVIRONMENT = "environment"
 CONTEXT_RECENT_LOG = "recent_log"
 CONTEXT_OPPONENT_NAME = "opponent_name"
-CONTEXT_OPPONENT_CLASS = "opponent_class" # If classes are introduced
-CONTEXT_SELF_CLASS = "self_class" # If classes are introduced
+CONTEXT_OPPONENT_CLASS = "opponent_class"  # If classes are introduced
+CONTEXT_SELF_CLASS = "self_class"  # If classes are introduced
 
 # Validation outcomes
 VALIDATION_PROB = "prob"
@@ -183,4 +183,4 @@ DEFENSIVENESS = "defensiveness"
 PREDICTION = "prediction"
 OUTCOME = "outcome"
 IN_PROGRESS = "in_progress"
-DRAW = "draw" 
+DRAW = "draw"

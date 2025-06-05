@@ -59,4 +59,4 @@ The DeltaSchema for each fighter includes fields like:
 Your narration should be consistent with the deltas you provide.
 If an action was successful (based on `successful_rolls`), describe its impact. If an action failed, describe that too.
 Be creative and fair.
-""" 
+"""
