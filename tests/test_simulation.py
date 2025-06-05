@@ -2,6 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import json
+import csv
 
 import src.simulation as sim_module
 from src.state import FighterState # Keep for spec
@@ -121,3 +122,23 @@ async def test_run_batch_exact_runs(tmp_path):
             await sim_module.run_batch(tmp_path / 'result.csv')
 
     assert calls == 3
+
+
+@pytest.mark.asyncio
+async def test_run_batch_handles_errors(tmp_path):
+    async def failing_fight():
+        raise RuntimeError("boom")
+
+    with patch.object(sim_module, '_single_fight', side_effect=failing_fight), \
+         patch.object(sim_module, 'RUNS', 2), patch.object(sim_module, 'CONCURRENT_RUNS', 1), \
+         patch.object(sim_module.logger, 'exception') as mock_exc:
+        out_file = tmp_path / 'err.csv'
+        path = await sim_module.run_batch(out_file)
+
+    assert path == out_file
+    with open(out_file, newline="") as fp:
+        rows = list(csv.DictReader(fp))
+
+    assert len(rows) == 2
+    assert all(row[C.WINNER] == 'error' for row in rows)
+    assert mock_exc.call_count == 2

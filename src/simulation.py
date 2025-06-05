@@ -153,7 +153,11 @@ async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
 
     async def sem_fight():
         async with sem:
-            return await _single_fight()
+            try:
+                return await _single_fight()
+            except Exception:
+                logger.exception("_single_fight failed")
+                return {C.WINNER: "error", C.LOG_TURN: "0"}
 
     tasks = [asyncio.create_task(sem_fight()) for _ in range(RUNS)]
     for coro in asyncio.as_completed(tasks):
