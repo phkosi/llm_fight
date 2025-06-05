@@ -363,7 +363,24 @@ Turn 1: A strikes B
 
 ## Contributing
 
-Details on contributing to the project will be added here.
+Set up a Python 3.11 environment before submitting changes:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+```
+
+Formatting and tests:
+
+```bash
+black .
+flake8
+pytest -q
+```
+
+Set `API_URL` if you want to run the live API tests. Make sure all
+checks pass before committing.
 
 ## License
 
