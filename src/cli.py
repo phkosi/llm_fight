@@ -1,6 +1,7 @@
 """Typer‑powered CLI front‑end."""
 
 import typer
+from typing import Optional
 
 app = typer.Typer()
 
@@ -14,10 +15,21 @@ def simulate(
         "--output-csv",
         "-o",
         help="Path for the simulation CSV output",
-    )
+    ),
+    config: Optional[Path] = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file",
+    ),
 ):
     """Run self‑play batch using config.ini parameters."""
     import asyncio
+    from . import config as config_mod
+
+    if config is not None:
+        config_mod.CONFIG = config_mod.Config(config)
+
     from .simulation import run_batch
 
     path = asyncio.run(run_batch(output_csv))
@@ -25,9 +37,21 @@ def simulate(
 
 
 @app.command()
-def play():
+def play(
+    config: Optional[Path] = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file",
+    )
+):
     """Run a single fight and print the winner."""
     import asyncio
+    from . import config as config_mod
+
+    if config is not None:
+        config_mod.CONFIG = config_mod.Config(config)
+
     from .simulation import _single_fight
     from .engine import constants as C
 
