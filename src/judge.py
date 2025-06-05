@@ -47,7 +47,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     }
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
     async def _call():
-        response_texts = await chat([system, user], max_tokens=4096, best_of=BEST_J)
+        response_texts = await chat([system, user], max_tokens=MAX_TOK_J, best_of=BEST_J)
         for txt in response_texts:
             try:
                 return json.loads(txt)

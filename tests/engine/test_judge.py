@@ -3,7 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import json
 
-from src.judge import judge_phase1, judge_phase2
+from src.judge import judge_phase1, judge_phase2, MAX_TOK_J, BEST_J
 from src.validation import JudgeP1Schema, JudgeP2Schema # Assuming these are Pydantic models or similar
 from src.engine import constants as C
 
@@ -34,12 +34,15 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B, recent_log="Turn 1")
 
     mock_chat.assert_called_once()
-    chat_call_args = mock_chat.call_args[0][0]
-    assert len(chat_call_args) == 2
-    assert chat_call_args[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
+    chat_call_positional, chat_call_kwargs = mock_chat.call_args
+    msg_payload = chat_call_positional[0]
+    assert len(msg_payload) == 2
+    assert msg_payload[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
+    assert chat_call_kwargs["max_tokens"] == MAX_TOK_J
+    assert chat_call_kwargs["best_of"] == BEST_J
     # We can add more specific checks for prompt content if needed
 
-    user_payload = json.loads(chat_call_args[1][C.AGENT_CONTENT])
+    user_payload = json.loads(msg_payload[1][C.AGENT_CONTENT])
     assert user_payload[f'fighter_{C.FIGHTER_A}_state_summary'] == MOCK_FIGHTER_A_STATE
     assert user_payload[f'fighter_{C.FIGHTER_B}_state_summary'] == MOCK_FIGHTER_B_STATE
     assert user_payload[f'{C.ATTEMPT}_{C.FIGHTER_A}'] == MOCK_ATTEMPT_A
