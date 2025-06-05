@@ -1,7 +1,9 @@
-# LLM Fighters Combat Engine – Detailed Design Document (v0.6)
+# Archived Design Document (May 2025)
+# LLM Fighters Combat Engine – Detailed Design Document (v0.5)
+This file preserves the original design for historical reference.
 
-> **Status · 2025‑06‑05**  This document reflects the current architecture after milestone 2 of the local‑LLM 1‑vs‑1 fighting simulator.  It is formatted in GitHub‑flavoured Markdown and should render correctly in most viewers (Discord, GitHub, VS Code, etc.).
-Older design iterations are preserved in `Design_doc_archived_2025.md`.
+
+> **Status · 2025‑05‑31**  This document defines the first working milestone of the local‑LLM 1‑vs‑1 fighting simulator.  It is formatted in GitHub‑flavoured Markdown and should render correctly in most viewers (Discord, GitHub, VS Code, etc.).
 
 ---
 
@@ -103,9 +105,6 @@ class FighterState:
     buffs: list[Effect] = field(default_factory=list)
     debuffs: list[Effect] = field(default_factory=list)
     status: Literal['fighting','unconscious','dead'] = 'fighting'
-    class_: str = "Generic Fighter"
-    loadout: str = "their bare fists and wits"
-    environment: str = "an open arena"
 ```
 
 *Presets*: `humanoid`, `quadruped`, … stored in **anatomy.py**.
@@ -134,29 +133,14 @@ Respond with ONE sentence describing what you attempt next. ≤ 30 words.
 ### 4.2  Judge Phase 1 — Probability
 
 ```text
-SYSTEM: You are an impartial combat arbiter. Return STRICT JSON.
-Schema:
-{
-  "judgement_text": "string",
-  "attempt_A_valid": "boolean",
-  "attempt_A_prob": "string (0.0-1.0)",
-  "attempt_B_valid": "boolean",
-  "attempt_B_prob": "string (0.0-1.0)",
-  "explanation": "string"
-}
+SYSTEM: You are an impartial combat arbiter.  Return STRICT JSON.
+SCHEMA per fighter: {prob: 0‑1, predicted: str, potential:{wounds:[...],buffs:[...],debuffs:[...]}}
 ```
 
 *Sample output (abridged)*:
 
 ```json
-{
-  "judgement_text": "A feints high.",
-  "attempt_A_valid": true,
-  "attempt_A_prob": "0.65",
-  "attempt_B_valid": false,
-  "attempt_B_prob": "0.0",
-  "explanation": "B's move is implausible."
-}
+{"A":{"prob":0.64,"predicted":"flame scorches torso","potential":{"wounds":["torso"],"debuffs":["burning"]}},"B":{...}}
 ```
 
 ### 4.3  Dice Roll (Python)
@@ -200,30 +184,28 @@ Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future
 
 ```ini
 [General]
-ollama_default_model = llama3.2
-ollama_api_url = http://localhost:11434/v1/chat/completions
+model              = llama3.2
+ollama_api_url     = http://localhost:11434/v1/chat/completions
 max_tokens_fighter = 24000
-max_tokens_judge = 48000
-ollama_temperature = 0.8
-best_of_fighter = 3
-best_of_judge = 2
-max_retries = 2
+max_tokens_judge   = 48000
+best_of_fighter    = 3
+best_of_judge      = 2
+max_retries        = 2
 
 [CONTEXT]
 fighter_log_window = 10
-judge_log_window = 9999
+judge_log_window   = 9999
 
 [SIMULATION]
-runs = 1000
-seed = 42
-concurrent_runs = 1
-
-[DISCORD]
-discord_token = <bot-token>
-discord_channel = <optional-channel>
+runs               = 1000
+seed               = 42
 ```
-## 8  Performance Notes
 
+---
+
+## 8  Performance Notes
+
+* Two fighter prompts + Judge phases keep GPU VRAM ≤ 12 GB (llama‑3‑8B context fits \~4 GB each).
 * Async `gather()` overlaps fighter calls; Judge is sequential but single call per phase.
 * Log summarisation triggers when total tokens > 48 k.
 
@@ -231,8 +213,9 @@ discord_channel = <optional-channel>
 
 ## 9  Future Work
 
-1. **Visualizer** (Godot) that replays combat logs with sprite limb masking.
-2. **Advanced Modifiers:** Infection, weather and other environmental effects.
+1. **Discord bot** using Ollama’s OpenAI‑compat endpoint.  Per‑channel fight sessions.
+2. **Visualiser** (Godot) that replays combat log with sprite limb masking.
+3. **Infection & weather** modifiers after MVP is stable.
 
 ---
 
