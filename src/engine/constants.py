@@ -126,6 +126,7 @@ CONFIG_MAX_TOKENS_JUDGE = "max_tokens_judge" # Added config key
 CONFIG_BEST_OF_FIGHTER = "best_of_fighter" # Added config key
 CONFIG_BEST_OF_JUDGE = "best_of_judge" # Added config key
 CONFIG_MAX_RETRIES = "max_retries" # Added config key
+CONFIG_LOG_LEVEL = "log_level"  # New config key for logger level
 CONFIG_RUNS = "runs" # Added config key
 CONFIG_SEED = "seed" # Added config key
 CONFIG_MAX_TURNS = "max_turns" # Added config key for simulation

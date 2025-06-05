@@ -3,13 +3,18 @@
 import logging
 import sys
 
+from ..config import CONFIG
+from . import constants as C
+
 # Create a logger instance
 logger = logging.getLogger("llm_fight_engine")
-logger.setLevel(logging.DEBUG)  # Set the default logging level
+_level_name = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_LEVEL, str, fallback="INFO").upper()
+_level = getattr(logging, _level_name, logging.INFO)
+logger.setLevel(_level)
 
 # Create a handler for console output
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.DEBUG)  # Set level for this handler
+console_handler.setLevel(_level)
 
 # Create a formatter and set it for the handler
 formatter = logging.Formatter(
