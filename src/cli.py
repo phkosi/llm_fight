@@ -14,9 +14,20 @@ def simulate(
         "--output-csv",
         "-o",
         help="Path for the simulation CSV output",
-    )
+    ),
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (llmfight.ini by default)",
+    ),
 ):
     """Run self‑play batch using config.ini parameters."""
+    from . import config as config_module
+
+    if config is not None:
+        config_module.CONFIG = config_module.Config(config)
+
     import asyncio
     from .simulation import run_batch
 
@@ -25,8 +36,20 @@ def simulate(
 
 
 @app.command()
-def play():
+def play(
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (llmfight.ini by default)",
+    ),
+):
     """Run a single fight and print the winner."""
+    from . import config as config_module
+
+    if config is not None:
+        config_module.CONFIG = config_module.Config(config)
+
     import asyncio
     from .simulation import _single_fight
     from .engine import constants as C

@@ -33,6 +33,20 @@ def test_cli_simulate(tmp_path):
     assert "Simulation saved to" in result.output
 
 
+def test_cli_simulate_with_config(tmp_path):
+    runner = CliRunner()
+    dummy_csv = tmp_path / "dummy.csv"
+    cfg = tmp_path / "alt.ini"
+    cfg.write_text("")
+    with patch("src.config.Config") as mock_cfg, patch("src.config.CONFIG"), patch(
+        "src.simulation.run_batch", new=AsyncMock(return_value=dummy_csv)
+    ):
+        result = runner.invoke(app, ["simulate", "--config", str(cfg)])
+    assert result.exit_code == 0
+    mock_cfg.assert_called_once_with(Path(cfg))
+    assert "Simulation saved to" in result.output
+
+
 def test_cli_unknown_option():
     runner = CliRunner()
     result = runner.invoke(app, ["simulate", "--unknown"])
@@ -63,3 +77,17 @@ def test_cli_unexpected_argument():
     result = runner.invoke(app, ["play", "extra"])
     assert result.exit_code != 0
     assert "unexpected extra argument" in result.output
+
+
+def test_cli_play_with_config(tmp_path):
+    runner = CliRunner()
+    fake_result = {C.WINNER: "A", C.LOG_TURN: "1"}
+    cfg = tmp_path / "custom.ini"
+    cfg.write_text("")
+    with patch("src.config.Config") as mock_cfg, patch("src.config.CONFIG"), patch(
+        "src.simulation._single_fight", new=AsyncMock(return_value=fake_result)
+    ):
+        result = runner.invoke(app, ["play", "--config", str(cfg)])
+    assert result.exit_code == 0
+    assert "Winner: A" in result.output
+    mock_cfg.assert_called_once_with(Path(cfg))
