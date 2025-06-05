@@ -157,3 +157,13 @@ def test_global_config_instance_loads():
 
 def test_default_max_turns_loaded(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 100
+
+
+def test_config_save_roundtrip(tmp_path):
+    file_path = tmp_path / "round.ini"
+    cfg = Config(file_path)
+    cfg.set("Custom", "answer", 42)
+    cfg.save()
+
+    new_cfg = Config(file_path)
+    assert new_cfg.get("Custom", "answer", int) == 42
