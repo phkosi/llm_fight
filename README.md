@@ -221,6 +221,15 @@ API endpoint before running the application:
 export API_URL="https://your-ngrok-url.ngrok-free.app/v1/chat/completions"
 ```
 
+To expose a local Ollama instance so that it can be reached over the
+internet, bind the service to all interfaces and tunnel it with ngrok:
+
+```powershell
+$Env:OLLAMA_HOST = "0.0.0.0:11434"
+ngrok http 11434 --host-header="localhost:11434"
+```
+Use the resulting public ngrok URL with `API_URL` as shown above.
+
 
 ## Directory Structure
 
