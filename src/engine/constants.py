@@ -1,7 +1,6 @@
-"""
-This module defines constants used throughout the LLM Fight simulation engine.
-Using constants helps avoid typos and makes it easier to update shared values.
-"""
+"""Constants and enums used throughout the LLM Fight simulation engine."""
+
+from enum import Enum
 
 # General
 STATUS = "status"
@@ -34,9 +33,17 @@ BLEED_RATE = "bleed_rate"
 BURN_RATE = "burn_rate"
 
 # Statuses
-STATUS_FIGHTING = "fighting"
-STATUS_UNCONSCIOUS = "unconscious"
-STATUS_DEAD = "dead"
+
+
+class FighterStatus(str, Enum):
+    FIGHTING = "fighting"
+    UNCONSCIOUS = "unconscious"
+    DEAD = "dead"
+
+
+STATUS_FIGHTING = FighterStatus.FIGHTING
+STATUS_UNCONSCIOUS = FighterStatus.UNCONSCIOUS
+STATUS_DEAD = FighterStatus.DEAD
 STATUS_SEVERED = "severed"  # for body parts
 MAX_PAIN_THRESHOLD = 100  # Threshold for unconsciousness (already implicitly used)
 MAX_PAIN_BEFORE_DEATH = 200  # New constant for death by pain
@@ -49,11 +56,20 @@ EFFECT_BLEEDING = "bleeding"
 EFFECT_BURNING = "burning"
 EFFECT_STUNNED = "stunned"
 
-# Damage Types (new section)
-DAMAGE_TYPE_PIERCING = "piercing"
-DAMAGE_TYPE_SLASHING = "slashing"
-DAMAGE_TYPE_FIRE = "fire"  # Consistent with C.EFFECT_BURNING usage elsewhere
-DAMAGE_TYPE_GENERIC = "generic"
+# Damage Types
+
+
+class DamageType(str, Enum):
+    PIERCING = "piercing"
+    SLASHING = "slashing"
+    FIRE = "fire"  # Consistent with C.EFFECT_BURNING usage elsewhere
+    GENERIC = "generic"
+
+
+DAMAGE_TYPE_PIERCING = DamageType.PIERCING
+DAMAGE_TYPE_SLASHING = DamageType.SLASHING
+DAMAGE_TYPE_FIRE = DamageType.FIRE
+DAMAGE_TYPE_GENERIC = DamageType.GENERIC
 
 # Judge & Simulation
 NARRATION = "narration"

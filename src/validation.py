@@ -55,7 +55,10 @@ DeltaSchema = {
                 C.SCHEMA_PROPERTIES: {
                     C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
                     C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER},
-                    C.TYPE: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+                    C.TYPE: {
+                        C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                        C.SCHEMA_ENUM: [dt.value for dt in C.DamageType],
+                    },
                 },
                 C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE],
             },
@@ -64,7 +67,7 @@ DeltaSchema = {
         C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
         C.STATUS_CHANGE: {
             C.SCHEMA_TYPE: C.SCHEMA_STRING,
-            C.SCHEMA_ENUM: [C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD],
+            C.SCHEMA_ENUM: [status.value for status in C.FighterStatus],
         },
     },
     C.SCHEMA_ADDITIONAL_PROPERTIES: False,

@@ -15,8 +15,8 @@ async def test_judge_phase1_live():
         pytest.skip("API_URL env var not set")
 
     state = {
-        C.FIGHTER_A: {C.STATUS: C.STATUS_FIGHTING, C.PAIN: 0},
-        C.FIGHTER_B: {C.STATUS: C.STATUS_FIGHTING, C.PAIN: 0},
+        C.FIGHTER_A: {C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0},
+        C.FIGHTER_B: {C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0},
     }
 
     attempt_a = "A throws a jab"
@@ -41,8 +41,8 @@ async def test_judge_phase2_live():
         pytest.skip("API_URL env var not set")
 
     state = {
-        C.FIGHTER_A: {C.STATUS: C.STATUS_FIGHTING, C.PAIN: 0},
-        C.FIGHTER_B: {C.STATUS: C.STATUS_FIGHTING, C.PAIN: 0},
+        C.FIGHTER_A: {C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0},
+        C.FIGHTER_B: {C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0},
     }
 
     attempt_a = "A feints left"

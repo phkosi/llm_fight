@@ -123,9 +123,9 @@ async def _single_fight() -> Dict[str, str]:
                 outcome = "draw"
             else:  # Unspecified winner but fight_end is true, could be a mutual kill or environmental factor
                 outcome = "ended_no_clear_winner"
-        elif A.status == C.STATUS_DEAD or A.status == C.STATUS_UNCONSCIOUS:
+        elif A.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}:
             outcome = B.id  # B wins if A is out
-        elif B.status == C.STATUS_DEAD or B.status == C.STATUS_UNCONSCIOUS:
+        elif B.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}:
             outcome = A.id  # A wins if B is out
         elif turn >= CONFIG.get(
             C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100
