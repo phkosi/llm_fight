@@ -32,13 +32,19 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
 ## Project layout
 - `src/` – runtime code.
   - `engine/` – helper modules (`constants.py`, `fighter.py`, `prompts.py`, etc.).
-  - `config.py` – INI file loader.
   - `agents.py` – async wrapper for Ollama.
-  - `state.py` – fighter dataclasses and state update logic.
-  - `simulation.py` – batch self‑play harness.
+  - `anatomy.py` – body part presets and tissue constants.
+  - `cli.py` – Typer command line interface.
+  - `config.py` – INI file loader.
+  - `discord_bot.py` – optional Discord integration.
   - `judge.py` – judge orchestration logic.
+  - `rng.py` – central random number generator.
+  - `simulation.py` – batch self‑play harness.
+  - `state.py` – fighter dataclasses and state update logic.
+  - `validation.py` – JSON schema helpers and guarded LLM calls.
 - `tests/` – pytest suite covering `src/` modules.
-- Docs live in `README.md` and `docs/Design_doc.md`.
+- Docs live in `README.md` and the `docs/` folder.
+- `run.py` – command line entry point.
 
 ## Style notes
 - Follow standard Python style (PEP8). `.flake8` allows lines up to **120** characters.
@@ -60,14 +66,15 @@ Follow these conventions to keep history easy to read and PRs self-explanatory.
 
 ### Commit messages
 * Use the **imperative mood** in the subject line, e.g. `Add new move`.
-* Keep the subject line under **72 characters**.
+* Keep the subject line under **72 characters** and clearly describe the change.
 * Include a blank line between the subject and body.
-* Provide a body when the change is non-trivial. Wrap lines at 72 characters.
+* Provide a body when the change is non-trivial. Explain why the change is needed and wrap lines at 72 characters.
 * Reference issues or docs with `Fix #123` or `See docs/xyz` when applicable.
 
 ### Pull requests
 * Title should summarize the change in a sentence.
-* In the description list what changed and why.
+* The description should explain what changed and why.
+* Mention key reasoning or context if not obvious.
 * Mention any tests run (`black`, `flake8`, `pytest`).
 * Note breaking changes or follow-up work if needed.
 
