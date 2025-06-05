@@ -1,3 +1,5 @@
+"""Logger configuration used across the engine modules."""
+
 import logging
 import sys
 
