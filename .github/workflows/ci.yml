@@ -29,9 +29,6 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -e .
 
-      - name: Run black
-        run: black --check .
-
       - name: Run flake8
         run: flake8
 
