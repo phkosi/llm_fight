@@ -100,6 +100,15 @@ With the dev dependencies installed you can execute the test suite using
 pytest -q
 ```
 
+### Running the Linter
+
+The project uses `flake8` with a small set of rules focused on catching
+obvious mistakes. Run it from the repository root:
+
+```bash
+flake8
+```
+
 When calling the async functions in `src/agents.py` within standalone scripts
 or tests, ensure the underlying aiohttp session is closed:
 

@@ -1,7 +1,6 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-import json
 import csv
 
 import src.simulation as sim_module

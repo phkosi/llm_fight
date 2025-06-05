@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Dict
 
 from .state import FighterState
-from .rng import seed
+from .rng import rand, seed
 from .judge import judge_phase1, judge_phase2
-from .agents import chat
 from .config import CONFIG
 from .engine.fighter import get_fighter_attempt
 from .engine import constants as C

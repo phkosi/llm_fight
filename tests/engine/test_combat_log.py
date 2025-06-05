@@ -1,4 +1,3 @@
-import pytest
 from src.engine.combat_log import CombatLog, CombatTurn
 from src.engine import constants as C
 

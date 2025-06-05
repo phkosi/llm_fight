@@ -1,6 +1,6 @@
 """Predefined anatomical presets and utility builders."""
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List
 
 __all__ = ['TissueLayer', 'BodyPart', 'Preset', 'HUMANOID']

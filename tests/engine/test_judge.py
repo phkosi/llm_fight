@@ -1,6 +1,5 @@
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 import json
 
 from src.judge import judge_phase1, judge_phase2, MAX_TOK_J, BEST_J

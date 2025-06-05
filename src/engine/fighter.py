@@ -1,6 +1,5 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
-import json
-from typing import Dict, Any, Union
+from typing import Union
 
 from ..state import FighterState  # Relative import from parent package
 from ..agents import chat

@@ -1,12 +1,9 @@
 """Judge orchestration (Phase‑1 probability, RNG, Phase‑2 narration)."""
-import asyncio
 import json
 from typing import Dict, Any
 
 from .agents import chat
-from .state import FighterState
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
-from .rng import rand
 from .config import CONFIG
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from .engine import constants as C

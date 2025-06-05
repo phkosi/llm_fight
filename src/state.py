@@ -4,9 +4,9 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Literal, Any
 import copy # Added import for deepcopy
 # import random as rand # This was added by mistake, use project's rng
-from .rng import rand, choice # Use project's seeded RNG and added choice import
+from .rng import choice  # Use project's seeded RNG
 
-from .anatomy import BodyPart, TissueLayer, PRESETS
+from .anatomy import BodyPart, PRESETS
 from .engine import constants as C # Added import
 from .engine.logger import logger # Import the logger
 from .config import CONFIG
