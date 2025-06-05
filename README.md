@@ -78,7 +78,7 @@ config.py          # INI loader & migration
     python -m venv .venv
     source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
     ```
-3.  Install runtime dependencies:
+3.  Install runtime dependencies (FastAPI >=0.111, Pydantic 2.x):
     ```bash
     pip install -r requirements.txt
     ```
@@ -156,7 +156,7 @@ assumed.
    4. Copy the generated URL and open it in your browser to invite the bot to a
       server where you have permission to add members.
 
-3. **Install project dependencies** (if you have not done so already):
+3. **Install project dependencies (FastAPI >=0.111, Pydantic 2.x)** (if you have not done so already):
    ```bash
    pip install -r requirements.txt
    ```
