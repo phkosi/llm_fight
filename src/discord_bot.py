@@ -17,6 +17,7 @@ class FightSession:
         self.log: CombatLog = CombatLog()
 
     def start(self) -> None:
+        """Start a new fight session with fresh fighter states."""
         logger.info("Starting new fight session")
         self.A = FighterState.from_preset('A', 'humanoid')
         self.B = FighterState.from_preset('B', 'humanoid')
@@ -24,10 +25,12 @@ class FightSession:
         self.active = True
 
     def stop(self) -> None:
+        """Stop the active fight session."""
         logger.info("Stopping fight session")
         self.active = False
 
     def status(self) -> str:
+        """Return a concise status string for the current fight."""
         if not self.active:
             return "No active fight"
         return f"Turns: {len(self.log)} - A {self.A.status} / B {self.B.status}"
@@ -41,6 +44,7 @@ fight_group = app_commands.Group(name="fight", description="Fight control")
 
 @fight_group.command(name="start")
 async def fight_start(interaction: discord.Interaction):
+    """Start a fight session via slash command."""
     if not _check_channel(interaction):
         await interaction.response.send_message(
             f"Commands are restricted to {ALLOWED_CHANNEL}", ephemeral=True
@@ -51,6 +55,7 @@ async def fight_start(interaction: discord.Interaction):
 
 @fight_group.command(name="status")
 async def fight_status(interaction: discord.Interaction):
+    """Return the current fight status via slash command."""
     if not _check_channel(interaction):
         await interaction.response.send_message(
             f"Commands are restricted to {ALLOWED_CHANNEL}", ephemeral=True
@@ -60,6 +65,7 @@ async def fight_status(interaction: discord.Interaction):
 
 @fight_group.command(name="stop")
 async def fight_stop(interaction: discord.Interaction):
+    """Stop the active fight session via slash command."""
     if not _check_channel(interaction):
         await interaction.response.send_message(
             f"Commands are restricted to {ALLOWED_CHANNEL}", ephemeral=True
