@@ -3,6 +3,8 @@
 import json
 from typing import Dict, Any
 
+from .utils.json_parser import parse_json_from_text
+
 from .agents import chat
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from .config import CONFIG
@@ -50,7 +52,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
         response_texts = await chat([system, user], max_tokens=MAX_TOK_J, best_of=BEST_J)
         for txt in response_texts:
             try:
-                return json.loads(txt)
+                return parse_json_from_text(txt)
             except json.JSONDecodeError:
                 continue  # Try next response
         raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
@@ -82,7 +84,7 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
         response_texts = await chat([system, user], max_tokens=MAX_TOK_J, best_of=BEST_J)
         for txt in response_texts:
             try:
-                return json.loads(txt)
+                return parse_json_from_text(txt)
             except json.JSONDecodeError:
                 continue  # Try next response
         raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed

@@ -110,3 +110,35 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
 
     mock_guarded_call.assert_called_once()
     assert mock_guarded_call.call_args[0][1] == JudgeP2Schema
+
+
+@pytest.mark.asyncio
+@patch("src.judge.guarded_call")
+@patch("src.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
+    fenced = f"```json\n{json.dumps({'judgement_text': 'ok'})}\n```"
+    mock_chat.return_value = [fenced]
+
+    async def mock_gc_logic(call_func, schema):
+        return await call_func()
+
+    mock_guarded_call.side_effect = mock_gc_logic
+
+    result = await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B)
+    assert result["judgement_text"] == "ok"
+
+
+@pytest.mark.asyncio
+@patch("src.judge.guarded_call")
+@patch("src.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
+    fenced = f"```json\n{json.dumps({'narration': 'done', 'delta': {}, 'fight_end': False, 'winner': None})}\n```"
+    mock_chat.return_value = [fenced]
+
+    async def mock_gc_logic(call_func, schema):
+        return await call_func()
+
+    mock_guarded_call.side_effect = mock_gc_logic
+
+    result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+    assert result["narration"] == "done"
