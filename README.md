@@ -114,7 +114,7 @@ black .
 flake8
 ```
 
-CI enforces formatting in the same way by running `black --check` and `flake8`.
+CI runs `flake8` during pull requests; run `black` locally before committing.
 
 The `SessionManager` context manager in `src/agents.py` should be used when
 calling the async helpers directly:
