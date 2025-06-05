@@ -58,7 +58,7 @@ async def close_session() -> None:
     _session = None
 
 # -------------- helper ---------------------------------------------
-async def _post_json(payload: Dict[str, Any]):
+async def _post_json(payload: Dict[str, Any]) -> str:
     try:
         # Allow aiohttp to respect proxy-related environment variables
         # like HTTPS_PROXY so network-restricted environments can
