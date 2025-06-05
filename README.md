@@ -90,7 +90,12 @@ src/
     pip install -r requirements-dev.txt
     pip install -e .
     ```
-5.  Copy the example configuration and customize as needed:
+5.  Install the pre-commit hook (optional but recommended):
+    ```bash
+    pip install pre-commit
+    pre-commit install
+    ```
+6.  Copy the example configuration and customize as needed:
     ```bash
     cp llmfight.ini.example llmfight.ini
     ```
@@ -106,15 +111,21 @@ pytest -q
 
 ### Running the Linter and Formatter
 
-Use `black` to automatically format the codebase, followed by `flake8` to catch
-obvious mistakes. Run them from the repository root:
+Install `pre-commit` so `black` and `flake8` run automatically on each commit:
 
 ```bash
-black .
-flake8
+pip install pre-commit
+pre-commit install
 ```
 
-CI runs `flake8` during pull requests; run `black` locally before committing.
+To check all files manually run:
+
+```bash
+pre-commit run --all-files
+```
+
+CI runs `pre-commit` during pull requests; make sure the hook passes before
+submitting changes.
 
 The `SessionManager` context manager in `src/agents.py` should be used when
 calling the async helpers directly:

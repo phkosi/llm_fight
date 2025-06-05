@@ -29,8 +29,8 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -e .
 
-      - name: Run flake8
-        run: flake8
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure --color always
 
       - name: Run tests
         run: pytest -q
