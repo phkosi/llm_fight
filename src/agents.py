@@ -59,6 +59,7 @@ async def close_session() -> None:
 
 # -------------- helper ---------------------------------------------
 async def _post_json(payload: Dict[str, Any]):
+    headers = {C.CONTENT_TYPE: C.APPLICATION_JSON}
     try:
         # Allow aiohttp to respect proxy-related environment variables
         # like HTTPS_PROXY so network-restricted environments can
@@ -68,6 +69,7 @@ async def _post_json(payload: Dict[str, Any]):
             resp.raise_for_status()
             data = await resp.json()
             return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+
     except aiohttp.ClientResponseError as e:
         logger.error(f"Ollama API request failed with status {e.status}: {e.message}. Payload: {payload}")
         raise
@@ -88,10 +90,12 @@ async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1
     # Ensure the session is created before spawning tasks to avoid race conditions
     _get_session()
     tasks = []
+    model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
+    temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
     for _ in range(best_of):
         payload = {
-            C.AGENT_MODEL: MODEL,
-            C.TEMPERATURE: TEMP,
+            C.AGENT_MODEL: model,
+            C.TEMPERATURE: temp,
             C.AGENT_MAX_TOKENS: max_tokens,
             C.AGENT_MESSAGES: messages,
         }

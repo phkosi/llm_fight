@@ -2,6 +2,7 @@ from typer.testing import CliRunner
 
 from src.cli import app
 from unittest.mock import AsyncMock, patch
+from pathlib import Path
 from src.engine import constants as C
 
 
@@ -19,3 +20,13 @@ def test_cli_play():
         result = runner.invoke(app, ["play"])
     assert result.exit_code == 0
     assert "Winner: A" in result.output
+
+
+def test_cli_simulate(tmp_path):
+    runner = CliRunner()
+    dummy = tmp_path / "dummy.csv"
+    with patch("src.simulation.run_batch", new=AsyncMock(return_value=dummy)) as mock_run_batch:
+        result = runner.invoke(app, ["simulate", "--output-csv", "out.csv"])
+    assert result.exit_code == 0
+    mock_run_batch.assert_called_once_with(Path("out.csv"))
+    assert "Simulation saved to" in result.output
