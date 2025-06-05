@@ -29,9 +29,9 @@ def delta_strategy(draw):
                         C.VALUE: st.integers(min_value=1, max_value=20),
                         C.TYPE: st.sampled_from(
                             [
-                                C.DAMAGE_TYPE_PIERCING,
-                                C.DAMAGE_TYPE_SLASHING,
-                                C.DAMAGE_TYPE_FIRE,
+                                C.DamageType.PIERCING,
+                                C.DamageType.SLASHING,
+                                C.DamageType.FIRE,
                             ]
                         ),
                     }
@@ -89,9 +89,9 @@ def test_apply_delta_property(delta):
 
     # Fighter status must be valid
     assert fighter.status in {
-        C.STATUS_FIGHTING,
-        C.STATUS_UNCONSCIOUS,
-        C.STATUS_DEAD,
+        C.FighterStatus.FIGHTING,
+        C.FighterStatus.UNCONSCIOUS,
+        C.FighterStatus.DEAD,
     }
 
     # No body part HP should increase from applying the delta

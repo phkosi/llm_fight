@@ -28,10 +28,10 @@ async def test_single_fight_runs_to_completion(
     # Create MagicMock instances for fighters
     fighter_a_mock = MagicMock(spec=FighterState)
     fighter_a_mock.id = "A"
-    fighter_a_mock.status = C.STATUS_FIGHTING
+    fighter_a_mock.status = C.FighterStatus.FIGHTING
     fighter_a_mock.to_json.return_value = {
         "id": "A",
-        C.STATUS: C.STATUS_FIGHTING,
+        C.STATUS: C.FighterStatus.FIGHTING,
         C.PAIN: 0,
     }  # For judge_phase1 context
     fighter_a_mock.apply_delta = MagicMock()  # Ensure it can be called
@@ -39,13 +39,13 @@ async def test_single_fight_runs_to_completion(
 
     fighter_b_mock = MagicMock(spec=FighterState)
     fighter_b_mock.id = "B"
-    fighter_b_mock.status = C.STATUS_FIGHTING
-    fighter_b_mock.to_json.return_value = {"id": "B", C.STATUS: C.STATUS_FIGHTING, C.PAIN: 0}
+    fighter_b_mock.status = C.FighterStatus.FIGHTING
+    fighter_b_mock.to_json.return_value = {"id": "B", C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0}
 
     # Define side effect for B's apply_delta to change status
     def b_apply_delta_side_effect(delta):
-        if delta.get(C.STATUS_CHANGE) == C.STATUS_UNCONSCIOUS:
-            fighter_b_mock.status = C.STATUS_UNCONSCIOUS
+        if delta.get(C.STATUS_CHANGE) == C.FighterStatus.UNCONSCIOUS:
+            fighter_b_mock.status = C.FighterStatus.UNCONSCIOUS
 
     fighter_b_mock.apply_delta.side_effect = b_apply_delta_side_effect
     fighter_b_mock.apply_effects = MagicMock()
@@ -67,7 +67,7 @@ async def test_single_fight_runs_to_completion(
         # This delta will be passed to fighter_b_mock.apply_delta
         return {
             "narration": "A lands a decisive blow! B is knocked out!",
-            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS}},
             "fight_end": True,
             "winner": "A",  # Winner is determined by ID string
         }
@@ -87,9 +87,9 @@ async def test_single_fight_runs_to_completion(
     mock_judge_p2.assert_called_once()
     mock_rand_obj.assert_called()
 
-    fighter_b_mock.apply_delta.assert_called_with({C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS})
-    assert fighter_b_mock.status == C.STATUS_UNCONSCIOUS
-    assert fighter_a_mock.status == C.STATUS_FIGHTING  # A should be unchanged
+    fighter_b_mock.apply_delta.assert_called_with({C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS})
+    assert fighter_b_mock.status == C.FighterStatus.UNCONSCIOUS
+    assert fighter_a_mock.status == C.FighterStatus.FIGHTING  # A should be unchanged
 
 
 @pytest.mark.asyncio

@@ -17,14 +17,14 @@ async def test_single_fight_raises_on_guarded_call(monkeypatch):
 
     fighter_a = MagicMock(spec=FighterState)
     fighter_a.id = "A"
-    fighter_a.status = C.STATUS_FIGHTING
+    fighter_a.status = C.FighterStatus.FIGHTING
     fighter_a.to_json.return_value = {}
     fighter_a.apply_delta = MagicMock()
     fighter_a.apply_effects = MagicMock()
 
     fighter_b = MagicMock(spec=FighterState)
     fighter_b.id = "B"
-    fighter_b.status = C.STATUS_FIGHTING
+    fighter_b.status = C.FighterStatus.FIGHTING
     fighter_b.to_json.return_value = {}
     fighter_b.apply_delta = MagicMock()
     fighter_b.apply_effects = MagicMock()
@@ -50,14 +50,14 @@ async def test_run_batch_partial_results_on_guarded_call_failure(monkeypatch, tm
 
     fighter_a = MagicMock(spec=FighterState)
     fighter_a.id = "A"
-    fighter_a.status = C.STATUS_FIGHTING
+    fighter_a.status = C.FighterStatus.FIGHTING
     fighter_a.to_json.return_value = {}
     fighter_a.apply_delta = MagicMock()
     fighter_a.apply_effects = MagicMock()
 
     fighter_b = MagicMock(spec=FighterState)
     fighter_b.id = "B"
-    fighter_b.status = C.STATUS_FIGHTING
+    fighter_b.status = C.FighterStatus.FIGHTING
     fighter_b.to_json.return_value = {}
     fighter_b.apply_delta = MagicMock()
     fighter_b.apply_effects = MagicMock()

@@ -213,7 +213,7 @@ def test_delta_schema_valid_full():
             }
         ],
         C.EFFECTS_REMOVED: ["stunned"],
-        C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS,
+        C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS,
     }
     _validate_against_schema(valid_data, DeltaSchema, True)
 
@@ -236,7 +236,7 @@ def test_delta_schema_invalid_pain_value():
 
 
 def test_delta_schema_invalid_wound_missing_field():
-    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.TYPE: "blunt"}]}  # Missing value
+    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.TYPE: C.DamageType.PIERCING}]}  # Missing value
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
@@ -257,7 +257,7 @@ def test_judge_p2_schema_valid():
         C.NARRATION: "The fighters trade blows, A lands a solid hit!",
         C.DELTA: {
             C.FIGHTER_A: {C.PAIN_INCREASE: 5},
-            C.FIGHTER_B: {C.WOUNDS: [{C.TARGETED_PART: "leg", C.VALUE: 10, C.TYPE: "blunt"}]},
+            C.FIGHTER_B: {C.WOUNDS: [{C.TARGETED_PART: "leg", C.VALUE: 10, C.TYPE: C.DamageType.SLASHING}]},
         },
         C.FIGHT_END: False,
         C.WINNER: None,
@@ -268,7 +268,7 @@ def test_judge_p2_schema_valid():
 def test_judge_p2_schema_valid_fight_ends():
     valid_data = {
         C.NARRATION: "B collapses, A is victorious!",
-        C.DELTA: {C.FIGHTER_B: {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+        C.DELTA: {C.FIGHTER_B: {C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS}},
         C.FIGHT_END: True,
         C.WINNER: C.FIGHTER_A,
     }

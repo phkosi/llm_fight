@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Literal, Any
+from typing import Dict, List, Any
 import copy
 from .rng import choice
 
@@ -42,7 +42,7 @@ class FighterState:
     heat: int = 0
     buffs: List[Effect] = field(default_factory=list)
     debuffs: List[Effect] = field(default_factory=list)
-    status: Literal[C.STATUS_FIGHTING, C.STATUS_UNCONSCIOUS, C.STATUS_DEAD] = C.STATUS_FIGHTING
+    status: C.FighterStatus = C.FighterStatus.FIGHTING
     class_: str = "Generic Fighter"
     loadout: str = "their bare fists and wits"
     environment: str = "an open arena"
@@ -69,7 +69,7 @@ class FighterState:
         """Serializes the fighter's state to a JSON-compatible dictionary."""
         return asdict(self)
 
-    def apply_damage_to_part(self, part_name: str, damage_amount: int, damage_type: str):
+    def apply_damage_to_part(self, part_name: str, damage_amount: int, damage_type: C.DamageType | str):
         """Applies damage to a specific body part and its tissue layers."""
         if part_name not in self.parts:
             logger.warning(f"Attempted to damage non-existent part: {part_name} for fighter {self.id}")
@@ -77,6 +77,7 @@ class FighterState:
 
         part = self.parts[part_name]
         remaining_damage = damage_amount
+        dt = damage_type.value if isinstance(damage_type, C.DamageType) else damage_type
 
         # If part is already severed or destroyed, no more damage can be applied to its layers
         if part.severed or part.status == C.IS_DESTROYED:
@@ -92,9 +93,7 @@ class FighterState:
             dealt_to_layer = min(remaining_damage, layer.max_hp)  # Cannot deal more damage than current HP
             layer.max_hp -= dealt_to_layer
             remaining_damage -= dealt_to_layer
-            logger.debug(
-                f"Dealt {dealt_to_layer} {damage_type} to {self.id}:{part_name}.{layer.name}, HP now {layer.max_hp}"
-            )
+            logger.debug(f"Dealt {dealt_to_layer} {dt} to {self.id}:{part_name}.{layer.name}, HP now {layer.max_hp}")
 
         # Basic pain update - can be refined
         self.pain += damage_amount
@@ -121,10 +120,10 @@ class FighterState:
                 part.status = C.IS_DESTROYED
             logger.info(f"{self.id}:{part_name} has been {part.status}.")
             if part.is_vital:
-                self.status = C.STATUS_UNCONSCIOUS
+                self.status = C.FighterStatus.UNCONSCIOUS
 
         # Apply bleeding or burning effects based on damage type
-        if damage_type == C.DAMAGE_TYPE_FIRE:
+        if dt == C.DamageType.FIRE.value:
             existing_burning = next(
                 (
                     eff
@@ -145,7 +144,7 @@ class FighterState:
                     )
                 )
                 logger.debug(f"{self.id}:{part_name} is now burning.")
-        elif damage_type == C.DAMAGE_TYPE_PIERCING or damage_type == C.DAMAGE_TYPE_SLASHING:
+        elif dt in {C.DamageType.PIERCING.value, C.DamageType.SLASHING.value}:
             existing_bleeding = next(
                 (
                     eff
@@ -180,7 +179,7 @@ class FighterState:
             self.apply_damage_to_part(
                 part_name=wound_data[C.TARGETED_PART],
                 damage_amount=wound_data[C.VALUE],
-                damage_type=wound_data.get(C.TYPE, C.DAMAGE_TYPE_GENERIC),
+                damage_type=wound_data.get(C.TYPE, C.DamageType.GENERIC),
             )
 
         if C.EFFECTS_ADDED in delta:
@@ -228,21 +227,28 @@ class FighterState:
                 logger.debug(f"Effect '{name_removed}' removed from {self.id} via delta.")
 
         if C.STATUS_CHANGE in delta:
-            self.status = delta[C.STATUS_CHANGE]
+            new_status = delta[C.STATUS_CHANGE]
+            if isinstance(new_status, C.FighterStatus):
+                self.status = new_status
+            else:
+                try:
+                    self.status = C.FighterStatus(new_status)
+                except ValueError:
+                    logger.warning(f"Unknown status '{new_status}' for fighter {self.id}")
 
         # Check for status changes due to pain
-        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.STATUS_FIGHTING:
+        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.FighterStatus.FIGHTING:
             logger.info(f"{self.id} fell unconscious due to pain: {self.pain}. Current status: {self.status}")
-            self.status = C.STATUS_UNCONSCIOUS
+            self.status = C.FighterStatus.UNCONSCIOUS
             logger.info(f"{self.id} status is now {self.status}")
 
         # Check for death by pain AFTER unconsciousness check
         logger.debug(
             f"Checking death by pain for {self.id}: Pain={self.pain} (Limit={C.MAX_PAIN_BEFORE_DEATH}), Status={self.status}"
         )
-        if self.pain >= C.MAX_PAIN_BEFORE_DEATH and self.status != C.STATUS_DEAD:
+        if self.pain >= C.MAX_PAIN_BEFORE_DEATH and self.status != C.FighterStatus.DEAD:
             logger.info(f"{self.id} met conditions for death by pain. Current status before change: {self.status}")
-            self.status = C.STATUS_DEAD
+            self.status = C.FighterStatus.DEAD
             logger.info(f"{self.id} died from excessive pain: {self.pain}. Status is now {self.status}")
         else:
             logger.debug(f"{self.id} did NOT meet conditions for death by pain.")
@@ -255,14 +261,14 @@ class FighterState:
                 if part.status == C.IS_DESTROYED:
                     vital_parts_destroyed += 1
 
-        if total_vital_parts > 0 and vital_parts_destroyed == total_vital_parts and self.status != C.STATUS_DEAD:
-            self.status = C.STATUS_DEAD
+        if total_vital_parts > 0 and vital_parts_destroyed == total_vital_parts and self.status != C.FighterStatus.DEAD:
+            self.status = C.FighterStatus.DEAD
             logger.info(f"Fighter {self.id} died due to destruction of all vital parts.")
         elif (
             any(p.is_vital and p.status == C.IS_DESTROYED for p in self.parts.values())
-            and self.status == C.STATUS_FIGHTING
+            and self.status == C.FighterStatus.FIGHTING
         ):
-            self.status = C.STATUS_UNCONSCIOUS
+            self.status = C.FighterStatus.UNCONSCIOUS
             logger.info(f"Fighter {self.id} fell unconscious due to destruction of a vital part.")
 
         return self  # Allow chaining or inspection
