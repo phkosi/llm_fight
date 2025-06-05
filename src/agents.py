@@ -3,7 +3,7 @@
 import aiohttp
 import asyncio
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from .config import CONFIG
 from .engine import constants as C
@@ -82,7 +82,12 @@ async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any]) ->
         raise
 
 
-async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1) -> List[str]:
+async def chat(
+    messages: List[Dict[str, str]],
+    max_tokens: int,
+    best_of: int = 1,
+    schema: Optional[Dict[str, Any]] = None,
+) -> List[str]:
     tasks = []
     model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
     temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
@@ -94,6 +99,8 @@ async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1
                 C.AGENT_MAX_TOKENS: max_tokens,
                 C.AGENT_MESSAGES: messages,
             }
+            if schema is not None:
+                payload[C.AGENT_FORMAT] = schema
             tasks.append(_post_json(session, payload))
         responses = await asyncio.gather(*tasks)
     log_exchange(messages, responses)

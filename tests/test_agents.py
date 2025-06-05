@@ -19,6 +19,7 @@ DEFAULT_TEMP = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
 async def test_chat_single_call_success():
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
     max_tokens = 50
+    schema = {"type": "object"}
     mock_response_content = "Hi there!"
 
     # 1. The actual response mock from (await session.post(...)).__aenter__()
@@ -50,7 +51,12 @@ async def test_chat_single_call_success():
         patch("aiohttp.ClientSession", return_value=mock_session_instance) as mock_ClientSession_constructor,
         patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}),
     ):
-        responses = await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+        responses = await chat(
+            messages=messages,
+            max_tokens=max_tokens,
+            best_of=1,
+            schema=schema,
+        )
 
     assert responses == [mock_response_content]
 
@@ -64,6 +70,7 @@ async def test_chat_single_call_success():
             C.TEMPERATURE: DEFAULT_TEMP,
             C.AGENT_MAX_TOKENS: max_tokens,
             C.AGENT_MESSAGES: messages,
+            C.AGENT_FORMAT: schema,
         },
         headers={C.CONTENT_TYPE: C.APPLICATION_JSON},
         timeout=300,
@@ -77,6 +84,7 @@ async def test_chat_best_of_n_calls_success():
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Tell me a joke"}]
     max_tokens = 100
     best_of_n = 3
+    schema = {"type": "object"}
     mock_responses_content = [f"Joke {i+1}" for i in range(best_of_n)]
 
     mock_actual_responses = []
@@ -109,7 +117,12 @@ async def test_chat_best_of_n_calls_success():
         patch("aiohttp.ClientSession", return_value=mock_session_instance) as mock_ClientSession_constructor,
         patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}),
     ):
-        responses = await chat(messages=messages, max_tokens=max_tokens, best_of=best_of_n)
+        responses = await chat(
+            messages=messages,
+            max_tokens=max_tokens,
+            best_of=best_of_n,
+            schema=schema,
+        )
 
     assert responses == mock_responses_content
     assert mock_ClientSession_constructor.call_count == 1
@@ -120,6 +133,7 @@ async def test_chat_best_of_n_calls_success():
         C.TEMPERATURE: DEFAULT_TEMP,
         C.AGENT_MAX_TOKENS: max_tokens,
         C.AGENT_MESSAGES: messages,
+        C.AGENT_FORMAT: schema,
     }
     expected_calls = [
         call(BASE_OLLAMA_URL, json=expected_payload, headers={C.CONTENT_TYPE: C.APPLICATION_JSON}, timeout=300)
