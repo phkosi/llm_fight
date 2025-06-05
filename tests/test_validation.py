@@ -104,7 +104,7 @@ def _validate_against_schema(data: Any, schema: Dict[str, Any], should_be_valid:
 
 # --- ActionSchema Tests ---
 def test_action_schema_valid():
-    valid_data = {C.VALIDATION_PROB: "0.75", C.VALIDATION_PREDICTED: "Fighter attempts a feint."}
+    valid_data = {C.VALIDATION_PROB: 0.75, C.VALIDATION_PREDICTED: "Fighter attempts a feint."}
     _validate_against_schema(valid_data, ActionSchema, True)
 
 def test_action_schema_invalid_missing_field():
@@ -112,7 +112,7 @@ def test_action_schema_invalid_missing_field():
     _validate_against_schema(invalid_data, ActionSchema, False)
 
 def test_action_schema_invalid_type():
-    invalid_data = {C.VALIDATION_PROB: 0.5, C.VALIDATION_PREDICTED: "Text"} # prob should be string
+    invalid_data = {C.VALIDATION_PROB: "0.5", C.VALIDATION_PREDICTED: "Text"}  # prob should be number
     _validate_against_schema(invalid_data, ActionSchema, False)
 
 # --- JudgeP1Schema Tests ---
