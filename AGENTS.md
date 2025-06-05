@@ -54,3 +54,20 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
 - The combat flow is orchestrated in `src/simulation.py`; refer to the design docs for high level behaviour.
 - Review `docs/DEVELOPMENT_PLAN.md` before starting work. When you finish an item from "Outstanding Tasks", mark it completed (e.g. move it to "Completed Milestones") and commit the updated file.
 
+## Commit and PR guidelines
+
+Follow these conventions to keep history easy to read and PRs self-explanatory.
+
+### Commit messages
+* Use the **imperative mood** in the subject line, e.g. `Add new move`.
+* Keep the subject line under **72 characters**.
+* Include a blank line between the subject and body.
+* Provide a body when the change is non-trivial. Wrap lines at 72 characters.
+* Reference issues or docs with `Fix #123` or `See docs/xyz` when applicable.
+
+### Pull requests
+* Title should summarize the change in a sentence.
+* In the description list what changed and why.
+* Mention any tests run (`black`, `flake8`, `pytest`).
+* Note breaking changes or follow-up work if needed.
+
