@@ -1,6 +1,7 @@
 """Schema validation and retry helpers using jsonschema."""
 
 import json
+import asyncio
 from typing import Any, Callable, Dict
 from jsonschema import validate, ValidationError
 
@@ -38,7 +39,10 @@ JudgeP1Schema: Dict[str, Any] = {
         f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
         "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
     },
-    C.SCHEMA_REQUIRED: ["judgement_text", f"{C.ATTEMPT}_{C.FIGHTER_A}_valid", f"{C.ATTEMPT}_{C.FIGHTER_B}_valid"],
+    # "attempt_X_valid" fields may be omitted if the LLM fails to include them.
+    # We still require the overall judgement text so downstream logic has
+    # something to work with even on partial responses.
+    C.SCHEMA_REQUIRED: ["judgement_text"],
     C.SCHEMA_ADDITIONAL_PROPERTIES: True,
 }
 
@@ -94,22 +98,27 @@ JudgeP2Schema = {
 
 
 async def guarded_call(func: Callable[[], Any], schema: dict) -> Any:
-    """Call func() async until schema validates or retries exhausted."""
+    """Call ``func`` until ``schema`` validates or retries are exhausted."""
+
+    BACKOFF_BASE = 1  # seconds
     last_error = None
+
     for attempt in range(MAX_RETRIES + 1):
         try:
-            data = await func()  # Await func() as it's an async callable (e.g. _call in judge.py)
+            data = await func()
             validate(data, schema)
             return data
-        except (ValidationError, json.JSONDecodeError) as e:  # Catch JSONDecodeError here too
+        except (ValidationError, json.JSONDecodeError) as e:
             last_error = e
             if attempt >= MAX_RETRIES:
-                # After all retries, raise the last encountered error
                 raise RuntimeError(
                     f"Validation/JSON parsing failed after {MAX_RETRIES + 1} attempts: {last_error}"
                 ) from last_error
-            # Optionally log the error for this attempt before retrying
-            logger.debug(f"Attempt {attempt + 1} failed during guarded_call: {e}. Retrying...")
+
+            logger.warning("guarded_call attempt %s/%s failed: %s", attempt + 1, MAX_RETRIES + 1, e)
+            delay = BACKOFF_BASE * 2**attempt
+            logger.debug("Sleeping %.1fs before retry", delay)
+            await asyncio.sleep(delay)
     # This part should not be reached if MAX_RETRIES >= 0, due to the raise in the loop.
     # However, to satisfy linters/type checkers if MAX_RETRIES could be -1 (though it shouldn't):
     if last_error:

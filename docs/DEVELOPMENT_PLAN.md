@@ -4,7 +4,6 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 
 ## Outstanding Tasks
 
-- **LLM Interaction Robustness**: Continue refining prompts, response parsing, and error handling to better cope with unexpected LLM outputs.
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
 
 ## Completed Milestones
@@ -21,6 +20,7 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - Structured Combat Log Implemented
 - Dynamic Loadouts, Classes, and Environments
 - Initial improvements for LLM Interaction Robustness: Judge Phase1 now receives recent combat log context
+- Robust parsing retries with exponential backoff for malformed LLM responses
 - Simulated failure scenarios for `_single_fight` and `run_batch` now tested
 - Property-based tests for `FighterState.apply_delta`
   - Use `hypothesis` strategies to generate random combinations of deltas for

@@ -81,6 +81,30 @@ async def test_guarded_call_retry_on_json_decode_error_then_success():
 
 
 @pytest.mark.asyncio
+async def test_guarded_call_exponential_backoff(monkeypatch):
+    monkeypatch.setattr("src.validation.MAX_RETRIES", 2)
+    sleep_calls: List[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    monkeypatch.setattr("src.validation.asyncio.sleep", fake_sleep)
+
+    schema = {
+        C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+        C.SCHEMA_PROPERTIES: {"key": {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
+        C.SCHEMA_REQUIRED: ["key"],
+    }
+    invalid = {"wrong": 1}
+    valid = {"key": "ok"}
+    mock_func = MockAsyncCallable(return_values=[invalid, invalid, valid])
+
+    result = await guarded_call(mock_func, schema)
+    assert result == valid
+    assert sleep_calls == [1, 2]
+
+
+@pytest.mark.asyncio
 async def test_guarded_call_fail_after_max_retries_validation_error(monkeypatch):
     # Reduce MAX_RETRIES for this test for speed
     monkeypatch.setattr("src.validation.MAX_RETRIES", 1)
@@ -168,6 +192,11 @@ def test_judge_p1_schema_valid_no_explanation():  # Explanation is optional
         f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
         f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.3",
     }
+    _validate_against_schema(valid_data, JudgeP1Schema, True)
+
+
+def test_judge_p1_schema_valid_missing_attempt_fields():
+    valid_data = {"judgement_text": "Just a summary."}
     _validate_against_schema(valid_data, JudgeP1Schema, True)
 
 
