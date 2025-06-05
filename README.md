@@ -359,7 +359,6 @@ Turn 1: A strikes B
 1. **Visualizer:** Develop a Godot-based tool to replay combat logs with sprite limb masking.
 2. **Advanced Modifiers:** Introduce infection and weather modifiers once the MVP is stable.
 3. **LLM Robustness & Scalability:** Continue refining prompts, error handling and batch execution for large numbers of simulations.
-4. **Test Suite Enhancements:** Add property-based tests for `FighterState.apply_delta` and CLI option validation.
 
 ## Contributing
 
