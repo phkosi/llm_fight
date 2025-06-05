@@ -110,6 +110,8 @@ black .
 flake8
 ```
 
+CI enforces formatting in the same way by running `black --check` and `flake8`.
+
 When calling the async functions in `src/agents.py` within standalone scripts
 or tests, ensure the underlying aiohttp session is closed:
 
