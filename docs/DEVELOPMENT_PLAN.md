@@ -14,12 +14,6 @@ This document summarizes outstanding tasks for ongoing development and tracks co
        body parts and ensure invariants (e.g. HP never increases).
      - Generate effect addition/removal data and verify that permanent effects
        are not duplicated and TTL logic is respected.
-  2. **Simulated failure scenarios for `_single_fight` and `run_batch`**
-     - Monkeypatch `agents.guarded_call` to raise exceptions to mimic
-       communication failures with the LLM backend.
-     - Ensure both functions catch these errors, log the failure and continue
-       without crashing the test run.
-     - Validate that partial results are returned when a subset of fights fail.
   3. **Negative CLI option tests**
      - Invoke the CLI entry point with invalid options using `CliRunner`.
      - Check that invalid model names or configuration paths produce helpful
@@ -40,3 +34,4 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 - Structured Combat Log Implemented
 - Dynamic Loadouts, Classes, and Environments
 - Initial improvements for LLM Interaction Robustness: Judge Phase1 now receives recent combat log context
+- Simulated failure scenarios for `_single_fight` and `run_batch` now tested
