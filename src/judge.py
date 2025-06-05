@@ -6,7 +6,7 @@ from typing import Dict, Any
 from .utils.json_parser import parse_json_from_text
 
 from .agents import chat
-from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
+from .validation import JudgeP1Model, JudgeP2Model, guarded_call
 from .config import CONFIG
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from .engine import constants as C
@@ -17,7 +17,7 @@ BEST_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
 # -------------------------------------------------------------------
 
 
-async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> Dict[str, Any]:
+async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> JudgeP1Model:
     """
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
 
@@ -28,7 +28,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
         recent_log: Text summary of the most recent turns from the combat log.
 
     Returns:
-        A dictionary conforming to JudgeP1Schema, including judgement text,
+        A ``JudgeP1Model`` including judgement text,
         validity flags, and success probabilities for each attempt.
     """
     system_prompt_content = JUDGE_P1_SYSTEM_PROMPT
@@ -49,19 +49,24 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
 
     async def _call():
-        response_texts = await chat([system, user], max_tokens=MAX_TOK_J, best_of=BEST_J)
+        response_texts = await chat(
+            [system, user],
+            max_tokens=MAX_TOK_J,
+            best_of=BEST_J,
+            format=JudgeP1Model.model_json_schema(),
+        )
         for txt in response_texts:
             try:
-                return parse_json_from_text(txt)
+                return json.dumps(parse_json_from_text(txt))
             except json.JSONDecodeError:
                 continue  # Try next response
         raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
 
-    result = await guarded_call(_call, JudgeP1Schema)
+    result = await guarded_call(_call, JudgeP1Model)
     return result
 
 
-async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
+async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -> JudgeP2Model:
     """
     Judge Phase 2: Narrates combat outcomes and calculates state changes (deltas).
 
@@ -71,7 +76,7 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
         rolls: Dictionary indicating whether each fighter's attempt was successful.
 
     Returns:
-        A dictionary conforming to JudgeP2Schema, including narration, state deltas
+        A ``JudgeP2Model`` including narration, state deltas
         for each fighter, a flag indicating if the fight ended, and the winner if applicable.
     """
     system_prompt_content = JUDGE_P2_SYSTEM_PROMPT
@@ -81,13 +86,18 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
 
     async def _call():
-        response_texts = await chat([system, user], max_tokens=MAX_TOK_J, best_of=BEST_J)
+        response_texts = await chat(
+            [system, user],
+            max_tokens=MAX_TOK_J,
+            best_of=BEST_J,
+            format=JudgeP2Model.model_json_schema(),
+        )
         for txt in response_texts:
             try:
-                return parse_json_from_text(txt)
+                return json.dumps(parse_json_from_text(txt))
             except json.JSONDecodeError:
                 continue  # Try next response
         raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
 
-    result = await guarded_call(_call, JudgeP2Schema)
+    result = await guarded_call(_call, JudgeP2Model)
     return result

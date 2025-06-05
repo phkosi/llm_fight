@@ -2,8 +2,9 @@
 
 import json
 import asyncio
-from typing import Any, Callable, Dict
-from jsonschema import validate, ValidationError
+from typing import Any, Callable, Dict, Type
+from jsonschema import validate, ValidationError as JSONSchemaValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError as PydanticValidationError, Field, field_validator
 
 from .config import CONFIG
 from .engine import constants as C
@@ -24,81 +25,69 @@ ActionSchema = {
     C.SCHEMA_REQUIRED: [C.VALIDATION_PROB, C.VALIDATION_PREDICTED],
 }
 
-# Schema for the output of Phase 1 Judge
-# This is a simple schema that expects a dictionary with two keys:
-# "judgement": a string describing the judgement
-# "valid_attempt_A": a boolean indicating if fighter A's attempt is valid
-# "valid_attempt_B": a boolean indicating if fighter B's attempt is valid
-JudgeP1Schema: Dict[str, Any] = {
-    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-    C.SCHEMA_PROPERTIES: {
-        "judgement_text": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-        f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-        f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-        "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-    },
-    # "attempt_X_valid" fields may be omitted if the LLM fails to include them.
-    # We still require the overall judgement text so downstream logic has
-    # something to work with even on partial responses.
-    C.SCHEMA_REQUIRED: ["judgement_text"],
-    C.SCHEMA_ADDITIONAL_PROPERTIES: True,
-}
 
-DeltaSchema = {
-    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-    C.SCHEMA_PROPERTIES: {
-        C.PAIN_INCREASE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
-        C.EXHAUSTION_INCREASE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
-        C.HEAT_INCREASE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
-        C.WOUNDS: {
-            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
-            C.SCHEMA_ITEMS: {
-                C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-                C.SCHEMA_PROPERTIES: {
-                    C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-                    C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER},
-                    C.TYPE: {
-                        C.SCHEMA_TYPE: C.SCHEMA_STRING,
-                        C.SCHEMA_ENUM: [dt.value for dt in C.DamageType],
-                    },
-                },
-                C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE],
-            },
-        },
-        C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_OBJECT}},
-        C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
-        C.STATUS_CHANGE: {
-            C.SCHEMA_TYPE: C.SCHEMA_STRING,
-            C.SCHEMA_ENUM: [status.value for status in C.FighterStatus],
-        },
-    },
-    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
-}
+class JudgeP1Model(BaseModel):
+    """Pydantic model for Judge phase‑1 output."""
 
-JudgeP2Schema = {
-    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-    C.SCHEMA_PROPERTIES: {
-        C.NARRATION: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-        C.DELTA: {
-            C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-            C.SCHEMA_PATTERN_PROPERTIES: {f"^[{C.FIGHTER_A}{C.FIGHTER_B}]$": DeltaSchema},
-            C.SCHEMA_MIN_PROPERTIES: 0,
-            C.SCHEMA_MAX_PROPERTIES: 2,
-            C.SCHEMA_ADDITIONAL_PROPERTIES: False,
-        },
-        C.FIGHT_END: {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        C.WINNER: {C.SCHEMA_TYPE: [C.SCHEMA_STRING, C.SCHEMA_NULL], C.SCHEMA_ENUM: [C.FIGHTER_A, C.FIGHTER_B, None]},
-    },
-    C.SCHEMA_REQUIRED: [C.NARRATION, C.DELTA, C.FIGHT_END],
-}
+    judgement_text: str
+    attempt_A_valid: bool | None = Field(default=None, strict=True)
+    attempt_A_prob: str | None = None
+    attempt_B_valid: bool | None = Field(default=None, strict=True)
+    attempt_B_prob: str | None = None
+    explanation: str | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+class WoundModel(BaseModel):
+    targeted_part: str
+    value: int = Field(ge=0)
+    type: C.DamageType | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class DeltaModel(BaseModel):
+    pain_increase: int | None = Field(default=None, ge=0)
+    exhaustion_increase: int | None = Field(default=None, ge=0)
+    heat_increase: int | None = Field(default=None, ge=0)
+    wounds: list[WoundModel] | None = None
+    effects_added: list[dict] | None = None
+    effects_removed: list[str] | None = None
+    status_change: C.FighterStatus | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class JudgeP2Model(BaseModel):
+    narration: str
+    delta: Dict[str, DeltaModel]
+    fight_end: bool
+    winner: str | None = Field(default=None)
+
+    @field_validator("delta")
+    @classmethod
+    def _check_delta_keys(cls, v: Dict[str, DeltaModel]) -> Dict[str, DeltaModel]:
+        for key in v:
+            if key not in {C.FIGHTER_A, C.FIGHTER_B}:
+                raise ValueError("delta keys must be 'A' or 'B'")
+        return v
+
+    @field_validator("winner")
+    @classmethod
+    def _check_winner(cls, v: str | None) -> str | None:
+        if v is not None and v not in {C.FIGHTER_A, C.FIGHTER_B}:
+            raise ValueError("winner must be 'A', 'B', or null")
+        return v
+
+    model_config = ConfigDict(extra="forbid")
+
 
 # generic validate wrapper ------------------------------------------------
 
 
-async def guarded_call(func: Callable[[], Any], schema: dict) -> Any:
-    """Call ``func`` until ``schema`` validates or retries are exhausted."""
+async def guarded_call(func: Callable[[], Any], schema: dict | Type[BaseModel]) -> Any:
+    """Call ``func`` until ``schema``/``model`` validates or retries are exhausted."""
 
     BACKOFF_BASE = 1  # seconds
     last_error = None
@@ -106,9 +95,13 @@ async def guarded_call(func: Callable[[], Any], schema: dict) -> Any:
     for attempt in range(MAX_RETRIES + 1):
         try:
             data = await func()
-            validate(data, schema)
-            return data
-        except (ValidationError, json.JSONDecodeError) as e:
+            if isinstance(schema, dict):
+                validate(data, schema)
+                return data
+            else:
+                json_str = data if isinstance(data, str) else json.dumps(data)
+                return schema.model_validate_json(json_str)
+        except (JSONSchemaValidationError, PydanticValidationError, json.JSONDecodeError) as e:
             last_error = e
             if attempt >= MAX_RETRIES:
                 raise RuntimeError(

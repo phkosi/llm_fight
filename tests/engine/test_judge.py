@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 import json
 
 from src.judge import judge_phase1, judge_phase2, MAX_TOK_J, BEST_J
-from src.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
+from src.validation import JudgeP1Model, JudgeP2Model  # Pydantic models
 from src.engine import constants as C
 
 # Mock states and attempts for testing
@@ -33,7 +33,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
 
     # Mock guarded_call to return the first (and only) parsed chat response
     async def mock_gc_logic(call_func, schema):
-        return await call_func()
+        return schema.model_validate_json(await call_func())
 
     mock_guarded_call.side_effect = mock_gc_logic
 
@@ -56,7 +56,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert user_payload["recent_combat_log"] == "Turn 1"
 
     mock_guarded_call.assert_called_once()
-    assert mock_guarded_call.call_args[0][1] == JudgeP1Schema
+    assert mock_guarded_call.call_args[0][1] == JudgeP1Model
 
 
 MOCK_P2_INPUT_STATE = {
@@ -92,7 +92,7 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     ]
 
     async def mock_gc_logic(call_func, schema):
-        return await call_func()
+        return schema.model_validate_json(await call_func())
 
     mock_guarded_call.side_effect = mock_gc_logic
 
@@ -109,7 +109,7 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert user_payload["fighter_A"] == MOCK_FIGHTER_A_STATE
 
     mock_guarded_call.assert_called_once()
-    assert mock_guarded_call.call_args[0][1] == JudgeP2Schema
+    assert mock_guarded_call.call_args[0][1] == JudgeP2Model
 
 
 @pytest.mark.asyncio
@@ -120,12 +120,12 @@ async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
     mock_chat.return_value = [fenced]
 
     async def mock_gc_logic(call_func, schema):
-        return await call_func()
+        return schema.model_validate_json(await call_func())
 
     mock_guarded_call.side_effect = mock_gc_logic
 
     result = await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B)
-    assert result["judgement_text"] == "ok"
+    assert result.judgement_text == "ok"
 
 
 @pytest.mark.asyncio
@@ -136,9 +136,9 @@ async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
     mock_chat.return_value = [fenced]
 
     async def mock_gc_logic(call_func, schema):
-        return await call_func()
+        return schema.model_validate_json(await call_func())
 
     mock_guarded_call.side_effect = mock_gc_logic
 
     result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
-    assert result["narration"] == "done"
+    assert result.narration == "done"

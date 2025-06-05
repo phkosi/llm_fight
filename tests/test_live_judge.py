@@ -1,10 +1,9 @@
 import os
 import asyncio
 import pytest
-from jsonschema import validate
 
 from src.judge import judge_phase1, judge_phase2
-from src.validation import JudgeP1Schema, JudgeP2Schema
+from src.validation import JudgeP1Model, JudgeP2Model
 from src.engine import constants as C
 
 
@@ -30,8 +29,7 @@ async def test_judge_phase1_live():
     except Exception as e:
         pytest.xfail(f"Live API call failed: {e}")
 
-    validate(instance=result, schema=JudgeP1Schema)
-    assert isinstance(result, dict)
+    assert isinstance(result, JudgeP1Model)
 
 
 @pytest.mark.asyncio
@@ -74,5 +72,4 @@ async def test_judge_phase2_live():
     except Exception as e:
         pytest.xfail(f"Live API call failed during phase2: {e}")
 
-    validate(instance=p2, schema=JudgeP2Schema)
-    assert isinstance(p2, dict)
+    assert isinstance(p2, JudgeP2Model)
