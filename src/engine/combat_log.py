@@ -41,6 +41,12 @@ class CombatLog:
 
     def to_summary(self, last_n: int | None = None) -> str:
         """Return narration summary for all or the last `n` turns."""
-        turns = self.turns if last_n is None else self.turns[-last_n:]
+        if last_n is not None:
+            if last_n <= 0:
+                return ""
+            turns = self.turns[-last_n:]
+        else:
+            turns = self.turns
+
         lines = [f"Turn {t.turn}: {t.narration}" for t in turns if t.narration]
         return "\n".join(lines)
