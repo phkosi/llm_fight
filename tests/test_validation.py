@@ -303,3 +303,14 @@ def test_judge_p2_schema_invalid_delta_fighter_key():
         C.WINNER: None,
     }
     _validate_against_schema(invalid_data, JudgeP2Schema, False)
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_negative_max_retries(monkeypatch):
+    monkeypatch.setattr("src.validation.MAX_RETRIES", -1)
+
+    async def dummy():
+        return {"key": "val"}
+
+    with pytest.raises(RuntimeError, match="Guarded call failed without specific error"):
+        await guarded_call(dummy, {"type": "object"})
