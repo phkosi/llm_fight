@@ -115,14 +115,15 @@ flake8
 
 CI enforces formatting in the same way by running `black --check` and `flake8`.
 
-When calling the async functions in `src/agents.py` within standalone scripts
-or tests, ensure the underlying aiohttp session is closed:
+The `SessionManager` context manager in `src/agents.py` should be used when
+calling the async helpers directly:
 
 ```python
-import asyncio
-from src.agents import close_session
+from src.agents import SessionManager, chat
 
-asyncio.run(close_session())
+async def main() -> None:
+    async with SessionManager() as session:
+        await chat([{"role": "user", "content": "hi"}], max_tokens=10)
 ```
 
 ## Running the Simulation

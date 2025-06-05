@@ -3,7 +3,7 @@
 import aiohttp
 import asyncio
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from .config import CONFIG
 from .engine import constants as C
@@ -36,33 +36,29 @@ def get_ollama_url() -> str:
 
 HEADERS = {C.CONTENT_TYPE: C.APPLICATION_JSON}
 
-_session: Optional[aiohttp.ClientSession] = None
 
+class SessionManager:
+    """Async context manager that provides an ``aiohttp.ClientSession``."""
 
-# -------------- session management ---------------------------------
-def _get_session() -> aiohttp.ClientSession:
-    """Return a module-level :class:`ClientSession`, creating it if needed."""
-    global _session
-    if _session is None or _session.closed:
-        _session = aiohttp.ClientSession(trust_env=True)
-    return _session
+    def __init__(self) -> None:
+        self._session: aiohttp.ClientSession | None = None
 
+    async def __aenter__(self) -> aiohttp.ClientSession:
+        self._session = aiohttp.ClientSession(trust_env=True)
+        return self._session
 
-async def close_session() -> None:
-    """Close the module-level session if it exists."""
-    global _session
-    if _session is not None and not _session.closed:
-        await _session.close()
-    _session = None
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+        self._session = None
 
 
 # -------------- helper ---------------------------------------------
-async def _post_json(payload: Dict[str, Any]) -> str:
+async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any]) -> str:
     try:
         # Allow aiohttp to respect proxy-related environment variables
         # like HTTPS_PROXY so network-restricted environments can
         # successfully connect to remote APIs.
-        session = _get_session()
         async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
             resp.raise_for_status()
             data = await resp.json()
@@ -86,19 +82,17 @@ async def _post_json(payload: Dict[str, Any]) -> str:
 
 
 async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1) -> List[str]:
-    # Ensure the session is created before spawning tasks to avoid race conditions
-    _get_session()
     tasks = []
     model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
     temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
-    for _ in range(best_of):
-        payload = {
-            C.AGENT_MODEL: model,
-            C.TEMPERATURE: temp,
-            C.AGENT_MAX_TOKENS: max_tokens,
-            C.AGENT_MESSAGES: messages,
-        }
-        tasks.append(_post_json(payload))
-    responses = await asyncio.gather(*tasks)
-    # Caller will handle picking/parsing from the list.
+    async with SessionManager() as session:
+        for _ in range(best_of):
+            payload = {
+                C.AGENT_MODEL: model,
+                C.TEMPERATURE: temp,
+                C.AGENT_MAX_TOKENS: max_tokens,
+                C.AGENT_MESSAGES: messages,
+            }
+            tasks.append(_post_json(session, payload))
+        responses = await asyncio.gather(*tasks)
     return responses
