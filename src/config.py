@@ -7,6 +7,7 @@ from .engine import constants as C
 DEFAULTS = {
     C.CONFIG_GENERAL: {
         C.CONFIG_LLAMA_DEFAULT_MODEL: 'llama3.2',
+        C.CONFIG_LLAMA_API_URL: 'http://localhost:11434/v1/chat/completions',
         C.CONFIG_MAX_TOKENS_FIGHTER: '24000',
         C.CONFIG_MAX_TOKENS_JUDGE: '48000',
         C.CONFIG_LLAMA_TEMPERATURE: '0.8',
@@ -21,7 +22,6 @@ DEFAULTS = {
     C.CONFIG_SIMULATION: {
         C.CONFIG_RUNS: '1000',
         C.CONFIG_SEED: '42',
-        C.CONFIG_MIRROR: 'yes',
     },
     C.CONFIG_DEFAULTS: {
         C.CONFIG_FIGHTER_CLASS: 'Generic Fighter',
