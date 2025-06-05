@@ -5,6 +5,7 @@ import pytest
 from src.agents import chat
 from src.engine import constants as C
 
+
 @pytest.mark.asyncio
 async def test_chat_live_api():
     api_url = os.environ.get("API_URL")

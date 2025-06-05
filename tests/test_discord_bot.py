@@ -13,9 +13,11 @@ from src.discord_bot import (
 )
 from src.engine import constants as C
 
+
 class DummyResponse:
     def __init__(self):
         self.send_message = AsyncMock()
+
 
 class DummyInteraction:
     def __init__(self, channel_name="general"):
@@ -37,6 +39,7 @@ def test_fight_session_start_stop():
     assert fs.A is not None and fs.B is not None
     fs.stop()
     assert not fs.active
+
 
 @pytest.mark.asyncio
 async def test_command_flow():
@@ -63,9 +66,7 @@ async def test_channel_restriction(monkeypatch):
 
     wrong = DummyInteraction("other")
     await fight_start.callback(wrong)
-    wrong.response.send_message.assert_called_with(
-        "Commands are restricted to allowed", ephemeral=True
-    )
+    wrong.response.send_message.assert_called_with("Commands are restricted to allowed", ephemeral=True)
     assert not session.active
 
     right = DummyInteraction("allowed")
@@ -83,7 +84,6 @@ def _patch_config(monkeypatch, token: str, channel: str):
         return fallback
 
     monkeypatch.setattr("src.discord_bot.CONFIG.get", fake_get)
-
 
 
 def test_run_bot_missing_token(monkeypatch):

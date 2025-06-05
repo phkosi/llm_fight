@@ -162,7 +162,6 @@ async def test_two_turn_single_fight_integration():
     assert fighters[1].status == C.STATUS_UNCONSCIOUS
 
 
-
 @pytest.mark.asyncio
 async def test_draw_after_max_turns():
     async def fake_get_attempt(*args, **kwargs):
@@ -201,4 +200,3 @@ async def test_draw_after_max_turns():
 
     assert result[C.WINNER] == C.DRAW
     assert result[C.LOG_TURN] == "2"
-

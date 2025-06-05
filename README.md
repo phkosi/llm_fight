@@ -100,12 +100,13 @@ With the dev dependencies installed you can execute the test suite using
 pytest -q
 ```
 
-### Running the Linter
+### Running the Linter and Formatter
 
-The project uses `flake8` with a small set of rules focused on catching
-obvious mistakes. Run it from the repository root:
+Use `black` to automatically format the codebase, followed by `flake8` to catch
+obvious mistakes. Run them from the repository root:
 
 ```bash
+black .
 flake8
 ```
 

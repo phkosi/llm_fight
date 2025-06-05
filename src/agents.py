@@ -1,4 +1,5 @@
 """Async wrappers for calling Ollama chat completions."""
+
 import aiohttp
 import asyncio
 import os
@@ -7,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from .config import CONFIG
 from .engine import constants as C
 from .engine.logger import logger
+
 
 def get_ollama_url() -> str:
     """Return the Ollama chat completions endpoint.
@@ -31,11 +33,11 @@ def get_ollama_url() -> str:
 
     return url
 
-HEADERS = {
-    C.CONTENT_TYPE: C.APPLICATION_JSON
-}
+
+HEADERS = {C.CONTENT_TYPE: C.APPLICATION_JSON}
 
 _session: Optional[aiohttp.ClientSession] = None
+
 
 # -------------- session management ---------------------------------
 def _get_session() -> aiohttp.ClientSession:
@@ -45,12 +47,14 @@ def _get_session() -> aiohttp.ClientSession:
         _session = aiohttp.ClientSession(trust_env=True)
     return _session
 
+
 async def close_session() -> None:
     """Close the module-level session if it exists."""
     global _session
     if _session is not None and not _session.closed:
         await _session.close()
     _session = None
+
 
 # -------------- helper ---------------------------------------------
 async def _post_json(payload: Dict[str, Any]) -> str:
@@ -79,6 +83,7 @@ async def _post_json(payload: Dict[str, Any]) -> str:
     except Exception as e:
         logger.error(f"Unexpected error during Ollama API call: {e}. Payload: {payload}")
         raise
+
 
 async def chat(messages: List[Dict[str, str]], max_tokens: int, best_of: int = 1) -> List[str]:
     # Ensure the session is created before spawning tasks to avoid race conditions

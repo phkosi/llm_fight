@@ -15,11 +15,15 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
   pip install -r requirements-dev.txt
   ```
 - Set `API_URL` to run live API tests; they are skipped if this variable is absent.
-- Use **pytest**.  From the repository root run:
+- Use **pytest**. From the repository root run:
   ```bash
   pytest -q
   ```
-- A lightweight **flake8** configuration checks for unused imports. Run:
+- Format the codebase with **black** before committing:
+  ```bash
+  black .
+  ```
+- Then run **flake8** which checks for unused imports:
   ```bash
   flake8
   ```
@@ -38,6 +42,7 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
 
 ## Style notes
 - Follow standard Python style (PEP8). `.flake8` allows lines up to **120** characters.
+- `.flake8` also excludes the `.venv`, `__pycache__`, `build`, and `dist` directories.
 - Use type hints where present.
 - Logging uses the `logger` from `src/engine/logger.py` – prefer this over `print`.
 - Keep constants in `src/engine/constants.py` rather than inline strings.

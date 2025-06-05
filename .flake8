@@ -1,3 +1,8 @@
 [flake8]
 max-line-length = 120
 select = F
+exclude =
+    .venv,
+    __pycache__,
+    build,
+    dist

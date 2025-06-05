@@ -8,6 +8,7 @@ from . import constants as C
 @dataclass
 class CombatTurn:
     """Represents a single turn in the combat log."""
+
     turn: int
     attempt_A: str = ""
     attempt_B: str = ""

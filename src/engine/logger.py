@@ -17,9 +17,7 @@ console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(_level)
 
 # Create a formatter and set it for the handler
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 
 # Add the handler to the logger if none are attached yet
@@ -35,4 +33,4 @@ if not logger.hasHandlers():
 #     logger.info("This is an info message from logger.py")
 #     logger.warning("This is a warning message from logger.py")
 #     logger.error("This is an error message from logger.py")
-#     logger.critical("This is a critical message from logger.py") 
+#     logger.critical("This is a critical message from logger.py")

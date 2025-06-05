@@ -1,4 +1,5 @@
 """Configuration loader and writer for LLM Fight Engine (INI‑style)."""
+
 from __future__ import annotations
 import configparser
 from pathlib import Path
@@ -6,36 +7,37 @@ from .engine import constants as C
 
 DEFAULTS = {
     C.CONFIG_GENERAL: {
-        C.CONFIG_LLAMA_DEFAULT_MODEL: 'llama3.2',
-        C.CONFIG_LLAMA_API_URL: 'http://localhost:11434/v1/chat/completions',
-        C.CONFIG_MAX_TOKENS_FIGHTER: '24000',
-        C.CONFIG_MAX_TOKENS_JUDGE: '48000',
-        C.CONFIG_LLAMA_TEMPERATURE: '0.8',
-        C.CONFIG_BEST_OF_FIGHTER: '3',
-        C.CONFIG_BEST_OF_JUDGE: '2',
-        C.CONFIG_MAX_RETRIES: '2',
-        C.CONFIG_LOG_LEVEL: 'INFO',
+        C.CONFIG_LLAMA_DEFAULT_MODEL: "llama3.2",
+        C.CONFIG_LLAMA_API_URL: "http://localhost:11434/v1/chat/completions",
+        C.CONFIG_MAX_TOKENS_FIGHTER: "24000",
+        C.CONFIG_MAX_TOKENS_JUDGE: "48000",
+        C.CONFIG_LLAMA_TEMPERATURE: "0.8",
+        C.CONFIG_BEST_OF_FIGHTER: "3",
+        C.CONFIG_BEST_OF_JUDGE: "2",
+        C.CONFIG_MAX_RETRIES: "2",
+        C.CONFIG_LOG_LEVEL: "INFO",
     },
     C.CONFIG_CONTEXT: {
-        C.CONFIG_FIGHTER_LOG_WINDOW: '10',
-        C.CONFIG_JUDGE_LOG_WINDOW: '9999',
+        C.CONFIG_FIGHTER_LOG_WINDOW: "10",
+        C.CONFIG_JUDGE_LOG_WINDOW: "9999",
     },
     C.CONFIG_SIMULATION: {
-        C.CONFIG_RUNS: '1000',
-        C.CONFIG_SEED: '42',
-        C.CONFIG_CONCURRENT_RUNS: '1',
-        C.CONFIG_MAX_TURNS: '100',
+        C.CONFIG_RUNS: "1000",
+        C.CONFIG_SEED: "42",
+        C.CONFIG_CONCURRENT_RUNS: "1",
+        C.CONFIG_MAX_TURNS: "100",
     },
     C.CONFIG_DEFAULTS: {
-        C.CONFIG_FIGHTER_CLASS: 'Generic Fighter',
-        C.CONFIG_FIGHTER_LOADOUT: 'their bare fists and wits',
-        C.CONFIG_FIGHTER_ENVIRONMENT: 'an open arena',
+        C.CONFIG_FIGHTER_CLASS: "Generic Fighter",
+        C.CONFIG_FIGHTER_LOADOUT: "their bare fists and wits",
+        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
     },
     C.CONFIG_DISCORD: {
-        C.CONFIG_DISCORD_TOKEN: '',
-        C.CONFIG_DISCORD_CHANNEL: '',
-    }
+        C.CONFIG_DISCORD_TOKEN: "",
+        C.CONFIG_DISCORD_CHANNEL: "",
+    },
 }
+
 
 class Config:
     """Simple wrapper around configparser with migration helpers.
@@ -43,14 +45,15 @@ class Config:
     Default values are seeded from :data:`DEFAULTS`. The
     ``concurrent_runs`` option lives under the ``[SIMULATION]`` section.
     """
-    def __init__(self, path: Path | str = 'llmfight.ini'):
+
+    def __init__(self, path: Path | str = "llmfight.ini"):
         self.path = Path(path)
         self.cp = configparser.ConfigParser()
 
         # Load DEFAULTS first using read_dict.
         self.cp.read_dict(DEFAULTS)
-        
-        # Then, load the user's file if it exists. 
+
+        # Then, load the user's file if it exists.
         # According to docs, values from files read later should take precedence.
         if self.path.exists():
             self.cp.read(self.path)
@@ -59,8 +62,8 @@ class Config:
     def _migrate_old_keys(self):
         """Handle legacy option names for backwards compatibility."""
         aliases = {
-            (C.CONFIG_GENERAL, 'llm_model'): C.CONFIG_LLAMA_DEFAULT_MODEL,
-            (C.CONFIG_GENERAL, 'temperature'): C.CONFIG_LLAMA_TEMPERATURE,
+            (C.CONFIG_GENERAL, "llm_model"): C.CONFIG_LLAMA_DEFAULT_MODEL,
+            (C.CONFIG_GENERAL, "temperature"): C.CONFIG_LLAMA_TEMPERATURE,
         }
 
         for (section, old_key), new_key in aliases.items():
@@ -71,7 +74,7 @@ class Config:
 
     # --- public API -----------------------------------------------------
     def save(self):
-        with self.path.open('w') as fp:
+        with self.path.open("w") as fp:
             self.cp.write(fp)
 
     def get(self, section: str, key: str, cast=str, fallback=None):
@@ -79,6 +82,7 @@ class Config:
         has_option = self.cp.has_option(section, key) if has_section else False
 
         if cast is bool:
+
             def _parse_bool(value):
                 if isinstance(value, bool):
                     return value
@@ -112,20 +116,22 @@ class Config:
                 raise
 
         # For other types
-        if not has_option: # Key or section missing
+        if not has_option:  # Key or section missing
             if fallback is not None:
                 return fallback
             # Re-raise the specific error if no fallback
             if not has_section:
                 raise configparser.NoSectionError(section)
-            else: # Section exists, but option doesn't
+            else:  # Section exists, but option doesn't
                 raise configparser.NoOptionError(key, section)
 
         val_str = self.cp.get(section, key)
         try:
             return cast(val_str)
         except ValueError as e:
-            raise ValueError(f"Failed to cast value '{val_str}' for key '{key}' in section '{section}' to {cast.__name__}: {e}") from e
+            raise ValueError(
+                f"Failed to cast value '{val_str}' for key '{key}' in section '{section}' to {cast.__name__}: {e}"
+            ) from e
 
     def set(self, section: str, key: str, value):
         if not self.cp.has_section(section):
@@ -135,25 +141,26 @@ class Config:
     def get_fighter_settings(self, fighter_id: str) -> dict:
         """Return class, loadout, and environment for a fighter."""
         return {
-            'class_': self.get(
+            "class_": self.get(
                 fighter_id,
                 C.CONFIG_FIGHTER_CLASS,
                 str,
                 fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_CLASS, str),
             ),
-            'loadout': self.get(
+            "loadout": self.get(
                 fighter_id,
                 C.CONFIG_FIGHTER_LOADOUT,
                 str,
                 fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_LOADOUT, str),
             ),
-            'environment': self.get(
+            "environment": self.get(
                 fighter_id,
                 C.CONFIG_FIGHTER_ENVIRONMENT,
                 str,
                 fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_ENVIRONMENT, str),
             ),
         }
+
 
 # convenience singleton
 CONFIG = Config()

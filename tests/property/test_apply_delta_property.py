@@ -27,11 +27,13 @@ def delta_strategy(draw):
                     {
                         C.TARGETED_PART: st.sampled_from(part_names),
                         C.VALUE: st.integers(min_value=1, max_value=20),
-                        C.TYPE: st.sampled_from([
-                            C.DAMAGE_TYPE_PIERCING,
-                            C.DAMAGE_TYPE_SLASHING,
-                            C.DAMAGE_TYPE_FIRE,
-                        ]),
+                        C.TYPE: st.sampled_from(
+                            [
+                                C.DAMAGE_TYPE_PIERCING,
+                                C.DAMAGE_TYPE_SLASHING,
+                                C.DAMAGE_TYPE_FIRE,
+                            ]
+                        ),
                     }
                 ),
                 min_size=1,
@@ -76,10 +78,7 @@ def test_apply_delta_property(delta):
     fighter = FighterState.from_preset("prop_test", "humanoid")
 
     # Snapshot HP before applying delta
-    hp_before = {
-        name: [layer.max_hp for layer in part.layers]
-        for name, part in fighter.parts.items()
-    }
+    hp_before = {name: [layer.max_hp for layer in part.layers] for name, part in fighter.parts.items()}
 
     fighter.apply_delta(delta)
 
@@ -101,9 +100,7 @@ def test_apply_delta_property(delta):
             assert layer.max_hp <= hp_before[name][idx]
 
     # Adding duplicate permanent effects should not create multiple entries
-    permanent_names = [
-        eff.name for eff in (fighter.buffs + fighter.debuffs) if eff.ttl == -1
-    ]
+    permanent_names = [eff.name for eff in (fighter.buffs + fighter.debuffs) if eff.ttl == -1]
     assert len(permanent_names) == len(set(permanent_names))
 
     # Tick effects and ensure expired ones are removed
