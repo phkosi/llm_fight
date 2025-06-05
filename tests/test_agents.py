@@ -4,7 +4,7 @@ import aiohttp
 import os
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
-from src.agents import chat
+from src.agents import chat, get_ollama_url
 from src.engine import constants as C
 from src.config import CONFIG # To access config values for assertions
 
@@ -194,4 +194,21 @@ async def test_chat_unexpected_error_raises_exception():
 
     with patch('aiohttp.ClientSession', return_value=mock_session_instance):
         with pytest.raises(ValueError):
-            await chat(messages=messages, max_tokens=max_tokens, best_of=1) 
+            await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+
+
+def test_get_ollama_url_from_env():
+    custom_base = "https://example.com"
+    with patch.dict(os.environ, {"API_URL": custom_base}):
+        assert get_ollama_url() == custom_base + "/v1/chat/completions"
+
+
+def test_get_ollama_url_from_config():
+    old = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str)
+    try:
+        new_url = "http://config-example.com/v1/chat/completions"
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, new_url)
+        with patch.dict(os.environ, {}, clear=True):
+            assert get_ollama_url() == new_url
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, old)
