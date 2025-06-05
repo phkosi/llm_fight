@@ -207,12 +207,14 @@ judge_log_window   = 9999        ; Number of recent turns for judge (effectively
 runs               = 1000        ; Number of simulation runs
 seed               = 42          ; PRNG seed for reproducibility
 concurrent_runs    = 1           ; Number of fights to execute simultaneously
+max_turns          = 100         ; End fight in a draw after this many turns
 
 [FighterA]
 class       = Barbarian
 loadout     = axe and shield
 environment = dusty arena
 ```
+`max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
 You can also configure the Discord bot:
 
 ```ini
