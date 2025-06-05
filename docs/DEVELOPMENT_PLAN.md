@@ -6,6 +6,10 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 
 - **LLM Interaction Robustness**: Continue refining prompts, response parsing, and error handling to better cope with unexpected LLM outputs.
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
+- **Test Suite Enhancements**:
+  - Property-based tests for `FighterState.apply_delta` to cover a wider range of deltas.
+  - Simulated failure scenarios for `_single_fight` and `run_batch` to verify graceful error handling.
+  - Negative CLI option tests to check validation and error messages.
 
 ## Completed Milestones
 
