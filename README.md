@@ -198,6 +198,7 @@ ollama_temperature   = 0.8       ; Temperature for Ollama completions
 best_of_fighter      = 3         ; Number of speculative completions for fighter actions
 best_of_judge        = 2         ; Number of speculative completions for judge phases
 max_retries          = 2         ; Max retries for LLM calls on validation failure
+log_level           = INFO      ; Logging verbosity for engine output
 
 [CONTEXT]
 fighter_log_window = 10          ; Number of recent turns to include in fighter's context
