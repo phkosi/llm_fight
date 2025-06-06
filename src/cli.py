@@ -37,9 +37,11 @@ def simulate(
     """Run self‑play batch using config.ini parameters."""
     import asyncio
     from . import config as config_mod
+    from .engine.logger import update_logger_level
 
     if config is not None:
         config_mod.CONFIG = config_mod.Config(config)
+        update_logger_level()
 
     from .simulation import run_batch
 
@@ -77,9 +79,11 @@ def play(
     """Run a single fight and print the winner."""
     import asyncio
     from . import config as config_mod
+    from .engine.logger import update_logger_level
 
     if config is not None:
         config_mod.CONFIG = config_mod.Config(config)
+        update_logger_level()
 
     from .simulation import _single_fight
     from .engine import constants as C
