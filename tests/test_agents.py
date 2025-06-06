@@ -266,3 +266,29 @@ def test_get_ollama_url_from_config():
             assert get_ollama_url() == new_url
     finally:
         CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, old)
+
+
+@pytest.mark.asyncio
+async def test_chat_uses_provided_session():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+    max_tokens = 5
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "Hi"}}]})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.post = MagicMock(return_value=mock_cm)
+    session.close = AsyncMock()
+
+    with patch("aiohttp.ClientSession") as mock_ctor:
+        responses = await chat(messages=messages, max_tokens=max_tokens, session=session)
+        mock_ctor.assert_not_called()
+
+    assert responses == ["Hi"]
+    session.post.assert_called_once()
