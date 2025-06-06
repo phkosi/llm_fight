@@ -147,6 +147,10 @@ To run a single fight and display the winner:
 ```bash
 python -m src.cli play
 ```
+When the optional `rich` library is installed, each turn is displayed
+using coloured tables so you can follow the narration and see HP and
+status changes as they occur. Without `rich` the winner is printed
+without turn-by-turn output.
 
 ## Discord Bot
 

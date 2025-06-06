@@ -16,12 +16,24 @@ def test_cli_help():
 
 def test_cli_play():
     runner = CliRunner()
-    fake_result = {C.WINNER: "A", C.LOG_TURN: "1"}
-    with patch("src.simulation._single_fight", new=AsyncMock(return_value=fake_result)) as mock_fight:
+    log = MagicMock(turns=[MagicMock()])
+    with (
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
+        ) as mock_fight,
+        patch("src.cli.render") as mock_render,
+    ):
+        mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play"])
     assert result.exit_code == 0
     assert "Winner: A" in result.output
-    mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None)
+    mock_fight.assert_called_once_with(
+        fighter_a_section=None,
+        fighter_b_section=None,
+        return_log=True,
+    )
+    mock_render.make_turn_table.assert_called_once()
 
 
 def test_cli_play_verbose():
@@ -149,7 +161,9 @@ def test_cli_play_with_config(tmp_path):
             "src.simulation._single_fight",
             new=AsyncMock(side_effect=fake_fight),
         ) as mock_fight,
+        patch("src.cli.render") as mock_render,
     ):
+        mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--config", str(cfg)])
     assert result.exit_code == 0
     mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None)
@@ -166,10 +180,14 @@ def test_cli_unexpected_argument():
 
 def test_cli_fighter_options():
     runner = CliRunner()
-    with patch(
-        "src.simulation._single_fight",
-        new=AsyncMock(return_value={C.WINNER: "A", C.LOG_TURN: "1"}),
-    ) as mock_fight:
+    with (
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(return_value={C.WINNER: "A", C.LOG_TURN: "1"}),
+        ) as mock_fight,
+        patch("src.cli.render") as mock_render,
+    ):
+        mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--fighter-a", "X", "--fighter-b", "Y"])
     assert result.exit_code == 0
     mock_fight.assert_called_once_with(fighter_a_section="X", fighter_b_section="Y")
