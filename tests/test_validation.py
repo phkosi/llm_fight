@@ -288,6 +288,11 @@ def test_delta_schema_invalid_additional_property():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
+def test_delta_schema_damage_types_match_constants():
+    enum_list = DeltaSchema[C.SCHEMA_PROPERTIES][C.WOUNDS][C.SCHEMA_ITEMS][C.SCHEMA_PROPERTIES][C.TYPE][C.SCHEMA_ENUM]
+    assert set(enum_list) == {dt.value for dt in C.DamageType}
+
+
 # --- JudgeP2Schema Tests ---
 def test_judge_p2_schema_valid():
     valid_data = {
