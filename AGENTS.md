@@ -14,6 +14,7 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
   ```bash
   pip install -r requirements-dev.txt
   ```
+- Copy `llmfight.ini.example` to `llmfight.ini` before running the application or tests.
 - Set `API_URL` to run live API tests; they are skipped if this variable is absent.
 - Use **pytest**. From the repository root run:
   ```bash
