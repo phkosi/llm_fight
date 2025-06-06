@@ -224,6 +224,14 @@ def test_judge_p1_schema_invalid_type():
     _validate_against_schema(invalid_data, JudgeP1Schema, False)
 
 
+def test_judge_p1_schema_invalid_probability():
+    invalid_data = {
+        "judgement_text": "Invalid prob",
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.2",
+    }
+    _validate_against_schema(invalid_data, JudgeP1Schema, False)
+
+
 # --- DeltaSchema Tests ---
 def test_delta_schema_valid_full():
     valid_data = {

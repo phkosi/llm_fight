@@ -34,9 +34,15 @@ JudgeP1Schema: Dict[str, Any] = {
     C.SCHEMA_PROPERTIES: {
         "judgement_text": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
         f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_PATTERN: r"^(0(\.\d+)?|1(\.0+)?)$",
+        },
         f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_PATTERN: r"^(0(\.\d+)?|1(\.0+)?)$",
+        },
         "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
     },
     # "attempt_X_valid" fields may be omitted if the LLM fails to include them.
