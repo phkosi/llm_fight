@@ -201,8 +201,8 @@ The simulation is configured using `llmfight.ini`. Start by copying `llmfight.in
 [General]
 ollama_default_model = llama3.2  ; Ollama model to use
 ollama_api_url      = http://localhost:11434/v1/chat/completions ; Local Ollama endpoint
-max_tokens_fighter   = 24000     ; Max context tokens for fighter prompts
-max_tokens_judge     = 48000     ; Max context tokens for judge prompts
+max_tokens_fighter   = 24000     ; Context limit for fighter prompts
+max_tokens_judge     = 48000     ; Context limit for judge prompts
 ollama_temperature   = 0.8       ; Temperature for Ollama completions
 best_of_fighter      = 3         ; Number of speculative completions for fighter actions
 best_of_judge        = 2         ; Number of speculative completions for judge phases
@@ -226,6 +226,8 @@ class       = Generic Fighter
 loadout     = their bare fists and wits
 environment = an open arena
 ```
+The engine subtracts the token count of the prompt from these context limits to
+determine the ``max_tokens`` value sent to Ollama.
 `max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
 Enable transcript logging for debugging by setting `save_transcripts = true`.
 Files will be written to the directory specified by `transcript_dir`.

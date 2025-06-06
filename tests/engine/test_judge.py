@@ -44,7 +44,10 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     msg_payload = chat_call_positional[0]
     assert len(msg_payload) == 2
     assert msg_payload[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
-    assert chat_call_kwargs["max_tokens"] == MAX_TOK_J
+    from src.utils.token_counter import compute_max_tokens
+
+    expected_max = compute_max_tokens(msg_payload, MAX_TOK_J)
+    assert chat_call_kwargs["max_tokens"] == expected_max
     assert chat_call_kwargs["best_of"] == BEST_J
     # We can add more specific checks for prompt content if needed
 

@@ -140,7 +140,10 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         call_args = mock_chat_func.call_args[0][0]  # Messages list
         call_kwargs = mock_chat_func.call_args[1]
 
-        assert call_kwargs["max_tokens"] == 150
+        from src.utils.token_counter import compute_max_tokens
+
+        expected_max = compute_max_tokens(call_args, 150)
+        assert call_kwargs["max_tokens"] == expected_max
         assert call_kwargs["best_of"] == 1
 
         assert len(call_args) == 2
