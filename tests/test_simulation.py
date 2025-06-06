@@ -179,3 +179,43 @@ async def test_run_batch_zero_runs(tmp_path):
     assert reader.fieldnames == [C.WINNER, C.LOG_TURN]
     assert rows == []
     mock_fight.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_turn_logging_respects_setting():
+    async def fake_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A hits",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            "narration": "A wins",
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "fight_end": True,
+            "winner": "A",
+        }
+
+    original_setting = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, "true")
+
+    with (
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_attempt)),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        patch.object(sim_module.logger, "info") as mock_info,
+    ):
+        await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, str(original_setting).lower())
+
+    assert any("Turn 1" in call.args[0] for call in mock_info.call_args_list)

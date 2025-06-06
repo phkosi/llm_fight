@@ -16,6 +16,7 @@ DEFAULTS = {
         C.CONFIG_BEST_OF_JUDGE: "2",
         C.CONFIG_MAX_RETRIES: "2",
         C.CONFIG_LOG_LEVEL: "INFO",
+        C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
         C.CONFIG_TRANSCRIPT_DIR: "transcripts",
     },

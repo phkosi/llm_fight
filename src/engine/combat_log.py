@@ -23,6 +23,24 @@ class CombatTurn:
     def narration(self) -> str:
         return self.judge_p2.get(C.NARRATION, "")
 
+    def to_text(self) -> str:
+        """Return a concise, human-readable summary of the turn."""
+        parts = [f"Turn {self.turn}"]
+        if self.attempt_A:
+            parts.append(f"A: {self.attempt_A}")
+        if self.attempt_B:
+            parts.append(f"B: {self.attempt_B}")
+        jtext = self.judge_p1.get("judgement_text")
+        if jtext:
+            parts.append(f"Judge: {jtext}")
+        narr = self.narration
+        if narr:
+            parts.append(f"Narration: {narr}")
+        return " | ".join(parts)
+
+    def __str__(self) -> str:  # pragma: no cover - thin wrapper
+        return self.to_text()
+
 
 class CombatLog:
     """Container for `CombatTurn` objects with helper query methods."""
