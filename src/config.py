@@ -1,4 +1,4 @@
-"""Configuration loader and writer for LLM Fight Engine (INI‑style)."""
+"""Configuration loader and writer for LLM Fight Engine (INI-style)."""
 
 from __future__ import annotations
 import configparser
