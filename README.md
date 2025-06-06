@@ -85,6 +85,9 @@ src/
     ```bash
     pip install .
     ```
+    The dependencies include `tiktoken` for accurate token counting. If
+    this optional library is missing the engine falls back to a basic
+    regex approach.
 4.  For development and testing, install the dev requirements and use editable mode:
     ```bash
     pip install -r requirements-dev.txt
