@@ -70,9 +70,17 @@ async def test_run_batch_partial_results_on_guarded_call_failure(monkeypatch, tm
     monkeypatch.setattr(sim_module, "get_fighter_attempt", AsyncMock(return_value="attack"))
 
     out_file = tmp_path / "results.csv"
+    orig_get = sim_module.CONFIG.get
+
+    def fake_get(section, key, cast=str, fallback=None):
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+            return 2
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+            return 1
+        return orig_get(section, key, cast, fallback)
+
     with (
-        patch.object(sim_module, "RUNS", 2),
-        patch.object(sim_module, "CONCURRENT_RUNS", 1),
+        patch.object(sim_module.CONFIG, "get", side_effect=fake_get),
         patch.object(sim_module.logger, "exception") as mock_exc,
     ):
         path = await sim_module.run_batch(out_file)
