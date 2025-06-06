@@ -11,6 +11,8 @@ log_level = INFO
 log_combat_turns = false
 save_transcripts = false
 transcript_dir = transcripts
+fighter_A = A
+fighter_B = B
 
 [CONTEXT]
 fighter_log_window = 10
@@ -26,6 +28,18 @@ max_turns = 100
 class = Generic Fighter
 loadout = their bare fists and wits
 environment = an open arena
+
+[A]
+name = Fighter Alpha
+class = Warrior
+loadout = sword and shield
+environment = stone arena
+
+[B]
+name = Fighter Bravo
+class = Rogue
+loadout = twin daggers
+environment = dark alley
 
 [DISCORD]
 discord_token =
