@@ -19,18 +19,6 @@ DEFAULTS = {
         C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
         C.CONFIG_TRANSCRIPT_DIR: "transcripts",
-        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
-    },
-    C.CONFIG_DEFAULT_FIGHTER: {
-        C.CONFIG_FIGHTER_CLASS: "Veteran Knight",
-        C.CONFIG_FIGHTER_LOADOUT: "longsword and tower shield",
-    },
-    "B": {
-        C.CONFIG_FIGHTER_CLASS: "Cunning Assassin",
-        C.CONFIG_FIGHTER_LOADOUT: "poison dagger and smoke bombs",
-    },
-        C.CONFIG_FIGHTER_SENTENCE_LIMIT: "1",
-        C.CONFIG_FIGHTER_WORD_LIMIT: "30",
         C.CONFIG_FIGHTER_A_SECTION: "A",
         C.CONFIG_FIGHTER_B_SECTION: "B",
     },
@@ -45,15 +33,26 @@ DEFAULTS = {
         C.CONFIG_MAX_TURNS: "100",
     },
     C.CONFIG_DEFAULTS: {
+        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
+    },
+    C.CONFIG_DEFAULT_FIGHTER: {
         C.CONFIG_FIGHTER_CLASS: "Generic Fighter",
         C.CONFIG_FIGHTER_LOADOUT: "their bare fists and wits",
-        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
+    },
+    "A": {
+        C.CONFIG_FIGHTER_CLASS: "Veteran Knight",
+        C.CONFIG_FIGHTER_LOADOUT: "longsword and tower shield",
+    },
+    "B": {
+        C.CONFIG_FIGHTER_CLASS: "Cunning Assassin",
+        C.CONFIG_FIGHTER_LOADOUT: "poison dagger and smoke bombs",
     },
     C.CONFIG_DISCORD: {
         C.CONFIG_DISCORD_TOKEN: "",
         C.CONFIG_DISCORD_CHANNEL: "",
     },
 }
+
 
 
 class Config:
