@@ -12,17 +12,20 @@ temperature = 0.75
 fighter_A = FighterA
 fighter_B = FighterB
 
+
+[DEFAULTS]
+environment = dusty arena
+
 [FighterA]
 name = Arnold
 class = Barbarian
 loadout = axe and shield
-environment = dusty arena
+
 
 [FighterB]
 name = Beth
 class = Ranger
 loadout = bow and arrows
-environment = forest glade
 
 [NonExistentSection]
 key = value

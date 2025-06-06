@@ -14,12 +14,10 @@ transcript_dir = transcripts
 name = Sir Galant
 class = Veteran Knight
 loadout = longsword and tower shield
-environment = grand coliseum
 
 name = Shade
 class = Cunning Assassin
 loadout = poison dagger and smoke bombs
-environment = moonlit forest
 [SIMULATION]
 runs = 10
 seed = 42
