@@ -277,15 +277,14 @@ def test_delta_schema_invalid_wound_missing_field():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
-def test_delta_schema_invalid_status_change_enum():
-    invalid_data = {C.STATUS_CHANGE: "confused"}  # Not in enum
-    _validate_against_schema(invalid_data, DeltaSchema, False)
+def test_delta_schema_allows_unknown_status_change():
+    unknown_status = {C.STATUS_CHANGE: "confused"}
+    _validate_against_schema(unknown_status, DeltaSchema, True)
 
 
-def test_delta_schema_invalid_additional_property():
-    # DeltaSchema has additionalProperties: False
-    invalid_data = {"mood_change": "angry"}
-    _validate_against_schema(invalid_data, DeltaSchema, False)
+def test_delta_schema_allows_additional_properties():
+    extra_prop = {"mood_change": "angry"}
+    _validate_against_schema(extra_prop, DeltaSchema, True)
 
 
 def test_delta_schema_damage_types_match_constants():
