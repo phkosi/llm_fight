@@ -1,6 +1,6 @@
 import os
-import resource
 import pytest
+import psutil
 
 from src.agents import chat
 from src.utils.token_counter import compute_max_tokens
@@ -8,8 +8,8 @@ from src.engine import constants as C
 
 
 def _mem_usage() -> int:
-    """Return current max resident set size in KB."""
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    """Return current process RSS in KB."""
+    return psutil.Process().memory_info().rss // 1024
 
 
 @pytest.mark.asyncio
