@@ -91,6 +91,3 @@ def play(
         )
     )
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")
-
-
-# Removed if __name__ == "__main__": app() and unconditional app()

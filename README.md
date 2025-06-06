@@ -243,6 +243,8 @@ The engine subtracts prompt tokens from these context limits to calculate the
 `max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
 Enable transcript logging for debugging by setting `save_transcripts = true`.
 Files will be written to the directory specified by `transcript_dir`.
+Transcript filenames now include microseconds to avoid collisions when multiple
+exchanges are logged within the same second.
 Set `log_combat_turns = true` if you want each turn printed to the console.
 You can also configure the Discord bot:
 

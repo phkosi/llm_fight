@@ -29,7 +29,7 @@ DEFAULTS = {
         C.CONFIG_JUDGE_LOG_WINDOW: "9999",
     },
     C.CONFIG_SIMULATION: {
-        C.CONFIG_RUNS: "1000",
+        C.CONFIG_RUNS: "10",
         C.CONFIG_SEED: "42",
         C.CONFIG_CONCURRENT_RUNS: "1",
         C.CONFIG_MAX_TURNS: "100",
