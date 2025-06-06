@@ -189,7 +189,7 @@ SYSTEM: You are the combat narrator.  Output JSON ONLY as:
 *CLI*:
 
 ```bash
-python -m llm_fight.cli simulate           # runs [SIMULATION] runs
+python -m src.cli simulate           # runs [SIMULATION] runs
 ```
 
 Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future: bar chart).

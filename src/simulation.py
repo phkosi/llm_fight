@@ -26,7 +26,8 @@ async def _single_fight(fighter_a_section: str | None = None, fighter_b_section:
     or a maximum turn limit is reached.
 
     Returns:
-        A dictionary containing the 'winner' (fighter ID or 'draw') and 'turns' taken.
+        A dictionary containing the 'winner' (fighter ID or 'draw') and
+        'turn' – the number of turns taken as a string.
     """
     if fighter_a_section is None:
         fighter_a_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")

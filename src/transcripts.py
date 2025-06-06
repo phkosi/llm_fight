@@ -10,7 +10,12 @@ from .engine.logger import logger
 
 
 def log_exchange(messages: list[dict], responses: list[str]) -> None:
-    """Append a prompt/response pair to a timestamped transcript file."""
+    """Append a prompt/response pair to a transcript file.
+
+    Each exchange is written as a JSON line with a filename that includes
+    microseconds to avoid collisions when multiple exchanges happen in quick
+    succession.
+    """
     if not CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, bool, fallback=False):
         return
 
