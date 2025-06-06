@@ -172,6 +172,8 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
             turn_window=turn_window_input,
             recent_log=recent_log_input,
             loadout=expected_loadout,
+            sentence_limit=1,
+            word_limit=30,
         )
         assert system_message[C.AGENT_CONTENT] == expected_system_content
 

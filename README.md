@@ -211,6 +211,8 @@ log_level           = INFO      ; Logging verbosity for engine output
 log_combat_turns   = false     ; Log each combat turn to the console
 save_transcripts    = false     ; Save prompt/response transcripts
 transcript_dir      = transcripts ; Directory for saved transcripts
+fighter_sentence_limit = 1     ; Number of sentences fighters may respond with
+fighter_word_limit     = 30    ; Maximum words per fighter response
 
 [CONTEXT]
 fighter_log_window = 10          ; Number of recent turns to include in fighter's context

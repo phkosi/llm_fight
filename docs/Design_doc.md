@@ -125,7 +125,7 @@ Last {turn_window} turns:
 {recent_log}
 Your equipment: {loadout}
 ---
-Respond with ONE sentence describing what you attempt next. ≤ 30 words.
+Respond with {sentence_limit} sentence describing what you attempt next. ≤ {word_limit} words.
 (No outcome narration.  Raw text only.)
 ```
 
@@ -212,6 +212,8 @@ log_level = INFO
 log_combat_turns = false
 save_transcripts = false
 transcript_dir = transcripts
+fighter_sentence_limit = 1
+fighter_word_limit = 30
 
 [CONTEXT]
 fighter_log_window = 10
