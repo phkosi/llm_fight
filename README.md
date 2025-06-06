@@ -216,15 +216,15 @@ fighter_log_window = 10          ; Number of recent turns to include in fighter'
 judge_log_window   = 9999        ; Number of recent turns for judge (effectively all)
 
 [SIMULATION]
-runs               = 1000        ; Number of simulation runs
+runs               = 10          ; Number of simulation runs
 seed               = 42          ; PRNG seed for reproducibility
 concurrent_runs    = 1           ; Number of fights to execute simultaneously
 max_turns          = 100         ; End fight in a draw after this many turns
 
-[FighterA]
-class       = Barbarian
-loadout     = axe and shield
-environment = dusty arena
+[DEFAULTS]
+class       = Generic Fighter
+loadout     = their bare fists and wits
+environment = an open arena
 ```
 `max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
 Enable transcript logging for debugging by setting `save_transcripts = true`.
