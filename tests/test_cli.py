@@ -74,10 +74,17 @@ def test_cli_simulate_with_config(tmp_path):
     from src import config as config_mod
 
     original = config_mod.CONFIG
-    with patch("src.simulation.run_batch", new=AsyncMock(side_effect=fake_run_batch)) as mock_run_batch:
+    with (
+        patch("src.engine.logger.update_logger_level") as mock_update,
+        patch(
+            "src.simulation.run_batch",
+            new=AsyncMock(side_effect=fake_run_batch),
+        ) as mock_run_batch,
+    ):
         result = runner.invoke(app, ["simulate", "--config", str(cfg)])
     assert result.exit_code == 0
     mock_run_batch.assert_called_once_with(Path("sim_results.csv"), fighter_a_section=None, fighter_b_section=None)
+    mock_update.assert_called_once()
     config_mod.CONFIG = original
 
 
@@ -96,10 +103,17 @@ def test_cli_play_with_config(tmp_path):
     from src import config as config_mod
 
     original = config_mod.CONFIG
-    with patch("src.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)) as mock_fight:
+    with (
+        patch("src.engine.logger.update_logger_level") as mock_update,
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(side_effect=fake_fight),
+        ) as mock_fight,
+    ):
         result = runner.invoke(app, ["play", "--config", str(cfg)])
     assert result.exit_code == 0
     mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None)
+    mock_update.assert_called_once()
     config_mod.CONFIG = original
 
 
