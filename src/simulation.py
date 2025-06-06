@@ -14,9 +14,6 @@ from .engine import constants as C
 from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
 
-RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
-CONCURRENT_RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
-
 
 async def _single_fight(fighter_a_section: str | None = None, fighter_b_section: str | None = None) -> Dict[str, str]:
     """
@@ -29,7 +26,8 @@ async def _single_fight(fighter_a_section: str | None = None, fighter_b_section:
     or a maximum turn limit is reached.
 
     Returns:
-        A dictionary containing the 'winner' (fighter ID or 'draw') and 'turns' taken.
+        A dictionary containing the 'winner' (fighter ID or 'draw') and
+        'turn' – the number of turns taken as a string.
     """
     if fighter_a_section is None:
         fighter_a_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")
@@ -152,9 +150,10 @@ async def run_batch(
 ) -> Path:
     """Run a batch of simulations and write the results to ``output_csv``.
 
-    ``RUNS`` and ``CONCURRENT_RUNS`` are read from the configuration.  The
-    resulting CSV contains one row per fight with columns matching the return
-    value of :func:`_single_fight`.
+    The number of runs and allowed concurrency are read from the current
+    configuration each time this function is called.  The resulting CSV contains
+    one row per fight with columns matching the return value of
+    :func:`_single_fight`.
 
     Parameters
     ----------
@@ -175,8 +174,11 @@ async def run_batch(
     """
     seed(CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
 
+    runs = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
+    concurrency = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
+
     res = []
-    sem = asyncio.Semaphore(CONCURRENT_RUNS)
+    sem = asyncio.Semaphore(concurrency)
 
     async def sem_fight():
         async with sem:
@@ -189,13 +191,13 @@ async def run_batch(
                 logger.exception("_single_fight failed")
                 return {C.WINNER: "error", C.LOG_TURN: "0"}
 
-    tasks = [asyncio.create_task(sem_fight()) for _ in range(RUNS)]
+    tasks = [asyncio.create_task(sem_fight()) for _ in range(runs)]
     for coro in asyncio.as_completed(tasks):
         res.append(await coro)
 
     csv_path = Path(output_csv)
     if not res:
-        # When RUNS is zero we still create the CSV but with only headers
+        # When the number of runs is zero we still create the CSV but with only headers
         with csv_path.open("w", newline="") as fp:
             writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
             writer.writeheader()

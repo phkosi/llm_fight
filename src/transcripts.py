@@ -10,7 +10,12 @@ from .engine.logger import logger
 
 
 def log_exchange(messages: list[dict], responses: list[str]) -> None:
-    """Append a prompt/response pair to a timestamped transcript file."""
+    """Append a prompt/response pair to a transcript file.
+
+    Each exchange is written as a JSON line with a filename that includes
+    microseconds to avoid collisions when multiple exchanges happen in quick
+    succession.
+    """
     if not CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, bool, fallback=False):
         return
 
@@ -21,7 +26,9 @@ def log_exchange(messages: list[dict], responses: list[str]) -> None:
         logger.error(f"Failed to create transcript directory '{directory}': {exc}")
         return
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Include microseconds to avoid collisions when multiple exchanges occur
+    # within the same second.
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     path = directory / f"{timestamp}.json"
 
     entry = {"prompt": messages, "responses": responses}

@@ -1,11 +1,10 @@
 """Typer‑powered CLI front‑end."""
 
+from pathlib import Path
 import typer
 from typing import Optional
 
 app = typer.Typer()
-
-from pathlib import Path
 
 
 @app.command()
@@ -92,6 +91,3 @@ def play(
         )
     )
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")
-
-
-# Removed if __name__ == "__main__": app() and unconditional app()
