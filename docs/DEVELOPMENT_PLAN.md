@@ -5,6 +5,12 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 ## Outstanding Tasks
 
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
+- **CLI Visualization Improvements**: Refine command output for readability.
+  - Add `rich` to optional dependencies and update docs.
+  - Create a rendering module using `rich` tables to display turns.
+  - Show a progress bar and summary table in `simulate`.
+  - Provide a `--verbose` option for detailed logs.
+  - Write tests covering rendering functions.
 
 ## Completed Milestones
 
