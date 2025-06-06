@@ -48,6 +48,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
 
     expected_max = compute_max_tokens(msg_payload, MAX_TOK_J)
     assert chat_call_kwargs["max_tokens"] == expected_max
+    assert chat_call_kwargs["num_ctx"] == MAX_TOK_J
     assert chat_call_kwargs["best_of"] == BEST_J
     # We can add more specific checks for prompt content if needed
 
@@ -111,6 +112,12 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     # Check if other parts of MOCK_P2_INPUT_STATE are present (they are merged)
     assert user_payload["fighter_A"] == MOCK_FIGHTER_A_STATE
 
+    chat_call_kwargs = mock_chat.call_args[1]
+    from src.utils.token_counter import compute_max_tokens
+
+    expected_max = compute_max_tokens(chat_call_args, MAX_TOK_J)
+    assert chat_call_kwargs["max_tokens"] == expected_max
+    assert chat_call_kwargs["num_ctx"] == MAX_TOK_J
     mock_guarded_call.assert_called_once()
     assert mock_guarded_call.call_args[0][1] == JudgeP2Schema
 

@@ -122,6 +122,7 @@ async def get_fighter_attempt(
     texts = await chat(
         messages,
         max_tokens=max_tokens,
+        num_ctx=context_limit,
         best_of=CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1),
     )
     txt = texts[0]

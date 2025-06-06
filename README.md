@@ -226,8 +226,9 @@ class       = Generic Fighter
 loadout     = their bare fists and wits
 environment = an open arena
 ```
-The engine subtracts the token count of the prompt from these context limits to
-determine the ``max_tokens`` value sent to Ollama.
+The engine subtracts prompt tokens from these context limits to calculate the
+``max_tokens`` parameter. The full context limit is also forwarded as
+``num_ctx`` in the Ollama request ``options``.
 `max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
 Enable transcript logging for debugging by setting `save_transcripts = true`.
 Files will be written to the directory specified by `transcript_dir`.

@@ -144,6 +144,7 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
 
         expected_max = compute_max_tokens(call_args, 150)
         assert call_kwargs["max_tokens"] == expected_max
+        assert call_kwargs["num_ctx"] == 150
         assert call_kwargs["best_of"] == 1
 
         assert len(call_args) == 2

@@ -56,6 +56,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
+            num_ctx=MAX_TOK_J,
             best_of=BEST_J,
             schema=JudgeP1Schema,
         )
@@ -96,6 +97,7 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
+            num_ctx=MAX_TOK_J,
             best_of=BEST_J,
             schema=JudgeP2Schema,
         )
