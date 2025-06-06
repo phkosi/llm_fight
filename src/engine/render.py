@@ -11,10 +11,19 @@ from . import constants as C
 
 try:
     from rich.table import Table
+    from rich.console import Console as RichConsole
 
     RICH_AVAILABLE = True
+    Console = RichConsole
 except Exception:  # pragma: no cover - import error fallback
     RICH_AVAILABLE = False
+
+    class Console:
+        """Minimal console fallback printing to stdout."""
+
+        def print(self, *objects: object, **kwargs: object) -> None:
+            for obj in objects:
+                print(obj)
 
 
 def make_turn_table(turn: CombatTurn) -> "Table | str":

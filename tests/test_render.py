@@ -34,3 +34,10 @@ def test_make_summary_table():
         assert isinstance(table, Table)
     else:
         assert "Average" in table
+
+
+def test_make_summary_table_fallback():
+    rows = [{C.WINNER: "A", C.LOG_TURN: "1"}]
+    with patch.object(render, "RICH_AVAILABLE", False):
+        result = render.make_summary_table(rows)
+    assert "Average Turns" in result
