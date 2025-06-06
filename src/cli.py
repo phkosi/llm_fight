@@ -1,8 +1,11 @@
 """Typer‑powered CLI front‑end."""
 
 from pathlib import Path
-import typer
 from typing import Optional
+
+import typer
+
+from .engine import render
 
 app = typer.Typer()
 
@@ -33,6 +36,12 @@ def simulate(
         "-B",
         help="INI section to use for fighter B",
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show progress bar and summary table",
+    ),
 ):
     """Run self‑play batch using config.ini parameters."""
     import asyncio
@@ -45,13 +54,50 @@ def simulate(
 
     from .simulation import run_batch
 
-    path = asyncio.run(
-        run_batch(
-            output_csv,
-            fighter_a_section=fighter_a,
-            fighter_b_section=fighter_b,
+    progress_cb = None
+    if verbose and render.RICH_AVAILABLE:
+        from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
+
+        console = render.Console()
+        progress = Progress(
+            TextColumn("Simulating"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
         )
-    )
+
+        def update(done: int, total: int) -> None:
+            if not progress.tasks:
+                progress.add_task("runs", total=total)
+            progress.update(0, completed=done)
+
+        progress_cb = update
+        with progress:
+            path = asyncio.run(
+                run_batch(
+                    output_csv,
+                    fighter_a_section=fighter_a,
+                    fighter_b_section=fighter_b,
+                    progress=progress_cb,
+                )
+            )
+    else:
+        path = asyncio.run(
+            run_batch(
+                output_csv,
+                fighter_a_section=fighter_a,
+                fighter_b_section=fighter_b,
+            )
+        )
+
+    if verbose and render.RICH_AVAILABLE:
+        import csv
+
+        with open(path, newline="") as fp:
+            rows = list(csv.DictReader(fp))
+        table = render.make_summary_table(rows)
+        console.print(table)
+
     typer.echo(f"Simulation saved to {path}")
 
 
@@ -75,6 +121,12 @@ def play(
         "-B",
         help="INI section to use for fighter B",
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed turn tables",
+    ),
 ):
     """Run a single fight and print the winner."""
     import asyncio
@@ -88,10 +140,27 @@ def play(
     from .simulation import _single_fight
     from .engine import constants as C
 
-    result = asyncio.run(
-        _single_fight(
-            fighter_a_section=fighter_a,
-            fighter_b_section=fighter_b,
+    if verbose and render.RICH_AVAILABLE:
+        result, log = asyncio.run(
+            _single_fight(
+                fighter_a_section=fighter_a,
+                fighter_b_section=fighter_b,
+                return_log=True,
+            )
         )
-    )
+        console = render.Console()
+        for turn in log.turns:
+            table = render.make_turn_table(turn)
+            if render.RICH_AVAILABLE:
+                console.print(table)
+            else:  # pragma: no cover - fallback
+                typer.echo(table)
+    else:
+        result = asyncio.run(
+            _single_fight(
+                fighter_a_section=fighter_a,
+                fighter_b_section=fighter_b,
+            )
+        )
+
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")

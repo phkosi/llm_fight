@@ -87,7 +87,9 @@ src/
     ```
     The dependencies include `tiktoken` for accurate token counting. If
     this optional library is missing the engine falls back to a basic
-    regex approach.
+    regex approach. The CLI also uses `rich` when available to render
+    colourful tables and progress bars; without it you get plain text
+    output.
 4.  For development and testing, install the dev requirements and use editable mode:
     ```bash
     pip install -r requirements-dev.txt

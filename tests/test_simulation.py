@@ -155,6 +155,35 @@ async def test_run_batch_exact_runs(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_batch_progress_callback(tmp_path):
+    async def fake_fight(*args, **kwargs):
+        await asyncio.sleep(0)
+        return {C.WINNER: "A", C.LOG_TURN: "1"}
+
+    progress_calls = []
+
+    with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
+        orig_get = sim_module.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 2
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 1
+            return orig_get(section, key, cast, fallback)
+
+        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+            out_file = tmp_path / "prog.csv"
+
+            def cb(done, total):
+                progress_calls.append((done, total))
+
+            await sim_module.run_batch(out_file, progress=cb)
+
+    assert progress_calls == [(1, 2), (2, 2)]
+
+
+@pytest.mark.asyncio
 async def test_run_batch_handles_errors(tmp_path):
     async def failing_fight(*args, **kwargs):
         raise RuntimeError("boom")

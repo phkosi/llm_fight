@@ -5,12 +5,6 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 ## Outstanding Tasks
 
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
-- **CLI Visualization Improvements**: Refine command output for readability.
-  - Add `rich` to optional dependencies and update docs.
-  - Create a rendering module using `rich` tables to display turns.
-  - Show a progress bar and summary table in `simulate`.
-  - Provide a `--verbose` option for detailed logs.
-  - Write tests covering rendering functions.
 
 ## Completed Milestones
 
@@ -36,6 +30,7 @@ This document summarizes outstanding tasks for ongoing development and tracks co
   - Generate effect addition/removal data and verify that permanent effects
     are not duplicated and TTL logic is respected.
 - Negative CLI option tests
+- CLI Visualization Improvements completed: rich tables, progress bar and verbose output with tests
 - Test Suite Enhancements completed: additional edge case tests for config save, invalid probabilities, and guarded_call
   - Invoke the CLI entry point with invalid options using `CliRunner`.
   - Check that invalid model names or configuration paths produce helpful
