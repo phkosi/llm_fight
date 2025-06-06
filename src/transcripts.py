@@ -21,7 +21,9 @@ def log_exchange(messages: list[dict], responses: list[str]) -> None:
         logger.error(f"Failed to create transcript directory '{directory}': {exc}")
         return
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Include microseconds to avoid collisions when multiple exchanges occur
+    # within the same second.
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     path = directory / f"{timestamp}.json"
 
     entry = {"prompt": messages, "responses": responses}

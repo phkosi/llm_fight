@@ -91,7 +91,7 @@ class Config:
 
     # --- public API -----------------------------------------------------
     def save(self):
-        with self.path.open("w") as fp:
+        with self.path.open("w", encoding="utf-8") as fp:
             self.cp.write(fp)
 
     def get(self, section: str, key: str, cast=str, fallback=None):

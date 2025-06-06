@@ -111,7 +111,16 @@ async def test_run_batch_concurrency(tmp_path):
         return {C.WINNER: "A", C.LOG_TURN: "1"}
 
     with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
-        with patch.object(sim_module, "RUNS", 4), patch.object(sim_module, "CONCURRENT_RUNS", 2):
+        orig_get = sim_module.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 4
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 2
+            return orig_get(section, key, cast, fallback)
+
+        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
             out_file = tmp_path / "result.csv"
             ret = await sim_module.run_batch(out_file)
 
@@ -130,7 +139,16 @@ async def test_run_batch_exact_runs(tmp_path):
         return {C.WINNER: "A", C.LOG_TURN: "1"}
 
     with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
-        with patch.object(sim_module, "RUNS", 3), patch.object(sim_module, "CONCURRENT_RUNS", 1):
+        orig_get = sim_module.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 3
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 1
+            return orig_get(section, key, cast, fallback)
+
+        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
             await sim_module.run_batch(tmp_path / "result.csv")
 
     assert calls == 3
@@ -138,17 +156,25 @@ async def test_run_batch_exact_runs(tmp_path):
 
 @pytest.mark.asyncio
 async def test_run_batch_handles_errors(tmp_path):
-    async def failing_fight():
+    async def failing_fight(*args, **kwargs):
         raise RuntimeError("boom")
 
-    with (
-        patch.object(sim_module, "_single_fight", side_effect=failing_fight),
-        patch.object(sim_module, "RUNS", 2),
-        patch.object(sim_module, "CONCURRENT_RUNS", 1),
-        patch.object(sim_module.logger, "exception") as mock_exc,
-    ):
-        out_file = tmp_path / "err.csv"
-        path = await sim_module.run_batch(out_file)
+    with patch.object(sim_module, "_single_fight", side_effect=failing_fight):
+        orig_get = sim_module.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 2
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 1
+            return orig_get(section, key, cast, fallback)
+
+        with (
+            patch.object(sim_module.CONFIG, "get", side_effect=fake_get),
+            patch.object(sim_module.logger, "exception") as mock_exc,
+        ):
+            out_file = tmp_path / "err.csv"
+            path = await sim_module.run_batch(out_file)
 
     assert path == out_file
     with open(out_file, newline="") as fp:
@@ -163,12 +189,18 @@ async def test_run_batch_handles_errors(tmp_path):
 async def test_run_batch_zero_runs(tmp_path):
     out_file = tmp_path / "empty.csv"
 
-    with (
-        patch.object(sim_module, "_single_fight", side_effect=RuntimeError("should not run")) as mock_fight,
-        patch.object(sim_module, "RUNS", 0),
-        patch.object(sim_module, "CONCURRENT_RUNS", 1),
-    ):
-        path = await sim_module.run_batch(out_file)
+    with patch.object(sim_module, "_single_fight", side_effect=RuntimeError("should not run")) as mock_fight:
+        orig_get = sim_module.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 0
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 1
+            return orig_get(section, key, cast, fallback)
+
+        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+            path = await sim_module.run_batch(out_file)
 
     assert path == out_file
     assert out_file.exists()

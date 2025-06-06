@@ -86,11 +86,19 @@ async def test_run_batch_short_simulation(tmp_path):
         patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
         patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
         patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
-        patch.object(sim_module, "RUNS", 2),
-        patch.object(sim_module, "CONCURRENT_RUNS", 1),
     ):
-        out_file = tmp_path / "results.csv"
-        path = await sim_module.run_batch(out_file)
+        orig_get = sim_module.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 2
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 1
+            return orig_get(section, key, cast, fallback)
+
+        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+            out_file = tmp_path / "results.csv"
+            path = await sim_module.run_batch(out_file)
 
     assert path == out_file
     with open(path, newline="") as fp:

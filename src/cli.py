@@ -1,11 +1,10 @@
 """Typer‑powered CLI front‑end."""
 
+from pathlib import Path
 import typer
 from typing import Optional
 
 app = typer.Typer()
-
-from pathlib import Path
 
 
 @app.command()
