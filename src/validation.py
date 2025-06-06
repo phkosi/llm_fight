@@ -34,9 +34,15 @@ JudgeP1Schema: Dict[str, Any] = {
     C.SCHEMA_PROPERTIES: {
         "judgement_text": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
         f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_PATTERN: r"^(0(\.\d+)?|1(\.0+)?)$",
+        },
         f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
-        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_PATTERN: r"^(0(\.\d+)?|1(\.0+)?)$",
+        },
         "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
     },
     # "attempt_X_valid" fields may be omitted if the LLM fails to include them.
@@ -69,7 +75,10 @@ DeltaSchema = {
         },
         C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_OBJECT}},
         C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
-        C.STATUS_CHANGE: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        C.STATUS_CHANGE: {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_ENUM: ["", *(fs.value for fs in C.FighterStatus)],
+        },
     },
     C.SCHEMA_ADDITIONAL_PROPERTIES: True,
 }
