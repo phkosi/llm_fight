@@ -63,12 +63,14 @@ class DamageType(str, Enum):
     PIERCING = "piercing"
     SLASHING = "slashing"
     FIRE = "fire"  # Consistent with C.EFFECT_BURNING usage elsewhere
+    BLUNT = "blunt"
     GENERIC = "generic"
 
 
 DAMAGE_TYPE_PIERCING = DamageType.PIERCING
 DAMAGE_TYPE_SLASHING = DamageType.SLASHING
 DAMAGE_TYPE_FIRE = DamageType.FIRE
+DAMAGE_TYPE_BLUNT = DamageType.BLUNT
 DAMAGE_TYPE_GENERIC = DamageType.GENERIC
 
 # Judge & Simulation

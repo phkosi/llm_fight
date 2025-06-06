@@ -69,13 +69,9 @@ DeltaSchema = {
         },
         C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_OBJECT}},
         C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
-        C.STATUS_CHANGE: {
-            C.SCHEMA_TYPE: C.SCHEMA_STRING,
-            # Allow blank string when no status change occurs
-            C.SCHEMA_ENUM: [status.value for status in C.FighterStatus] + [""],
-        },
+        C.STATUS_CHANGE: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
     },
-    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+    C.SCHEMA_ADDITIONAL_PROPERTIES: True,
 }
 
 JudgeP2Schema = {
