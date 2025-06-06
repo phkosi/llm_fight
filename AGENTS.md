@@ -57,6 +57,8 @@ This repository contains a turn‑based combat simulator where LLM agents fight 
 - When adding functionality ensure accompanying tests are created or updated.
 - If you introduce new configuration options update `src/config.py` defaults and document them in the README.
 - Async functions that call Ollama are located in `src/agents.py`; they return lists of response strings for `guarded_call` to parse.
+- When working with the Ollama Python library consult the [API docs](https://github.com/ollama/ollama/blob/main/docs/api.md) before making changes.
+- Update any affected documentation in `README.md` and the `docs/` directory whenever you modify the code.
 - The combat flow is orchestrated in `src/simulation.py`; refer to the design docs for high level behaviour.
 - Review `docs/DEVELOPMENT_PLAN.md` before starting work. When you finish an item from "Outstanding Tasks", mark it completed (e.g. move it to "Completed Milestones") and commit the updated file.
 
