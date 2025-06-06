@@ -99,7 +99,7 @@ async def test_run_batch_concurrency(tmp_path):
     max_running = 0
     lock = asyncio.Lock()
 
-    async def fake_fight():
+    async def fake_fight(*args, **kwargs):
         nonlocal running, max_running
         async with lock:
             running += 1
@@ -124,7 +124,7 @@ async def test_run_batch_concurrency(tmp_path):
 async def test_run_batch_exact_runs(tmp_path):
     calls = 0
 
-    async def fake_fight():
+    async def fake_fight(*args, **kwargs):
         nonlocal calls
         calls += 1
         return {C.WINNER: "A", C.LOG_TURN: "1"}

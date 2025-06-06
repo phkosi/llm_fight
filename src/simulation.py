@@ -18,7 +18,7 @@ RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
 CONCURRENT_RUNS = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
 
-async def _single_fight() -> Dict[str, str]:
+async def _single_fight(fighter_a_section: str | None = None, fighter_b_section: str | None = None) -> Dict[str, str]:
     """
     Simulates a single fight between two AI fighters (A and B).
 
@@ -31,8 +31,13 @@ async def _single_fight() -> Dict[str, str]:
     Returns:
         A dictionary containing the 'winner' (fighter ID or 'draw') and 'turns' taken.
     """
-    A = FighterState.from_preset("A", "humanoid")
-    B = FighterState.from_preset("B", "humanoid")
+    if fighter_a_section is None:
+        fighter_a_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")
+    if fighter_b_section is None:
+        fighter_b_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str, fallback="B")
+
+    A = FighterState.from_preset("A", "humanoid", config_section=fighter_a_section)
+    B = FighterState.from_preset("B", "humanoid", config_section=fighter_b_section)
     turn = 0
     outcome = None
     combat_log = CombatLog()
@@ -140,7 +145,11 @@ async def _single_fight() -> Dict[str, str]:
     return {C.WINNER: outcome, C.LOG_TURN: str(turn)}
 
 
-async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
+async def run_batch(
+    output_csv: str | Path = "sim_results.csv",
+    fighter_a_section: str | None = None,
+    fighter_b_section: str | None = None,
+) -> Path:
     """Run a batch of simulations and write the results to ``output_csv``.
 
     ``RUNS`` and ``CONCURRENT_RUNS`` are read from the configuration.  The
@@ -150,8 +159,14 @@ async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
     Parameters
     ----------
     output_csv:
-        File path for the CSV output.  Defaults to ``"sim_results.csv"`` in the
+        File path for the CSV output. Defaults to ``"sim_results.csv"`` in the
         current working directory.
+    fighter_a_section:
+        INI section providing fighter A's settings. Defaults to the value of
+        ``fighter_A`` in the ``[General]`` section.
+    fighter_b_section:
+        INI section providing fighter B's settings. Defaults to the value of
+        ``fighter_B`` in the ``[General]`` section.
 
     Returns
     -------
@@ -166,7 +181,10 @@ async def run_batch(output_csv: str | Path = "sim_results.csv") -> Path:
     async def sem_fight():
         async with sem:
             try:
-                return await _single_fight()
+                return await _single_fight(
+                    fighter_a_section=fighter_a_section,
+                    fighter_b_section=fighter_b_section,
+                )
             except Exception:
                 logger.exception("_single_fight failed")
                 return {C.WINNER: "error", C.LOG_TURN: "0"}

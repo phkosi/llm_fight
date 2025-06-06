@@ -135,7 +135,7 @@ The simulation harness can be run via the command-line interface.
 python -m src.cli simulate
 ```
 This command will execute the number of simulation runs specified in the configuration file (see below) and output results to `sim_results.csv` by default. Use `--output-csv PATH` to change the file location.
-Both `simulate` and `play` accept `--config PATH` to load an alternate configuration file.
+Both `simulate` and `play` accept `--config PATH` to load an alternate configuration file. Use `--fighter-a` and `--fighter-b` to select which INI sections define the combatants.
 
 To run a single fight and display the winner:
 
@@ -211,6 +211,8 @@ log_level           = INFO      ; Logging verbosity for engine output
 log_combat_turns   = false     ; Log each combat turn to the console
 save_transcripts    = false     ; Save prompt/response transcripts
 transcript_dir      = transcripts ; Directory for saved transcripts
+fighter_A          = A          ; INI section name for fighter A
+fighter_B          = B          ; INI section name for fighter B
 
 [CONTEXT]
 fighter_log_window = 10          ; Number of recent turns to include in fighter's context
@@ -223,10 +225,16 @@ concurrent_runs    = 1           ; Number of fights to execute simultaneously
 max_turns          = 100         ; End fight in a draw after this many turns
 
 [DEFAULTS]
+environment = an open arena
+[DEFAULT_FIGHTER]
 class       = Generic Fighter
 loadout     = their bare fists and wits
-environment = an open arena
 ```
+`fighter_A` and `fighter_B` point to INI sections describing the two
+combatants. Create sections with those names (e.g. `[A]`, `[B]`) and
+specify `class` and `loadout` to customise each fighter. If a section
+lacks these keys, values from `[DEFAULT_FIGHTER]` are used. The fighting
+`environment` is configured globally under `[DEFAULTS]`.
 The engine subtracts prompt tokens from these context limits to calculate the
 ``max_tokens`` parameter. The full context limit is also forwarded as
 ``num_ctx`` in the Ollama request ``options``.

@@ -12,7 +12,7 @@ async def test_short_single_fight_integration():
     fighters = []
     original_from_preset = sim_module.FighterState.from_preset
 
-    def capture_from_preset(id_, preset):
+    def capture_from_preset(id_, preset, config_section=None):
         fighter = original_from_preset(id_, preset)
         fighters.append(fighter)
         return fighter
@@ -104,7 +104,7 @@ async def test_two_turn_single_fight_integration():
     fighters = []
     original_from_preset = sim_module.FighterState.from_preset
 
-    def capture_from_preset(id_, preset):
+    def capture_from_preset(id_, preset, config_section=None):
         fighter = original_from_preset(id_, preset)
         fighters.append(fighter)
         return fighter
