@@ -257,6 +257,11 @@ def test_delta_schema_valid_minimal():
     _validate_against_schema(valid_data_empty, DeltaSchema, True)
 
 
+def test_delta_schema_valid_blank_status_change():
+    valid_data = {C.STATUS_CHANGE: ""}
+    _validate_against_schema(valid_data, DeltaSchema, True)
+
+
 def test_delta_schema_invalid_pain_type():
     invalid_data = {C.PAIN_INCREASE: "high"}  # Should be integer
     _validate_against_schema(invalid_data, DeltaSchema, False)
