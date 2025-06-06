@@ -5,11 +5,12 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 ## Outstanding Tasks
 
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
-- **CLI Visualization Improvements**: Enhance terminal output for `play` and `simulate`.
-  - Use the `rich` library for colorized text and progress bars.
-  - Display turns in a compact table with actions and narration.
-  - Show a progress bar for `simulate` and a summary table of wins/draws.
-  - Add a verbosity option so users can toggle between concise and detailed views.
+- **CLI Visualization Improvements**: Refine command output for readability.
+  - Add `rich` to optional dependencies and update docs.
+  - Create a rendering module using `rich` tables to display turns.
+  - Show a progress bar and summary table in `simulate`.
+  - Provide a `--verbose` option for detailed logs.
+  - Write tests covering rendering functions.
 
 ## Completed Milestones
 
