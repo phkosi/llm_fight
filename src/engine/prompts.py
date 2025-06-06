@@ -51,7 +51,7 @@ The DeltaSchema for each fighter includes fields like:
 - "pain_increase": integer (non-negative)
 - "exhaustion_increase": integer (non-negative)
 - "heat_increase": integer (non-negative)
-- "wounds": array of objects, each with "part_name": string, "damage": integer, "type": string (e.g., "piercing", "fire")
+- "wounds": array of objects, each with "targeted_part": string, "value": integer, "type": string (e.g., "piercing", "fire")
 - "effects_added": array of Effect objects (e.g., {"name": "burning", "magnitude": 1.0, "ttl": 3, "on_apply": "Starts burning", "on_tick": "Takes fire damage"})
 - "effects_removed": array of strings (names of effects to remove)
 - "status_change": string (e.g., "fighting", "unconscious", "dead")
