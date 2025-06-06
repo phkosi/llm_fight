@@ -145,6 +145,7 @@ CONFIG_BEST_OF_FIGHTER = "best_of_fighter"  # Added config key
 CONFIG_BEST_OF_JUDGE = "best_of_judge"  # Added config key
 CONFIG_MAX_RETRIES = "max_retries"  # Added config key
 CONFIG_LOG_LEVEL = "log_level"  # New config key for logger level
+CONFIG_LOG_COMBAT_TURNS = "log_combat_turns"  # Log each combat turn
 CONFIG_TRANSCRIPT_DIR = "transcript_dir"
 CONFIG_SAVE_TRANSCRIPTS = "save_transcripts"
 CONFIG_RUNS = "runs"  # Added config key

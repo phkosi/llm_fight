@@ -208,6 +208,7 @@ best_of_fighter      = 3         ; Number of speculative completions for fighter
 best_of_judge        = 2         ; Number of speculative completions for judge phases
 max_retries          = 2         ; Max retries for LLM calls on validation failure
 log_level           = INFO      ; Logging verbosity for engine output
+log_combat_turns   = false     ; Log each combat turn to the console
 save_transcripts    = false     ; Save prompt/response transcripts
 transcript_dir      = transcripts ; Directory for saved transcripts
 
@@ -229,6 +230,7 @@ environment = an open arena
 `max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
 Enable transcript logging for debugging by setting `save_transcripts = true`.
 Files will be written to the directory specified by `transcript_dir`.
+Set `log_combat_turns = true` if you want each turn printed to the console.
 You can also configure the Discord bot:
 
 ```ini

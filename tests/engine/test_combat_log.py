@@ -24,3 +24,20 @@ def test_to_summary_zero_last_n():
     log.append(CombatTurn(turn=2, judge_p2={C.NARRATION: "B dodges"}))
 
     assert log.to_summary(last_n=0) == ""
+
+
+def test_combat_turn_to_text():
+    turn = CombatTurn(
+        turn=3,
+        attempt_A="strike",
+        attempt_B="parry",
+        judge_p1={"judgement_text": "A hits"},
+        judge_p2={C.NARRATION: "A wounds B"},
+    )
+
+    text = turn.to_text()
+    assert "Turn 3" in text
+    assert "A: strike" in text
+    assert "B: parry" in text
+    assert "Judge: A hits" in text
+    assert "Narration: A wounds B" in text
