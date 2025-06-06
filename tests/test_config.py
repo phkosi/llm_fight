@@ -9,12 +9,27 @@ SAMPLE_INI_CONTENT = """
 llm_model = test_model
 max_retries = 5
 temperature = 0.75
+fighter_A = FighterA
+fighter_B = FighterB
+
+
+[DEFAULTS]
+environment = dusty arena
+
+[DEFAULT_FIGHTER]
+class = Generic Fighter
+loadout = their bare fists and wits
 
 [FighterA]
 name = Arnold
 class = Barbarian
 loadout = axe and shield
-environment = dusty arena
+
+
+[FighterB]
+name = Beth
+class = Ranger
+loadout = bow and arrows
 
 [NonExistentSection]
 key = value
@@ -157,6 +172,11 @@ def test_global_config_instance_loads():
 
 def test_default_max_turns_loaded(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 100
+
+
+def test_fighter_section_names(temp_config_instance):
+    assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str) == "FighterA"
+    assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str) == "FighterB"
 
 
 def test_config_save_roundtrip(tmp_path):

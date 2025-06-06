@@ -1,4 +1,4 @@
-"""Configuration loader and writer for LLM Fight Engine (INI‑style)."""
+"""Configuration loader and writer for LLM Fight Engine (INI-style)."""
 
 from __future__ import annotations
 import configparser
@@ -21,6 +21,8 @@ DEFAULTS = {
         C.CONFIG_TRANSCRIPT_DIR: "transcripts",
         C.CONFIG_FIGHTER_SENTENCE_LIMIT: "1",
         C.CONFIG_FIGHTER_WORD_LIMIT: "30",
+        C.CONFIG_FIGHTER_A_SECTION: "A",
+        C.CONFIG_FIGHTER_B_SECTION: "B",
     },
     C.CONFIG_CONTEXT: {
         C.CONFIG_FIGHTER_LOG_WINDOW: "10",
@@ -33,9 +35,19 @@ DEFAULTS = {
         C.CONFIG_MAX_TURNS: "100",
     },
     C.CONFIG_DEFAULTS: {
+        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
+    },
+    C.CONFIG_DEFAULT_FIGHTER: {
         C.CONFIG_FIGHTER_CLASS: "Generic Fighter",
         C.CONFIG_FIGHTER_LOADOUT: "their bare fists and wits",
-        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
+    },
+    "A": {
+        C.CONFIG_FIGHTER_CLASS: "Veteran Knight",
+        C.CONFIG_FIGHTER_LOADOUT: "longsword and tower shield",
+    },
+    "B": {
+        C.CONFIG_FIGHTER_CLASS: "Cunning Assassin",
+        C.CONFIG_FIGHTER_LOADOUT: "poison dagger and smoke bombs",
     },
     C.CONFIG_DISCORD: {
         C.CONFIG_DISCORD_TOKEN: "",
@@ -123,7 +135,12 @@ class Config:
         # For other types
         if not has_option:  # Key or section missing
             if fallback is not None:
-                return fallback
+                try:
+                    return cast(fallback)
+                except ValueError as e:
+                    raise ValueError(
+                        f"Failed to cast fallback '{fallback}' for key '{key}' in section '{section}' to {cast.__name__}: {e}"
+                    ) from e
             # Re-raise the specific error if no fallback
             if not has_section:
                 raise configparser.NoSectionError(section)
@@ -150,13 +167,13 @@ class Config:
                 fighter_id,
                 C.CONFIG_FIGHTER_CLASS,
                 str,
-                fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_CLASS, str),
+                fallback=self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str),
             ),
             "loadout": self.get(
                 fighter_id,
                 C.CONFIG_FIGHTER_LOADOUT,
                 str,
-                fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_LOADOUT, str),
+                fallback=self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str),
             ),
             "environment": self.get(
                 fighter_id,

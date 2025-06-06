@@ -22,6 +22,18 @@ def simulate(
         "-c",
         help="Path to configuration file",
     ),
+    fighter_a: Optional[str] = typer.Option(
+        None,
+        "--fighter-a",
+        "-A",
+        help="INI section to use for fighter A",
+    ),
+    fighter_b: Optional[str] = typer.Option(
+        None,
+        "--fighter-b",
+        "-B",
+        help="INI section to use for fighter B",
+    ),
 ):
     """Run self‑play batch using config.ini parameters."""
     import asyncio
@@ -32,7 +44,13 @@ def simulate(
 
     from .simulation import run_batch
 
-    path = asyncio.run(run_batch(output_csv))
+    path = asyncio.run(
+        run_batch(
+            output_csv,
+            fighter_a_section=fighter_a,
+            fighter_b_section=fighter_b,
+        )
+    )
     typer.echo(f"Simulation saved to {path}")
 
 
@@ -43,7 +61,19 @@ def play(
         "--config",
         "-c",
         help="Path to configuration file",
-    )
+    ),
+    fighter_a: Optional[str] = typer.Option(
+        None,
+        "--fighter-a",
+        "-A",
+        help="INI section to use for fighter A",
+    ),
+    fighter_b: Optional[str] = typer.Option(
+        None,
+        "--fighter-b",
+        "-B",
+        help="INI section to use for fighter B",
+    ),
 ):
     """Run a single fight and print the winner."""
     import asyncio
@@ -55,7 +85,12 @@ def play(
     from .simulation import _single_fight
     from .engine import constants as C
 
-    result = asyncio.run(_single_fight())
+    result = asyncio.run(
+        _single_fight(
+            fighter_a_section=fighter_a,
+            fighter_b_section=fighter_b,
+        )
+    )
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")
 
 

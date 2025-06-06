@@ -48,13 +48,18 @@ class FighterState:
     environment: str = "an open arena"
 
     @classmethod
-    def from_preset(cls, id_: str, preset_name: str) -> FighterState:
-        """Creates a FighterState instance from a predefined anatomical preset."""
+    def from_preset(cls, id_: str, preset_name: str, config_section: str | None = None) -> FighterState:
+        """Creates a FighterState instance from a predefined anatomical preset.
+
+        ``config_section`` specifies which INI section to pull fighter settings
+        from. When ``None`` it defaults to ``id_`` for backward compatibility.
+        """
         preset = PRESETS[preset_name]
         # Use deepcopy so presets aren't mutated across fighters
         parts_copy = copy.deepcopy(preset.parts)
 
-        settings = CONFIG.get_fighter_settings(id_)
+        section = config_section or id_
+        settings = CONFIG.get_fighter_settings(section)
 
         return cls(
             id=id_,

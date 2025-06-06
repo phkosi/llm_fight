@@ -13,6 +13,8 @@ save_transcripts = false
 transcript_dir = transcripts
 fighter_sentence_limit = 1
 fighter_word_limit = 30
+fighter_A = A
+fighter_B = B
 
 [CONTEXT]
 fighter_log_window = 10
@@ -25,9 +27,21 @@ concurrent_runs = 1
 max_turns = 100
 
 [DEFAULTS]
+environment = an open arena
+
+[DEFAULT_FIGHTER]
 class = Generic Fighter
 loadout = their bare fists and wits
-environment = an open arena
+
+[A]
+name = Sir Galant
+class = Veteran Knight
+loadout = longsword and tower shield
+
+[B]
+name = Shade
+class = Cunning Assassin
+loadout = poison dagger and smoke bombs
 
 [DISCORD]
 discord_token =
