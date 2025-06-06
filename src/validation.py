@@ -71,7 +71,8 @@ DeltaSchema = {
         C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
         C.STATUS_CHANGE: {
             C.SCHEMA_TYPE: C.SCHEMA_STRING,
-            C.SCHEMA_ENUM: [status.value for status in C.FighterStatus],
+            # Allow blank string when no status change occurs
+            C.SCHEMA_ENUM: [status.value for status in C.FighterStatus] + [""],
         },
     },
     C.SCHEMA_ADDITIONAL_PROPERTIES: False,

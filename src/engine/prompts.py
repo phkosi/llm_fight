@@ -54,7 +54,8 @@ The DeltaSchema for each fighter includes fields like:
 - "wounds": array of objects, each with "targeted_part": string, "value": integer, "type": string (e.g., "piercing", "fire")
 - "effects_added": array of Effect objects (e.g., {"name": "burning", "magnitude": 1.0, "ttl": 3, "on_apply": "Starts burning", "on_tick": "Takes fire damage"})
 - "effects_removed": array of strings (names of effects to remove)
-- "status_change": string (e.g., "fighting", "unconscious", "dead")
+ - "status_change": string (e.g., "fighting", "unconscious", "dead")
+   - leave blank or omit if the fighter's status does not change
 
 Your narration should be consistent with the deltas you provide.
 If an action was successful (based on `successful_rolls`), describe its impact. If an action failed, describe that too.
