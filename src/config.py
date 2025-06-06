@@ -19,7 +19,9 @@ DEFAULTS = {
         C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
         C.CONFIG_TRANSCRIPT_DIR: "transcripts",
-    "A": {
+        C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
+    },
+    C.CONFIG_DEFAULT_FIGHTER: {
         C.CONFIG_FIGHTER_CLASS: "Veteran Knight",
         C.CONFIG_FIGHTER_LOADOUT: "longsword and tower shield",
     },
@@ -133,8 +135,8 @@ class Config:
         # For other types
         if not has_option:  # Key or section missing
             if fallback is not None:
-                return fallback
-            # Re-raise the specific error if no fallback
+                fallback=self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str),
+                fallback=self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str),
             if not has_section:
                 raise configparser.NoSectionError(section)
             else:  # Section exists, but option doesn't

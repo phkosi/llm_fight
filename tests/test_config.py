@@ -16,6 +16,10 @@ fighter_B = FighterB
 [DEFAULTS]
 environment = dusty arena
 
+[DEFAULT_FIGHTER]
+class = Generic Fighter
+loadout = their bare fists and wits
+
 [FighterA]
 name = Arnold
 class = Barbarian

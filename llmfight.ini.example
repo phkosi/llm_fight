@@ -11,7 +11,9 @@ log_level = INFO
 log_combat_turns = false
 save_transcripts = false
 transcript_dir = transcripts
-name = Sir Galant
+environment = an open arena
+
+[DEFAULT_FIGHTER]
 class = Veteran Knight
 loadout = longsword and tower shield
 

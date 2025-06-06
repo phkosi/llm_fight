@@ -134,6 +134,7 @@ APPLICATION_JSON = "application/json"  # Added for headers
 
 # Config file keys
 CONFIG_GENERAL = "General"
+CONFIG_DEFAULT_FIGHTER = "DEFAULT_FIGHTER"  # Section for fallback fighter stats
 CONFIG_CONTEXT = "CONTEXT"  # Added config section name
 CONFIG_SIMULATION = "SIMULATION"  # Added config section name
 CONFIG_FIGHTER_LOG_WINDOW = "fighter_log_window"

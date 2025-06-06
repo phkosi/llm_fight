@@ -211,8 +211,10 @@ log_level           = INFO      ; Logging verbosity for engine output
 log_combat_turns   = false     ; Log each combat turn to the console
 save_transcripts    = false     ; Save prompt/response transcripts
 transcript_dir      = transcripts ; Directory for saved transcripts
-specify `class` and `loadout` to customise each fighter. The fighting
-`environment` is configured globally under `[DEFAULTS]`.
+environment = an open arena
+[DEFAULT_FIGHTER]
+specify `class` and `loadout` to customise each fighter. If a section
+lacks these keys, values from `[DEFAULT_FIGHTER]` are used. The fighting
 fighter_word_limit     = 30    ; Maximum words per fighter response
 fighter_A          = A          ; INI section name for fighter A
 fighter_B          = B          ; INI section name for fighter B
