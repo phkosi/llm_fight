@@ -88,6 +88,7 @@ async def chat(
     num_ctx: int | None = None,
     best_of: int = 1,
     schema: Optional[Dict[str, Any]] = None,
+    session: aiohttp.ClientSession | None = None,
 ) -> List[str]:
     """Return ``best_of`` completions from Ollama.
 
@@ -97,7 +98,8 @@ async def chat(
     tasks = []
     model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
     temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
-    async with SessionManager() as session:
+
+    async def _collect(sess: aiohttp.ClientSession) -> List[str]:
         for _ in range(best_of):
             payload = {
                 C.AGENT_MODEL: model,
@@ -109,7 +111,14 @@ async def chat(
                 payload[C.AGENT_OPTIONS] = {C.NUM_CTX: num_ctx}
             if schema is not None:
                 payload[C.AGENT_FORMAT] = schema
-            tasks.append(_post_json(session, payload))
-        responses = await asyncio.gather(*tasks)
+            tasks.append(_post_json(sess, payload))
+        return await asyncio.gather(*tasks)
+
+    if session is None:
+        async with SessionManager() as sess:
+            responses = await _collect(sess)
+    else:
+        responses = await _collect(session)
+
     log_exchange(messages, responses)
     return responses
