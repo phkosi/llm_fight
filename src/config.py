@@ -19,6 +19,8 @@ DEFAULTS = {
         C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
         C.CONFIG_TRANSCRIPT_DIR: "transcripts",
+        C.CONFIG_FIGHTER_SENTENCE_LIMIT: "1",
+        C.CONFIG_FIGHTER_WORD_LIMIT: "30",
     },
     C.CONFIG_CONTEXT: {
         C.CONFIG_FIGHTER_LOG_WINDOW: "10",
