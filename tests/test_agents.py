@@ -292,3 +292,31 @@ async def test_chat_uses_provided_session():
 
     assert responses == ["Hi"]
     session.post.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_chat_retries_on_failure(monkeypatch):
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Retry"}]
+    max_tokens = 5
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}}]})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm_success = AsyncMock()
+    mock_cm_success.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(side_effect=[aiohttp.ClientConnectionError("boom"), mock_cm_success])
+
+    with (
+        patch("aiohttp.ClientSession", return_value=session),
+        patch("src.agents.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        responses = await chat(messages=messages, max_tokens=max_tokens, retries=1)
+
+    assert responses == ["ok"]
+    assert session.post.call_count == 2
+    mock_sleep.assert_awaited_once_with(1)

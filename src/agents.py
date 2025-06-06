@@ -55,31 +55,53 @@ class SessionManager:
 
 
 # -------------- helper ---------------------------------------------
-async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any]) -> str:
-    try:
-        # Allow aiohttp to respect proxy-related environment variables
-        # like HTTPS_PROXY so network-restricted environments can
-        # successfully connect to remote APIs.
-        async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-            return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], retries: int = 0) -> str:
+    attempt = 0
+    while True:
+        try:
+            # Allow aiohttp to respect proxy-related environment variables
+            # like HTTPS_PROXY so network-restricted environments can
+            # successfully connect to remote APIs.
+            async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
+                if resp.status >= 500:
+                    raise aiohttp.ClientResponseError(
+                        request_info=resp.request_info,
+                        history=resp.history,
+                        status=resp.status,
+                        message=f"Server error {resp.status}",
+                        headers=resp.headers,
+                    )
+                resp.raise_for_status()
+                data = await resp.json()
+                return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
 
-    except aiohttp.ClientResponseError as e:
-        logger.error(f"Ollama API request failed with status {e.status}: {e.message}. Payload: {payload}")
-        raise
-    except aiohttp.ClientConnectionError as e:
-        logger.error(f"Ollama API connection error: {e}. Is Ollama running at {get_ollama_url()}?")
-        raise
-    except aiohttp.ContentTypeError as e:
-        logger.error(f"Ollama API response content type error: {e}. Expected JSON. Payload: {payload}")
-        raise
-    except asyncio.TimeoutError:
-        logger.error(f"Ollama API request timed out after 300s. Payload: {payload}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error during Ollama API call: {e}. Payload: {payload}")
-        raise
+        except aiohttp.ClientResponseError as e:
+            if e.status >= 500 and attempt < retries:
+                delay = 2**attempt
+                logger.warning(
+                    f"Ollama API server error {e.status} (attempt {attempt + 1}/{retries + 1}). "
+                    f"Retrying in {delay}s. Payload: {payload}"
+                )
+                attempt += 1
+                await asyncio.sleep(delay)
+                continue
+            logger.error(f"Ollama API request failed with status {e.status}: {e.message}. Payload: {payload}")
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            if attempt < retries:
+                delay = 2**attempt
+                logger.warning(
+                    f"Ollama API call failed (attempt {attempt + 1}/{retries + 1}): {e}. "
+                    f"Retrying in {delay}s. Payload: {payload}"
+                )
+                attempt += 1
+                await asyncio.sleep(delay)
+                continue
+            logger.error(f"Ollama API call failed after {attempt + 1} attempts: {e}. Payload: {payload}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during Ollama API call: {e}. Payload: {payload}")
+            raise
 
 
 async def chat(
@@ -89,11 +111,14 @@ async def chat(
     best_of: int = 1,
     schema: Optional[Dict[str, Any]] = None,
     session: aiohttp.ClientSession | None = None,
+    retries: int = 0,
 ) -> List[str]:
     """Return ``best_of`` completions from Ollama.
 
     ``max_tokens`` limits how many tokens the model may generate. ``num_ctx``
     sets the context window for the request via Ollama's ``options``.
+    ``retries`` specifies how many additional attempts should be made if the
+    request fails due to network issues or 5xx responses.
     """
     tasks = []
     model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
@@ -111,7 +136,7 @@ async def chat(
                 payload[C.AGENT_OPTIONS] = {C.NUM_CTX: num_ctx}
             if schema is not None:
                 payload[C.AGENT_FORMAT] = schema
-            tasks.append(_post_json(sess, payload))
+            tasks.append(_post_json(sess, payload, retries=retries))
         return await asyncio.gather(*tasks)
 
     if session is None:
