@@ -125,7 +125,7 @@ def play(
         False,
         "--verbose",
         "-v",
-        help="Show detailed turn tables",
+        help="Print extra debug information",
     ),
 ):
     """Run a single fight and print the winner."""
@@ -140,7 +140,7 @@ def play(
     from .simulation import _single_fight
     from .engine import constants as C
 
-    if verbose and render.RICH_AVAILABLE:
+    if render.RICH_AVAILABLE:
         result, log = asyncio.run(
             _single_fight(
                 fighter_a_section=fighter_a,
@@ -151,10 +151,7 @@ def play(
         console = render.Console()
         for turn in log.turns:
             table = render.make_turn_table(turn)
-            if render.RICH_AVAILABLE:
-                console.print(table)
-            else:  # pragma: no cover - fallback
-                typer.echo(table)
+            console.print(table)
     else:
         result = asyncio.run(
             _single_fight(

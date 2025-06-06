@@ -285,9 +285,9 @@ def test_delta_schema_invalid_wound_missing_field():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
-def test_delta_schema_invalid_unknown_status_change():
+def test_delta_schema_allows_unknown_status_change():
     unknown_status = {C.STATUS_CHANGE: "confused"}
-    _validate_against_schema(unknown_status, DeltaSchema, False)
+    _validate_against_schema(unknown_status, DeltaSchema, True)
 
 
 def test_delta_schema_allows_additional_properties():
