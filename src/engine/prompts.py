@@ -8,7 +8,7 @@ Last {turn_window} turns:
 {recent_log}
 Your equipment: {loadout}
 ---
-Respond with ONE sentence describing what you attempt next. ≤ 30 words.
+Respond with {sentence_limit} sentence describing what you attempt next. ≤ {word_limit} words.
 (No outcome narration. Raw text only.)
 """
 

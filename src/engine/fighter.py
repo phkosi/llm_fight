@@ -96,6 +96,9 @@ async def get_fighter_attempt(
         else:
             current_recent_log = str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
 
+    sentence_limit = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_SENTENCE_LIMIT, int, fallback=1)
+    word_limit = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_WORD_LIMIT, int, fallback=30)
+
     system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
         name=fighter.id,
         class_=fighter.class_,
@@ -107,6 +110,8 @@ async def get_fighter_attempt(
         turn_window=turn_window,
         recent_log=current_recent_log,
         loadout=loadout,
+        sentence_limit=sentence_limit,
+        word_limit=word_limit,
     )
 
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}

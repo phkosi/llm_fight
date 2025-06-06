@@ -224,6 +224,14 @@ def test_judge_p1_schema_invalid_type():
     _validate_against_schema(invalid_data, JudgeP1Schema, False)
 
 
+def test_judge_p1_schema_invalid_probability():
+    invalid_data = {
+        "judgement_text": "Invalid prob",
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.2",
+    }
+    _validate_against_schema(invalid_data, JudgeP1Schema, False)
+
+
 # --- DeltaSchema Tests ---
 def test_delta_schema_valid_full():
     valid_data = {
@@ -277,9 +285,9 @@ def test_delta_schema_invalid_wound_missing_field():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
-def test_delta_schema_allows_unknown_status_change():
+def test_delta_schema_invalid_unknown_status_change():
     unknown_status = {C.STATUS_CHANGE: "confused"}
-    _validate_against_schema(unknown_status, DeltaSchema, True)
+    _validate_against_schema(unknown_status, DeltaSchema, False)
 
 
 def test_delta_schema_allows_additional_properties():
