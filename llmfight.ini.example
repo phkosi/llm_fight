@@ -11,15 +11,15 @@ log_level = INFO
 log_combat_turns = false
 save_transcripts = false
 transcript_dir = transcripts
-fighter_sentence_limit = 1
-fighter_word_limit = 30
-fighter_A = A
-fighter_B = B
+name = Sir Galant
+class = Veteran Knight
+loadout = longsword and tower shield
+environment = grand coliseum
 
-[CONTEXT]
-fighter_log_window = 10
-judge_log_window = 9999
-
+name = Shade
+class = Cunning Assassin
+loadout = poison dagger and smoke bombs
+environment = moonlit forest
 [SIMULATION]
 runs = 10
 seed = 42
