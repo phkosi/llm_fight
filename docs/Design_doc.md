@@ -13,9 +13,10 @@ Older design iterations are preserved in `Design_doc_archived_2025.md`.
 4. [Prompt Engineering](#4-prompt-engineering)
 5. [Validation & Retries](#5-validation--retries)
 6. [Simulation Harness](#6-simulation-harness)
-7. [Configuration (INI)](#7-configuration-ini)
-8. [Performance Notes](#8-performance-notes)
-9. [Future Work](#9-future-work)
+7. [CLI Visualization](#7-cli-visualization)
+8. [Configuration (INI)](#8-configuration-ini)
+9. [Performance Notes](#9-performance-notes)
+10. [Future Work](#10-future-work)
 
 ---
 
@@ -196,7 +197,18 @@ Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future
 
 ---
 
-## 7  Configuration (INI excerpt)
+## 7  CLI Visualization
+
+The command line interface uses the **rich** library to present turns and
+simulation results in a readable way. A dedicated rendering module will format
+each turn using tables with colour‑coded hit results and remaining health for
+both fighters. During `simulate`, a progress bar tracks runs, and a summary
+table lists win counts and average turns. The optional `--verbose` flag
+displays full judge narration, while the default view keeps output concise.
+
+---
+
+## 8  Configuration (INI excerpt)
 
 ```ini
 [General]
@@ -230,14 +242,14 @@ concurrent_runs = 1
 discord_token = <bot-token>
 discord_channel = <optional-channel>
 ```
-## 8  Performance Notes
+## 9  Performance Notes
 
 * Async `gather()` overlaps fighter calls; Judge is sequential but single call per phase.
 * Log summarisation triggers when total tokens > 48 k.
 
 ---
 
-## 9  Future Work
+## 10  Future Work
 
 1. **Visualizer** (Godot) that replays combat logs with sprite limb masking.
 2. **Advanced Modifiers:** Infection, weather and other environmental effects.

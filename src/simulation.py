@@ -3,7 +3,7 @@
 import asyncio
 import csv
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Callable
 
 from .state import FighterState
 from .rng import rand, seed
@@ -15,7 +15,11 @@ from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
 
 
-async def _single_fight(fighter_a_section: str | None = None, fighter_b_section: str | None = None) -> Dict[str, str]:
+async def _single_fight(
+    fighter_a_section: str | None = None,
+    fighter_b_section: str | None = None,
+    return_log: bool = False,
+) -> Dict[str, str] | tuple[Dict[str, str], CombatLog]:
     """
     Simulates a single fight between two AI fighters (A and B).
 
@@ -25,9 +29,12 @@ async def _single_fight(fighter_a_section: str | None = None, fighter_b_section:
     The fight ends when a fighter is dead/unconscious, the judge declares an end,
     or a maximum turn limit is reached.
 
-    Returns:
-        A dictionary containing the 'winner' (fighter ID or 'draw') and
-        'turn' – the number of turns taken as a string.
+    Returns
+    -------
+    dict or tuple
+        When ``return_log`` is ``False`` (default) returns a dict containing
+        the winner and turn count. If ``True``, returns a tuple of that dict and
+        the :class:`CombatLog` for the fight.
     """
     if fighter_a_section is None:
         fighter_a_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")
@@ -140,13 +147,17 @@ async def _single_fight(fighter_a_section: str | None = None, fighter_b_section:
 
     logger.info(f"Fight ended. Outcome: {outcome}, Turns: {turn}")
     logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
-    return {C.WINNER: outcome, C.LOG_TURN: str(turn)}
+    result = {C.WINNER: outcome, C.LOG_TURN: str(turn)}
+    if return_log:
+        return result, combat_log
+    return result
 
 
 async def run_batch(
     output_csv: str | Path = "sim_results.csv",
     fighter_a_section: str | None = None,
     fighter_b_section: str | None = None,
+    progress: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Run a batch of simulations and write the results to ``output_csv``.
 
@@ -166,6 +177,8 @@ async def run_batch(
     fighter_b_section:
         INI section providing fighter B's settings. Defaults to the value of
         ``fighter_B`` in the ``[General]`` section.
+    progress:
+        Optional callback receiving ``(completed, total)`` as the batch runs.
 
     Returns
     -------
@@ -192,8 +205,10 @@ async def run_batch(
                 return {C.WINNER: "error", C.LOG_TURN: "0"}
 
     tasks = [asyncio.create_task(sem_fight()) for _ in range(runs)]
-    for coro in asyncio.as_completed(tasks):
+    for idx, coro in enumerate(asyncio.as_completed(tasks), start=1):
         res.append(await coro)
+        if progress:
+            progress(idx, runs)
 
     csv_path = Path(output_csv)
     if not res:

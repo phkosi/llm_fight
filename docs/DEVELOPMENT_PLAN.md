@@ -30,6 +30,7 @@ This document summarizes outstanding tasks for ongoing development and tracks co
   - Generate effect addition/removal data and verify that permanent effects
     are not duplicated and TTL logic is respected.
 - Negative CLI option tests
+- CLI Visualization Improvements completed: rich tables, progress bar and verbose output with tests
 - Test Suite Enhancements completed: additional edge case tests for config save, invalid probabilities, and guarded_call
   - Invoke the CLI entry point with invalid options using `CliRunner`.
   - Check that invalid model names or configuration paths produce helpful

@@ -1,7 +1,7 @@
 from typer.testing import CliRunner
 
 from src.cli import app
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 from click import ClickException
 from src.engine import constants as C
@@ -24,6 +24,27 @@ def test_cli_play():
     mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None)
 
 
+def test_cli_play_verbose():
+    runner = CliRunner()
+    log = MagicMock(turns=[MagicMock(), MagicMock()])
+    with (
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
+        ) as mock_fight,
+        patch("src.cli.render") as mock_render,
+    ):
+        mock_render.RICH_AVAILABLE = True
+        result = runner.invoke(app, ["play", "--verbose"])
+    assert result.exit_code == 0
+    mock_fight.assert_called_once_with(
+        fighter_a_section=None,
+        fighter_b_section=None,
+        return_log=True,
+    )
+    assert mock_render.make_turn_table.call_count == 2
+
+
 def test_cli_simulate(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
@@ -32,6 +53,25 @@ def test_cli_simulate(tmp_path):
     assert result.exit_code == 0
     mock_run_batch.assert_called_once_with(Path("out.csv"), fighter_a_section=None, fighter_b_section=None)
     assert "Simulation saved to" in result.output
+
+
+def test_cli_simulate_verbose(tmp_path):
+    runner = CliRunner()
+    dummy = tmp_path / "dummy.csv"
+    dummy.write_text("winner,turn\nA,1\n")
+    with (
+        patch(
+            "src.simulation.run_batch",
+            new=AsyncMock(return_value=dummy),
+        ) as mock_run_batch,
+        patch("src.cli.render") as mock_render,
+    ):
+        mock_render.RICH_AVAILABLE = True
+        mock_render.make_summary_table.return_value = "table"
+        result = runner.invoke(app, ["simulate", "--verbose"])
+    assert result.exit_code == 0
+    assert mock_run_batch.call_args.kwargs["progress"] is not None
+    mock_render.make_summary_table.assert_called_once()
 
 
 def test_cli_unknown_option():
