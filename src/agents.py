@@ -85,9 +85,15 @@ async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any]) ->
 async def chat(
     messages: List[Dict[str, str]],
     max_tokens: int,
+    num_ctx: int | None = None,
     best_of: int = 1,
     schema: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
+    """Return ``best_of`` completions from Ollama.
+
+    ``max_tokens`` limits how many tokens the model may generate. ``num_ctx``
+    sets the context window for the request via Ollama's ``options``.
+    """
     tasks = []
     model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
     temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
@@ -99,6 +105,8 @@ async def chat(
                 C.AGENT_MAX_TOKENS: max_tokens,
                 C.AGENT_MESSAGES: messages,
             }
+            if num_ctx is not None:
+                payload[C.AGENT_OPTIONS] = {C.NUM_CTX: num_ctx}
             if schema is not None:
                 payload[C.AGENT_FORMAT] = schema
             tasks.append(_post_json(session, payload))

@@ -4,6 +4,7 @@ from typing import Union, Optional
 
 from ..state import FighterState  # Relative import from parent package
 from ..agents import chat
+from ..utils.token_counter import compute_max_tokens
 from ..config import CONFIG
 from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from . import constants as C  # Added import
@@ -115,9 +116,13 @@ async def get_fighter_attempt(
 
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
 
+    messages = [system, user]
+    context_limit = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
+    max_tokens = compute_max_tokens(messages, context_limit)
     texts = await chat(
-        [system, user],
-        max_tokens=CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256),
+        messages,
+        max_tokens=max_tokens,
+        num_ctx=context_limit,
         best_of=CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1),
     )
     txt = texts[0]

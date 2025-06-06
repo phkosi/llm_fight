@@ -6,6 +6,7 @@ from typing import Dict, Any
 from .utils.json_parser import parse_json_from_text
 
 from .agents import chat
+from .utils.token_counter import compute_max_tokens
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from .config import CONFIG
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
@@ -48,10 +49,14 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     }
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
 
+    messages = [system, user]
+    max_tok = compute_max_tokens(messages, MAX_TOK_J)
+
     async def _call():
         response_texts = await chat(
-            [system, user],
-            max_tokens=MAX_TOK_J,
+            messages,
+            max_tokens=max_tok,
+            num_ctx=MAX_TOK_J,
             best_of=BEST_J,
             schema=JudgeP1Schema,
         )
@@ -85,10 +90,14 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
     user_payload = {**p2_input_state, C.PREDICTION: rolls}
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
 
+    messages = [system, user]
+    max_tok = compute_max_tokens(messages, MAX_TOK_J)
+
     async def _call():
         response_texts = await chat(
-            [system, user],
-            max_tokens=MAX_TOK_J,
+            messages,
+            max_tokens=max_tok,
+            num_ctx=MAX_TOK_J,
             best_of=BEST_J,
             schema=JudgeP2Schema,
         )
