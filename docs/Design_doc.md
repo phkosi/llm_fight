@@ -208,13 +208,16 @@ ollama_temperature = 0.8
 best_of_fighter = 3
 best_of_judge = 2
 max_retries = 2
+log_level = INFO
+save_transcripts = false
+transcript_dir = transcripts
 
 [CONTEXT]
 fighter_log_window = 10
 judge_log_window = 9999
 
 [SIMULATION]
-runs = 1000
+runs = 10
 seed = 42
 concurrent_runs = 1
 
