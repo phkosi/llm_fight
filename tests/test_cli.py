@@ -34,7 +34,7 @@ def test_cli_play():
         fighter_b_section=None,
         return_log=True,
     )
-    mock_render.make_turn_table.assert_called_once()
+    mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=False)
 
 
 def test_cli_play_verbose():
@@ -57,6 +57,52 @@ def test_cli_play_verbose():
         return_log=True,
     )
     assert mock_render.make_turn_table.call_count == 2
+    for call in mock_render.make_turn_table.call_args_list:
+        assert call.kwargs.get("simple") is False
+
+
+def test_cli_play_simple_output():
+    runner = CliRunner()
+    log = MagicMock(turns=[MagicMock()])
+    with (
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
+        ) as mock_fight,
+        patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
+    ):
+        mock_render.RICH_AVAILABLE = True
+        result = runner.invoke(app, ["play", "--simple-output"])
+    assert result.exit_code == 0
+    mock_fight.assert_called_once_with(
+        fighter_a_section=None,
+        fighter_b_section=None,
+        return_log=True,
+    )
+    mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
+
+
+def test_cli_play_simple_output_no_rich():
+    runner = CliRunner()
+    log = MagicMock(turns=[MagicMock()])
+    with (
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
+        ) as mock_fight,
+        patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
+    ):
+        mock_render.RICH_AVAILABLE = False
+        result = runner.invoke(app, ["play", "--simple-output"])
+    assert result.exit_code == 0
+    mock_fight.assert_called_once_with(
+        fighter_a_section=None,
+        fighter_b_section=None,
+        return_log=True,
+    )
+    mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
 
 
 def test_cli_simulate(tmp_path):

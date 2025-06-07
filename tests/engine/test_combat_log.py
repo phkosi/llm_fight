@@ -41,3 +41,26 @@ def test_combat_turn_to_text():
     assert "B: parry" in text
     assert "Judge: A hits" in text
     assert "Narration: A wounds B" in text
+
+
+def test_combat_turn_to_simple_text():
+    turn = CombatTurn(
+        turn=4,
+        attempt_A="swing",
+        attempt_B="block",
+        judge_p1={"judgement_text": "A misses"},
+        judge_p2={C.NARRATION: "B blocks"},
+        state_A_before={"status": C.FighterStatus.FIGHTING},
+        state_B_before={"status": C.FighterStatus.FIGHTING},
+        state_A_after={"status": C.FighterStatus.FIGHTING},
+        state_B_after={"status": C.FighterStatus.UNCONSCIOUS},
+    )
+
+    text = turn.to_simple_text()
+    lines = text.splitlines()
+    assert lines[0].startswith("Turn 4")
+    assert "A: swing" in lines[1]
+    assert "B: block" in lines[2]
+    assert any("Judge: A misses" in l for l in lines)
+    assert any("Narration: B blocks" in l for l in lines)
+    assert any("Status changes:" in l and "B unconscious" in l for l in lines)

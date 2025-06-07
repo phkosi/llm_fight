@@ -25,6 +25,22 @@ def test_make_turn_table_fallback():
         assert "Turn 1" in result
 
 
+def test_make_turn_table_simple():
+    turn = CombatTurn(
+        turn=1,
+        attempt_A="hit",
+        attempt_B="parry",
+        judge_p2={C.NARRATION: "A hits"},
+        state_A_before={"status": C.FighterStatus.FIGHTING},
+        state_A_after={"status": C.FighterStatus.FIGHTING},
+        state_B_before={"status": C.FighterStatus.FIGHTING},
+        state_B_after={"status": C.FighterStatus.DEAD},
+    )
+    result = render.make_turn_table(turn, simple=True)
+    assert isinstance(result, str)
+    assert "Status changes:" in result
+
+
 def test_make_summary_table():
     rows = [{C.WINNER: "A", C.LOG_TURN: "2"}, {C.WINNER: "B", C.LOG_TURN: "3"}, {C.WINNER: "A", C.LOG_TURN: "1"}]
     table = render.make_summary_table(rows)

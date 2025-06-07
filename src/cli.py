@@ -132,6 +132,12 @@ def play(
         "-B",
         help="INI section to use for fighter B",
     ),
+    simple_output: bool = typer.Option(
+        False,
+        "--simple-output",
+        "-so",
+        help="Disable rich formatting and print plain text",
+    ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -144,7 +150,7 @@ def play(
     from . import config as config_mod
     from .engine.logger import update_logger_level, logger
 
-    if not render.RICH_AVAILABLE:
+    if not render.RICH_AVAILABLE and not simple_output:
         raise ClickException("The 'rich' library is required for this command")
 
     if config is not None:
@@ -167,7 +173,7 @@ def play(
     )
     console = render.Console()
     for turn in log.turns:
-        table = render.make_turn_table(turn)
+        table = render.make_turn_table(turn, simple=simple_output)
         console.print(table)
 
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")
