@@ -222,6 +222,8 @@ best_of_judge = 2
 max_retries = 2
 log_level = INFO
 log_combat_turns = false
+; When set to true turn logs appear in real time during `play` without needing
+; the --verbose flag.
 save_transcripts = false
 transcript_dir = transcripts
 ; Transcript filenames include microseconds to avoid collisions when logging
