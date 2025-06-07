@@ -220,10 +220,10 @@ ollama_temperature = 0.8
 best_of_fighter = 3
 best_of_judge = 2
 max_retries = 2
-log_level = INFO
+log_level = OFF ; disable logging unless overridden
 log_combat_turns = false
-; When set to true turn logs appear in real time during `play` without needing
-; the --verbose flag.
+; When true each turn is also logged as plain text. Turns are streamed live
+; regardless of this setting.
 save_transcripts = false
 transcript_dir = transcripts
 ; Transcript filenames include microseconds to avoid collisions when logging

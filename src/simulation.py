@@ -19,6 +19,7 @@ async def _single_fight(
     fighter_a_section: str | None = None,
     fighter_b_section: str | None = None,
     return_log: bool = False,
+    on_turn: Callable[[CombatTurn], None] | None = None,
 ) -> Dict[str, str] | tuple[Dict[str, str], CombatLog]:
     """
     Simulates a single fight between two AI fighters (A and B).
@@ -34,7 +35,8 @@ async def _single_fight(
     dict or tuple
         When ``return_log`` is ``False`` (default) returns a dict containing
         the winner and turn count. If ``True``, returns a tuple of that dict and
-        the :class:`CombatLog` for the fight.
+        the :class:`CombatLog` for the fight. The ``on_turn`` callback, when
+        provided, is invoked with each :class:`CombatTurn` as it occurs.
     """
     if fighter_a_section is None:
         fighter_a_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")
@@ -123,6 +125,8 @@ async def _single_fight(
         combat_log.append(turn_entry)
         if CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
             logger.info(turn_entry.to_simple_text())
+        if on_turn is not None:
+            on_turn(turn_entry)
 
         # Check for fight end conditions
         if p2.get("fight_end", False):

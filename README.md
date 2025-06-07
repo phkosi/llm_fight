@@ -214,8 +214,8 @@ ollama_temperature   = 0.8       ; Temperature for Ollama completions
 best_of_fighter      = 3         ; Number of speculative completions for fighter actions
 best_of_judge        = 2         ; Number of speculative completions for judge phases
 max_retries          = 2         ; Max retries for LLM calls on validation failure
-log_level           = INFO      ; Logging verbosity for engine output
-log_combat_turns   = false     ; Log each combat turn to the console
+log_level           = OFF       ; Disable logging unless overridden
+log_combat_turns   = false     ; Log each combat turn to the console when logging is enabled
 save_transcripts    = false     ; Save prompt/response transcripts
 transcript_dir      = transcripts ; Directory for saved transcripts
 fighter_sentence_limit = 1     ; Number of sentences fighters may respond with
@@ -252,9 +252,10 @@ Enable transcript logging for debugging by setting `save_transcripts = true`.
 Files will be written to the directory specified by `transcript_dir`.
 Transcript filenames now include microseconds to avoid collisions when multiple
 exchanges are logged within the same second.
-Set `log_combat_turns = true` if you want each turn printed to the console.
-With this option enabled the `play` command shows turn logs in real time even
-without the `--verbose` flag.
+Set `log_combat_turns = true` to also log each turn as plain text.
+Turns are always displayed live using rich tables (or `--simple-output` for
+plain text), so this option is mainly useful when capturing logs to a file or
+when you increase the log level.
 You can also configure the Discord bot:
 
 ```ini

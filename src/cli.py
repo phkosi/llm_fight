@@ -166,16 +166,19 @@ def play(
 
     from .simulation import _single_fight
 
-    result, log = asyncio.run(
+    console = render.Console()
+    console.rule("[bold magenta]LLM Fighters[/bold magenta]")
+
+    def on_turn(turn):
+        table = render.make_turn_table(turn, simple=simple_output)
+        console.print(table)
+
+    result = asyncio.run(
         _single_fight(
             fighter_a_section=fighter_a,
             fighter_b_section=fighter_b,
-            return_log=True,
+            on_turn=on_turn,
         )
     )
-    console = render.Console()
-    for turn in log.turns:
-        table = render.make_turn_table(turn, simple=simple_output)
-        console.print(table)
 
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")

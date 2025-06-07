@@ -16,12 +16,14 @@ def test_cli_help():
 
 def test_cli_play():
     runner = CliRunner()
-    log = MagicMock(turns=[MagicMock()])
+    turn = MagicMock()
+
+    async def fake_fight(*args, **kwargs):
+        kwargs["on_turn"](turn)
+        return {C.WINNER: "A", C.LOG_TURN: "1"}
+
     with (
-        patch(
-            "src.simulation._single_fight",
-            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
-        ) as mock_fight,
+        patch("src.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)) as mock_fight,
         patch("src.cli.render") as mock_render,
         patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
@@ -29,80 +31,82 @@ def test_cli_play():
         result = runner.invoke(app, ["play"])
     assert result.exit_code == 0
     assert "Winner: A" in result.output
-    mock_fight.assert_called_once_with(
-        fighter_a_section=None,
-        fighter_b_section=None,
-        return_log=True,
-    )
-    mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=False)
+    mock_fight.assert_called_once()
+    assert mock_fight.call_args.kwargs["fighter_a_section"] is None
+    assert mock_fight.call_args.kwargs["fighter_b_section"] is None
+    assert callable(mock_fight.call_args.kwargs["on_turn"])
+    mock_render.make_turn_table.assert_called_once_with(turn, simple=False)
 
 
 def test_cli_play_verbose():
     runner = CliRunner()
-    log = MagicMock(turns=[MagicMock(), MagicMock()])
+    turns = [MagicMock(), MagicMock()]
+
+    async def fake_fight(*args, **kwargs):
+        for t in turns:
+            kwargs["on_turn"](t)
+        return {C.WINNER: "A", C.LOG_TURN: "1"}
+
     with (
-        patch(
-            "src.simulation._single_fight",
-            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
-        ) as mock_fight,
+        patch("src.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)) as mock_fight,
         patch("src.cli.render") as mock_render,
         patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play", "--verbose"])
     assert result.exit_code == 0
-    mock_fight.assert_called_once_with(
-        fighter_a_section=None,
-        fighter_b_section=None,
-        return_log=True,
-    )
+    mock_fight.assert_called_once()
+    assert mock_fight.call_args.kwargs["fighter_a_section"] is None
+    assert mock_fight.call_args.kwargs["fighter_b_section"] is None
+    assert callable(mock_fight.call_args.kwargs["on_turn"])
     assert mock_render.make_turn_table.call_count == 2
-    for call in mock_render.make_turn_table.call_args_list:
+    for call, turn in zip(mock_render.make_turn_table.call_args_list, turns):
+        assert call.args[0] is turn
         assert call.kwargs.get("simple") is False
 
 
 def test_cli_play_simple_output():
     runner = CliRunner()
-    log = MagicMock(turns=[MagicMock()])
+    turn = MagicMock()
+
+    async def fake_fight(*args, **kwargs):
+        kwargs["on_turn"](turn)
+        return {C.WINNER: "A", C.LOG_TURN: "1"}
+
     with (
-        patch(
-            "src.simulation._single_fight",
-            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
-        ) as mock_fight,
+        patch("src.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)) as mock_fight,
         patch("src.cli.render") as mock_render,
         patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play", "--simple-output"])
     assert result.exit_code == 0
-    mock_fight.assert_called_once_with(
-        fighter_a_section=None,
-        fighter_b_section=None,
-        return_log=True,
-    )
-    mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
+    mock_fight.assert_called_once()
+    assert mock_fight.call_args.kwargs["fighter_a_section"] is None
+    assert mock_fight.call_args.kwargs["fighter_b_section"] is None
+    assert callable(mock_fight.call_args.kwargs["on_turn"])
+    mock_render.make_turn_table.assert_called_once_with(turn, simple=True)
 
 
 def test_cli_play_simple_output_no_rich():
     runner = CliRunner()
-    log = MagicMock(turns=[MagicMock()])
+    turn = MagicMock()
+
+    async def fake_fight(*args, **kwargs):
+        kwargs["on_turn"](turn)
+        return {C.WINNER: "A", C.LOG_TURN: "1"}
+
     with (
-        patch(
-            "src.simulation._single_fight",
-            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
-        ) as mock_fight,
+        patch("src.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)) as mock_fight,
         patch("src.cli.render") as mock_render,
         patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--simple-output"])
     assert result.exit_code == 0
-    mock_fight.assert_called_once_with(
-        fighter_a_section=None,
-        fighter_b_section=None,
-        return_log=True,
-    )
-    mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
+    mock_fight.assert_called_once()
+    assert callable(mock_fight.call_args.kwargs["on_turn"])
+    mock_render.make_turn_table.assert_called_once_with(turn, simple=True)
 
 
 def test_cli_simulate(tmp_path):

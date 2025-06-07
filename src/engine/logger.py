@@ -22,8 +22,11 @@ if not logger.hasHandlers():
 def update_logger_level() -> None:
     """Update :data:`logger` and its handlers from :data:`config.CONFIG`."""
 
-    level_name = config.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_LEVEL, str, fallback="INFO").upper()
-    level = getattr(logging, level_name, logging.INFO)
+    level_name = config.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_LEVEL, str, fallback="OFF").upper()
+    if level_name == "OFF":
+        level = logging.CRITICAL + 10
+    else:
+        level = getattr(logging, level_name, logging.INFO)
     logger.setLevel(level)
     for handler in logger.handlers:
         handler.setLevel(level)
