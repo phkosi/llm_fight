@@ -6,6 +6,7 @@ from typing import Optional
 import typer
 
 from .engine import render
+from .engine import constants as C
 from .agents import ping_ollama
 import asyncio
 from click import ClickException
@@ -57,8 +58,9 @@ def simulate(
 
     if config is not None:
         config_mod.CONFIG = config_mod.Config(config)
-        update_logger_level()
-    if not verbose:
+    update_logger_level()
+    log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
+    if not verbose and not log_turns:
         logger.setLevel(CRITICAL)
 
     asyncio.run(ping_ollama())
@@ -155,14 +157,14 @@ def play(
 
     if config is not None:
         config_mod.CONFIG = config_mod.Config(config)
-        update_logger_level()
-    if not verbose:
+    update_logger_level()
+    log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
+    if not verbose and not log_turns:
         logger.setLevel(CRITICAL)
 
     asyncio.run(ping_ollama())
 
     from .simulation import _single_fight
-    from .engine import constants as C
 
     result, log = asyncio.run(
         _single_fight(

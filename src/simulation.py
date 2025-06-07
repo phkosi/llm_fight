@@ -122,7 +122,7 @@ async def _single_fight(
 
         combat_log.append(turn_entry)
         if CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
-            logger.info(turn_entry.to_text())
+            logger.info(turn_entry.to_simple_text())
 
         # Check for fight end conditions
         if p2.get("fight_end", False):

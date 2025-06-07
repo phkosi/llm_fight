@@ -253,6 +253,8 @@ Files will be written to the directory specified by `transcript_dir`.
 Transcript filenames now include microseconds to avoid collisions when multiple
 exchanges are logged within the same second.
 Set `log_combat_turns = true` if you want each turn printed to the console.
+With this option enabled the `play` command shows turn logs in real time even
+without the `--verbose` flag.
 You can also configure the Discord bot:
 
 ```ini
