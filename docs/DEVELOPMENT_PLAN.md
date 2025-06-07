@@ -6,6 +6,28 @@ This document summarizes outstanding tasks for ongoing development and tracks co
 
 - **Scalability**: Explore optimizations for very large numbers of simulations, such as improved state handling or batch execution.
 
+- **Ollama API refactor**: migrate from `/v1/chat/completions` to the modern `/api` endpoints.
+  - Research shows `/api/generate` accepts a `prompt` plus optional parameters such as
+    `format`, `options`, `system`, `template`, `stream`, `raw`, `keep_alive` and
+    `context`. When `stream` is `false` the JSON reply contains the complete text in a
+    `response` field.
+  - **Adjust tests first (TDD)**:
+    - Update endpoint expectations in `tests/test_agents.py` and any other tests
+      referencing `/v1/chat/completions`.
+    - Add new tests for `_post_json` to handle `data["message"]["content"]` and
+      `data["response"]` while remaining compatible with the legacy `choices`
+      structure.
+  - Update the default `ollama_api_url` in `src/config.py` and
+    `llmfight.ini.example` to `http://localhost:11434/api/chat`.
+  - Revise `get_ollama_url()` so a bare host will be normalised with `/api/chat`
+    and allow `/api/generate` when specified.
+  - Adjust `ping_ollama()` to compute the base with `.split('/api')[0]` and check
+    `'/api/tags'`.
+  - Extend `_post_json()` to read from the new response shapes and fall back to
+    legacy `choices` if neither exists. Always send `{"stream": false}` in the
+    payload.
+  - Update README examples and configuration instructions for the new endpoint.
+
 ## Completed Milestones
 
 - Core State Updates Implemented
