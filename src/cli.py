@@ -46,6 +46,11 @@ def simulate(
         "-v",
         help="Show progress bar and summary table",
     ),
+    force_color: bool = typer.Option(
+        False,
+        "--force-color",
+        help="Force coloured output even when stdout is not a TTY",
+    ),
 ):
     """Run self‑play batch using config.ini parameters."""
     from logging import CRITICAL
@@ -69,7 +74,7 @@ def simulate(
     if verbose:
         from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
 
-        console = render.Console()
+        console = render.get_console(force_terminal=force_color)
         progress = Progress(
             TextColumn("Simulating"),
             BarColumn(),
@@ -144,6 +149,11 @@ def play(
         "-v",
         help="Print extra debug information",
     ),
+    force_color: bool = typer.Option(
+        False,
+        "--force-color",
+        help="Force coloured output even when stdout is not a TTY",
+    ),
 ):
     """Run a single fight and print the winner."""
     from logging import CRITICAL
@@ -171,7 +181,7 @@ def play(
             return_log=True,
         )
     )
-    console = render.Console()
+    console = render.get_console(force_terminal=force_color)
     for turn in log.turns:
         table = render.make_turn_table(turn, simple=simple_output)
         console.print(table)

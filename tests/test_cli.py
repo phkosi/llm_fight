@@ -35,6 +35,7 @@ def test_cli_play():
         return_log=True,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=False)
+    mock_render.get_console.assert_called_once_with(force_terminal=False)
 
 
 def test_cli_play_verbose():
@@ -59,6 +60,7 @@ def test_cli_play_verbose():
     assert mock_render.make_turn_table.call_count == 2
     for call in mock_render.make_turn_table.call_args_list:
         assert call.kwargs.get("simple") is False
+    mock_render.get_console.assert_called_once_with(force_terminal=False)
 
 
 def test_cli_play_simple_output():
@@ -81,6 +83,7 @@ def test_cli_play_simple_output():
         return_log=True,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
+    mock_render.get_console.assert_called_once_with(force_terminal=False)
 
 
 def test_cli_play_simple_output_no_rich():
@@ -103,6 +106,7 @@ def test_cli_play_simple_output_no_rich():
         return_log=True,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
+    mock_render.get_console.assert_called_once_with(force_terminal=False)
 
 
 def test_cli_simulate(tmp_path):
@@ -136,6 +140,7 @@ def test_cli_simulate_verbose(tmp_path):
     assert result.exit_code == 0
     assert mock_run_batch.call_args.kwargs["progress"] is not None
     mock_render.make_summary_table.assert_called_once()
+    mock_render.get_console.assert_called_once_with(force_terminal=False)
 
 
 def test_cli_unknown_option():
@@ -274,3 +279,38 @@ def test_cli_ollama_unreachable():
         result = runner.invoke(app, ["play"])
     assert result.exit_code != 0
     assert "offline" in result.output
+
+
+def test_cli_play_force_color():
+    runner = CliRunner()
+    log = MagicMock(turns=[MagicMock()])
+    with (
+        patch(
+            "src.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
+        ) as mock_fight,
+        patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
+    ):
+        mock_render.RICH_AVAILABLE = True
+        result = runner.invoke(app, ["play", "--force-color"])
+    assert result.exit_code == 0
+    mock_fight.assert_called_once()
+    mock_render.get_console.assert_called_once_with(force_terminal=True)
+
+
+def test_cli_simulate_force_color(tmp_path):
+    runner = CliRunner()
+    dummy = tmp_path / "dummy.csv"
+    dummy.write_text("winner,turn\nA,1\n")
+    with (
+        patch("src.simulation.run_batch", new=AsyncMock(return_value=dummy)) as mock_run_batch,
+        patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
+    ):
+        mock_render.RICH_AVAILABLE = True
+        mock_render.make_summary_table.return_value = "table"
+        result = runner.invoke(app, ["simulate", "--verbose", "--force-color"])
+    assert result.exit_code == 0
+    assert mock_run_batch.call_args.kwargs["progress"] is not None
+    mock_render.get_console.assert_called_once_with(force_terminal=True)

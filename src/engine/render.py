@@ -26,6 +26,14 @@ except Exception:  # pragma: no cover - import error fallback
                 print(obj)
 
 
+def get_console(**kwargs: object) -> Console:
+    """Return a :class:`rich.console.Console` if available."""
+
+    if RICH_AVAILABLE:
+        return RichConsole(**kwargs)
+    return Console()
+
+
 def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
     """Return a rich ``Table`` or plain text representation of ``turn``."""
     if simple or not RICH_AVAILABLE:
