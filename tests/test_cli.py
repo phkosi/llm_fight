@@ -23,6 +23,7 @@ def test_cli_play():
             new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
         ) as mock_fight,
         patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play"])
@@ -45,6 +46,7 @@ def test_cli_play_verbose():
             new=AsyncMock(return_value=({C.WINNER: "A", C.LOG_TURN: "1"}, log)),
         ) as mock_fight,
         patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play", "--verbose"])
@@ -60,7 +62,10 @@ def test_cli_play_verbose():
 def test_cli_simulate(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
-    with patch("src.simulation.run_batch", new=AsyncMock(return_value=dummy)) as mock_run_batch:
+    with (
+        patch("src.simulation.run_batch", new=AsyncMock(return_value=dummy)) as mock_run_batch,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
+    ):
         result = runner.invoke(app, ["simulate", "--output-csv", "out.csv"])
     assert result.exit_code == 0
     mock_run_batch.assert_called_once_with(Path("out.csv"), fighter_a_section=None, fighter_b_section=None)
@@ -77,6 +82,7 @@ def test_cli_simulate_verbose(tmp_path):
             new=AsyncMock(return_value=dummy),
         ) as mock_run_batch,
         patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = True
         mock_render.make_summary_table.return_value = "table"
@@ -102,9 +108,12 @@ def test_cli_missing_option_value():
 
 def test_cli_invalid_path():
     runner = CliRunner()
-    with patch(
-        "src.simulation.run_batch",
-        new=AsyncMock(side_effect=ClickException("invalid path")),
+    with (
+        patch(
+            "src.simulation.run_batch",
+            new=AsyncMock(side_effect=ClickException("invalid path")),
+        ),
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         result = runner.invoke(app, ["simulate", "--output-csv", "bad/out.csv"])
     assert result.exit_code != 0
@@ -132,6 +141,7 @@ def test_cli_simulate_with_config(tmp_path):
             "src.simulation.run_batch",
             new=AsyncMock(side_effect=fake_run_batch),
         ) as mock_run_batch,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         result = runner.invoke(app, ["simulate", "--config", str(cfg)])
     assert result.exit_code == 0
@@ -162,12 +172,14 @@ def test_cli_play_with_config(tmp_path):
             new=AsyncMock(side_effect=fake_fight),
         ) as mock_fight,
         patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--config", str(cfg)])
-    assert result.exit_code == 0
-    mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None)
-    mock_update.assert_called_once()
+    assert result.exit_code != 0
+    assert "rich" in result.output.lower()
+    mock_fight.assert_not_called()
+    mock_update.assert_not_called()
     config_mod.CONFIG = original
 
 
@@ -186,20 +198,33 @@ def test_cli_fighter_options():
             new=AsyncMock(return_value={C.WINNER: "A", C.LOG_TURN: "1"}),
         ) as mock_fight,
         patch("src.cli.render") as mock_render,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
     ):
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--fighter-a", "X", "--fighter-b", "Y"])
-    assert result.exit_code == 0
-    mock_fight.assert_called_once_with(fighter_a_section="X", fighter_b_section="Y")
+    assert result.exit_code != 0
+    assert "rich" in result.output.lower()
+    mock_fight.assert_not_called()
 
 
 def test_cli_simulate_fighter_options(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
-    with patch(
-        "src.simulation.run_batch",
-        new=AsyncMock(return_value=dummy),
-    ) as mock_run_batch:
+    with (
+        patch(
+            "src.simulation.run_batch",
+            new=AsyncMock(return_value=dummy),
+        ) as mock_run_batch,
+        patch("src.cli.ping_ollama", new=AsyncMock()),
+    ):
         result = runner.invoke(app, ["simulate", "--fighter-a", "X", "--fighter-b", "Y"])
     assert result.exit_code == 0
     mock_run_batch.assert_called_once_with(Path("sim_results.csv"), fighter_a_section="X", fighter_b_section="Y")
+
+
+def test_cli_ollama_unreachable():
+    runner = CliRunner()
+    with patch("src.cli.ping_ollama", new=AsyncMock(side_effect=ClickException("offline"))):
+        result = runner.invoke(app, ["play"])
+    assert result.exit_code != 0
+    assert "offline" in result.output

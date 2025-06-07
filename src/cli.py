@@ -6,6 +6,10 @@ from typing import Optional
 import typer
 
 from .engine import render
+from .agents import ping_ollama
+import asyncio
+from click import ClickException
+
 
 app = typer.Typer()
 
@@ -44,18 +48,25 @@ def simulate(
     ),
 ):
     """Run self‑play batch using config.ini parameters."""
-    import asyncio
+    from logging import CRITICAL
     from . import config as config_mod
-    from .engine.logger import update_logger_level
+    from .engine.logger import update_logger_level, logger
+
+    if not render.RICH_AVAILABLE:
+        raise ClickException("The 'rich' library is required for this command")
 
     if config is not None:
         config_mod.CONFIG = config_mod.Config(config)
         update_logger_level()
+    if not verbose:
+        logger.setLevel(CRITICAL)
+
+    asyncio.run(ping_ollama())
 
     from .simulation import run_batch
 
     progress_cb = None
-    if verbose and render.RICH_AVAILABLE:
+    if verbose:
         from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
 
         console = render.Console()
@@ -90,7 +101,7 @@ def simulate(
             )
         )
 
-    if verbose and render.RICH_AVAILABLE:
+    if verbose:
         import csv
 
         with open(path, newline="") as fp:
@@ -129,35 +140,34 @@ def play(
     ),
 ):
     """Run a single fight and print the winner."""
-    import asyncio
+    from logging import CRITICAL
     from . import config as config_mod
-    from .engine.logger import update_logger_level
+    from .engine.logger import update_logger_level, logger
+
+    if not render.RICH_AVAILABLE:
+        raise ClickException("The 'rich' library is required for this command")
 
     if config is not None:
         config_mod.CONFIG = config_mod.Config(config)
         update_logger_level()
+    if not verbose:
+        logger.setLevel(CRITICAL)
+
+    asyncio.run(ping_ollama())
 
     from .simulation import _single_fight
     from .engine import constants as C
 
-    if render.RICH_AVAILABLE:
-        result, log = asyncio.run(
-            _single_fight(
-                fighter_a_section=fighter_a,
-                fighter_b_section=fighter_b,
-                return_log=True,
-            )
+    result, log = asyncio.run(
+        _single_fight(
+            fighter_a_section=fighter_a,
+            fighter_b_section=fighter_b,
+            return_log=True,
         )
-        console = render.Console()
-        for turn in log.turns:
-            table = render.make_turn_table(turn)
-            console.print(table)
-    else:
-        result = asyncio.run(
-            _single_fight(
-                fighter_a_section=fighter_a,
-                fighter_b_section=fighter_b,
-            )
-        )
+    )
+    console = render.Console()
+    for turn in log.turns:
+        table = render.make_turn_table(turn)
+        console.print(table)
 
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")

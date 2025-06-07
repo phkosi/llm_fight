@@ -199,12 +199,11 @@ Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future
 
 ## 7  CLI Visualization
 
-The command line interface uses the **rich** library to present turns and
-simulation results in a readable way. A dedicated rendering module formats
-each turn using tables with colour‑coded hit results and remaining health for
-both fighters. During `simulate`, a progress bar tracks runs, and a summary
-table lists win counts and average turns. When Rich is installed these turn
-tables are shown by default. The `--verbose` flag still prints extra log
+The command line interface requires the **rich** library to present turns and
+simulation results in a readable way. A dedicated rendering module formats each
+turn using tables with colour‑coded hit results and remaining health for both
+fighters. During `simulate`, a progress bar tracks runs, and a summary table
+lists win counts and average turns. The `--verbose` flag prints extra log
 details, but output remains concise otherwise.
 
 ---
