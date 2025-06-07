@@ -87,9 +87,8 @@ src/
     ```
     The dependencies include `tiktoken` for accurate token counting. If
     this optional library is missing the engine falls back to a basic
-    regex approach. The CLI also uses `rich` when available to render
-    colourful tables and progress bars; without it you get plain text
-    output.
+    regex approach. The CLI requires the `rich` library to render
+    colourful tables and progress bars.
 4.  For development and testing, install the dev requirements and use editable mode:
     ```bash
     pip install -r requirements-dev.txt
@@ -147,10 +146,9 @@ To run a single fight and display the winner:
 ```bash
 python -m src.cli play
 ```
-When the optional `rich` library is installed, each turn is displayed
-using coloured tables so you can follow the narration and see HP and
-status changes as they occur. Without `rich` the winner is printed
-without turn-by-turn output.
+Each turn is displayed using colourful `rich` tables so you can follow the
+narration and see HP and status changes as they occur. The CLI exits with an
+error if `rich` is missing.
 
 ## Discord Bot
 

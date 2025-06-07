@@ -147,3 +147,14 @@ async def chat(
 
     log_exchange(messages, responses)
     return responses
+
+
+async def ping_ollama(timeout: int = 5) -> None:
+    """Raise an error if the Ollama server cannot be reached."""
+    url = get_ollama_url().split("/v1")[0].rstrip("/") + "/api/tags"
+    try:
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(url, timeout=timeout) as resp:
+                resp.raise_for_status()
+    except Exception as exc:
+        raise ConnectionError(f"Cannot reach Ollama server at {url}: {exc}") from exc
