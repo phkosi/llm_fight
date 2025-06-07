@@ -26,9 +26,11 @@ except Exception:  # pragma: no cover - import error fallback
                 print(obj)
 
 
-def make_turn_table(turn: CombatTurn) -> "Table | str":
-    """Return a rich ``Table`` representing ``turn`` or plain text fallback."""
-    if not RICH_AVAILABLE:
+def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
+    """Return a rich ``Table`` or plain text representation of ``turn``."""
+    if simple or not RICH_AVAILABLE:
+        if simple:
+            return turn.to_simple_text()
         return turn.to_text()
 
     table = Table(title=f"Turn {turn.turn}")
