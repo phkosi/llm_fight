@@ -78,3 +78,51 @@ Acceptance run after fixed context and environment-prompt fixes:
 - Winner summary: `draw: 3`
 - Residency evidence: `transcripts\gemma4_26b_playtest\final_ctx32768_samples.log` stayed on `gemma4:26b`, `100% GPU`, `CONTEXT 32768`, and roughly 22.7-23.0 GB GPU memory throughout the run and post-run sample.
 - Notes: `sim_final_ctx32768.out.log` had no validation failures, fallback/no-op warnings, non-positive wound warnings, or new nonexistent pillar/corridor arena geometry in fighter actions.
+
+## Gemma 4 26B Rich Play Loop
+
+Addresses: ISSUE-036, ISSUE-037
+
+Evidence: ran `uv run llmfight play --config playtest_gemma4_26b.ini` with Ollama model `gemma4:26b` on 2026-05-12. Transcript: `transcripts\gemma4_26b_playtest\rich_play_20260512_000858.out.log`.
+
+- [x] Suppress engine turn logs in non-verbose interactive `play` output. The rich table itself is clear, but the command first prints the plain logger copy of each turn because `playtest_gemma4_26b.ini` has `log_combat_turns = true`, then prints the rich table version again. This makes the full rich output doubled and noisy. Reproduction command: `uv run llmfight play --config playtest_gemma4_26b.ini`. Fixed by suppressing engine logs for non-verbose `play`; verified by `transcripts\gemma4_26b_playtest\rich_play_20260512_001054.out.log`, which starts directly with the rich `Turn 1` table and has no `INFO - Turn` preamble.
+- [x] Prevent stale temporary effects from the recent combat log from overriding current state. In `transcripts\gemma4_26b_playtest\rich_play_20260512_001054.out.log` and the matching JSON transcript `transcripts\gemma4_26b_playtest\20260512_001117_581884.json`, turn 4 had `debuffs: []` for both fighters but the fighter and judge still treated the old smoke bomb as active because earlier narration repeated `thick grey haze`. Reproduction command: `uv run llmfight play --config playtest_gemma4_26b.ini`. Fixed by making current active effects authoritative in fighter and judge prompts and adding a final `current_state_reminder` to judge payloads; verified by `transcripts\gemma4_26b_playtest\rich_play_20260512_001652.out.log`, where turn 3 smoke references align with active `obscured` state and turn 4 no longer treats smoke as active.
+
+Successful rich play streak after fixes:
+
+- Command: `uv run llmfight play --config playtest_gemma4_26b.ini`
+- Clean run 1: `transcripts\gemma4_26b_playtest\rich_play_20260512_001652.out.log`
+- Clean run 2: `transcripts\gemma4_26b_playtest\rich_play_20260512_001755.out.log`
+- Clean run 3: `transcripts\gemma4_26b_playtest\rich_play_20260512_001823.out.log`
+- Notes: all three runs completed with `Winner: draw`, rich tables only, no `INFO - Turn` duplicate preamble, no validation/fallback/runtime error in stdout, and no new actionable rich-output issue found during review.
+
+## Emergent Fighter Anatomy And Effects
+
+Addresses: ISSUE-001, ISSUE-002
+
+- [ ] Support creative fighter designs with dynamic anatomy and dynamically generated effects, including a match-start variant where LLMs create their own fighter profile before combat. Fighter prompts/config should be able to define non-humanoid bodies such as three arms, two heads, wings, tentacles, tails, or other custom parts, and the judge/simulation should treat those parts as valid combat targets with reasonable tissue, vital/severing, and damage behavior. The fighter-creation variant should use light random nudges such as warrior, mage, monster, trickster, hybrid, or fully original/creative so the system can produce varied characters instead of only mirrored humanoids. The same system should allow successful actions to create new debuffs/effects such as poison, blindness, corrosion, freezing, or entanglement even when they are not hard-coded ahead of time, with the judge proposing reasonable magnitude, TTL, affected stats/body parts, and tick behavior that Python validates and applies safely.
+
+Acceptance goals:
+
+- Creative fighter body plans are represented in state and shown to fighter/judge prompts as authoritative valid target parts.
+- The LLM-created-fighter mode produces structured fighter profiles with class/theme, loadout, anatomy, and any starting traits/effects before turn 1.
+- Judge-created effects use a structured contract, not only narration, so their current state survives across turns.
+- Python validates dynamic parts/effects for sane names, positive values, bounded TTL/magnitude, deterministic tick behavior, and safe fallback/rejection when generated payloads are unusable.
+- Existing humanoid fights continue to work unchanged.
+- Add deterministic tests with mocked LLM/judge outputs for custom anatomy, generated fighter profiles, valid-target propagation, judge-created poison-style effects, effect expiry, invalid dynamic payload rejection, and transcript/state persistence.
+- Add creativity-focused tests or gates that prove the system allows genuinely dynamic outcomes: at minimum, a non-humanoid body plan, a body part not present in the fixed humanoid preset, and an effect not listed in the current hard-coded effect constants must survive into state and prompts.
+- Add an opt-in Codex-agent creativity gate for richer samples, where agents review generated fighter/effect artifacts and flag runs that collapse back to fixed humanoid anatomy, purely narrated effects, or repetitive low-creativity designs.
+
+## Terminal Fight Startup And Progress Feedback
+
+Addresses: ISSUE-011, ISSUE-023
+
+- [ ] Show fighter designs before combat starts and provide responsive terminal feedback while LLM calls are running. When `llmfight play` starts, render a clear pre-fight view of both fighters before turn 1, including class/theme, loadout, environment, anatomy/body parts, and starting buffs/debuffs or traits. While fighters and judges are generating, show progress feedback such as a spinner, progress bar, or phase status so the terminal does not look frozen. When available from the LLM transport or transcript metadata, surface useful token stats such as prompt tokens, completion tokens, total tokens, or tokens generated.
+
+Acceptance goals:
+
+- Non-verbose `llmfight play` shows both fighter designs before the first turn result.
+- Long-running fighter and judge phases display responsive status for the current step, such as fighter A action, fighter B action, Judge Phase 1, rolls, Judge Phase 2, applying deltas, or ticking effects.
+- Token usage is displayed or summarized when available, and omitted cleanly when the provider does not return token data.
+- Existing rich turn tables remain readable and are not duplicated by engine logs.
+- Add tests or snapshot-style coverage for the pre-fight render, progress/status hooks, token-stat formatting, and missing-token fallback behavior.

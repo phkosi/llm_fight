@@ -37,6 +37,44 @@ Live Ollama tests are skipped by default. Opt in only when Ollama is intentional
 uv run pytest -q --run-live
 ```
 
+## Playtest Loop
+
+Invoke this workflow when the user asks for the "playtest loop".
+
+Default playtest command:
+
+```bash
+uv run llmfight play
+```
+
+If the user names a config, include it explicitly:
+
+```bash
+uv run llmfight play --config <path>
+```
+
+During each playtest pass, inspect terminal output, generated transcripts, state changes, prompt behavior, gameplay logic, and user-facing responsiveness. Add bugs, regressions, security risks, test gaps, prompt failures, and gameplay-system failures to `ISSUES.md`. If an issue already exists, append new evidence to the existing entry instead of creating a duplicate.
+
+Use `DESIGN_ISSUES.md` for game design concerns that are not clearly erroneous, such as pacing problems, unclear fantasy, weak drama, boring but valid strategies, or balance concerns. Do not automatically create `TODO.md` implementation tasks from design issues unless the user asks.
+
+`ISSUES.md` issue entries should support these tracking fields:
+
+- `Status: open | tasked | resolved`
+- `Task: none | TODO.md - <section/task>`
+- `Source: playtest | codebase review | implementation review`
+- `Evidence:`
+- `Impact:`
+- `Suggested fix:`
+- `Tests:`
+
+When unresolved `ISSUES.md` entries need implementation work, use architect subagents to design tasks for `TODO.md`. Each issue-backed TODO task should include `Addresses: ISSUE-###`, implementation intent, acceptance goals, and required tests. Once a task exists, update the source issue with `Task: TODO.md - <section/task>` and mark its status as `tasked` to avoid duplicate task creation.
+
+A review subagent must review each proposed TODO task against the codebase before implementation. If the task design has problems, revise the task first. If approved, implement exactly one TODO task at a time.
+
+After implementation, give the diff to review subagents and iterate until no blocking issues remain. Before committing any codebase change, a hard gate is a 2-subagent review of the diff with both reviewers reporting no blocking issues.
+
+Continue the loop from issues to tasks to implementation to review to playtest until no actionable issues remain. If 5 consecutive playtest runs find no issues, replace the next playtest pass with a full codebase review focused on gameplay systems, logic and reasoning, and prompt strength. Add review findings to `ISSUES.md`, and add non-error design concerns to `DESIGN_ISSUES.md`.
+
 ## Project Layout
 
 - `src/llm_fight/agents.py` - async Ollama client.
