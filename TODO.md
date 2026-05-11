@@ -126,3 +126,27 @@ Acceptance goals:
 - Token usage is displayed or summarized when available, and omitted cleanly when the provider does not return token data.
 - Existing rich turn tables remain readable and are not duplicated by engine logs.
 - Add tests or snapshot-style coverage for the pre-fight render, progress/status hooks, token-stat formatting, and missing-token fallback behavior.
+
+## Effect Payload Safety Gate
+
+Addresses: ISSUE-005
+
+- [ ] Harden judge-created effect payload validation so malformed `effects_added` entries are rejected before they can become active `Effect` objects or appear in later prompts. Add a narrow `EffectSchema` used by `DeltaSchema`, plus a defensive runtime sanitizer in `FighterState.apply_delta()` for callers that bypass schema validation. This task is only a safety/crash fix: preserve the current simple known-effect behavior for `burning` and `bleeding`, allow unknown-but-safe narrative effect names to remain inert, and do not implement the broader dynamic effects registry/mechanics system yet.
+
+Acceptance goals:
+
+- `effects_added` items are strict objects with bounded fields: safe short `name`, one required positive bounded `value` or `magnitude`, required integer `ttl` of `-1` or `1..MAX_EFFECT_TTL`, optional `type` limited to `buffs` or `debuffs`, optional short plain-text `on_apply`/`on_tick`, and optional `metadata`.
+- Missing `ttl` or missing magnitude is rejected rather than defaulted to permanent `ttl=-1` or `magnitude=1.0`.
+- `metadata` is omitted or an object with `additionalProperties: false`; for this task, allow only `targeted_part` as a short safe string matching a current body part. Reject oversized, non-string, unknown-key, or instruction-like metadata values.
+- Missing or invalid effect payloads are skipped with a warning, not coerced into permanent effects.
+- `Effect.tick()` defensively expires/removes impossible TTLs instead of raising, so old bad state or direct test construction cannot crash the fight loop.
+- Rejected effect names and text never appear in subsequent fighter or judge prompt payloads.
+- Existing valid `burning`/`bleeding` effects, magnitude alias support, permanent effects with `ttl=-1`, and humanoid fights continue to work.
+
+Required tests:
+
+- Add `EffectSchema` coverage for valid canonical effects and invalid missing name, missing TTL, `ttl=null`, non-integer TTL, `ttl=0`, `ttl<-1`, TTL above max, missing magnitude, negative/zero/oversized magnitude, unknown `type`, oversized/instruction-like names, non-object metadata, unknown metadata keys, and unknown top-level properties.
+- Add state tests proving `apply_delta()` skips invalid effects without appending buffs/debuffs; valid `value` and `magnitude` effects still append correctly; `apply_effects()` no longer crashes when an invalid TTL somehow exists.
+- Add tests rejecting instruction-like, oversized, or control-character `on_apply`, `on_tick`, and `metadata` values.
+- Add prompt/integration coverage where a malicious or invalid effect from mocked Judge Phase 2 is rejected, the next turn continues, and the rejected name/text/metadata is absent from fighter/judge prompt payloads.
+- Keep or add property-style coverage that fuzzes mixed effect payloads through `apply_delta()` and asserts no crash, no active `ttl=0` effects, and no duplicate permanent effects.

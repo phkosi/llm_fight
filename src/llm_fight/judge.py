@@ -26,6 +26,31 @@ def _effect_names(effects: list[dict[str, Any]]) -> list[str]:
     return [effect.get(C.NAME, "") for effect in effects if effect.get(C.NAME)]
 
 
+def _effect_names_text(effects: list[Any]) -> str:
+    names = []
+    for effect in effects:
+        if isinstance(effect, dict):
+            name = effect.get(C.NAME, "")
+        else:
+            name = str(effect)
+        if name:
+            names.append(name)
+    return ", ".join(names) if names else "none"
+
+
+def _current_state_reminder(fighter_a: dict[str, Any], fighter_b: dict[str, Any]) -> str:
+    temp_terms = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
+    return (
+        "Current active effects: "
+        f"Fighter A buffs={_effect_names_text(fighter_a.get(C.BUFFS, []))}, "
+        f"debuffs={_effect_names_text(fighter_a.get(C.DEBUFFS, []))}; "
+        f"Fighter B buffs={_effect_names_text(fighter_b.get(C.BUFFS, []))}, "
+        f"debuffs={_effect_names_text(fighter_b.get(C.DEBUFFS, []))}. "
+        "Temporary effects not listed here are inactive, even if recent_combat_log mentions them. "
+        f"Do not cite old {temp_terms} as current conditions unless they are listed here or created by the current action."
+    )
+
+
 def _damaged_parts(parts: dict[str, Any]) -> dict[str, Any]:
     damaged = {}
     for name, part in parts.items():
@@ -115,12 +140,15 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     """
     system_prompt_content = JUDGE_P1_SYSTEM_PROMPT
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
+    fighter_a_summary = _fighter_summary(state.get(C.FIGHTER_A, {}))
+    fighter_b_summary = _fighter_summary(state.get(C.FIGHTER_B, {}))
     user_content = {
-        f"fighter_{C.FIGHTER_A}_state_summary": _fighter_summary(state.get(C.FIGHTER_A, {})),
-        f"fighter_{C.FIGHTER_B}_state_summary": _fighter_summary(state.get(C.FIGHTER_B, {})),
+        f"fighter_{C.FIGHTER_A}_state_summary": fighter_a_summary,
+        f"fighter_{C.FIGHTER_B}_state_summary": fighter_b_summary,
         f"{C.ATTEMPT}_{C.FIGHTER_A}": attemptA,
         f"{C.ATTEMPT}_{C.FIGHTER_B}": attemptB,
         "recent_combat_log": recent_log,
+        "current_state_reminder": _current_state_reminder(fighter_a_summary, fighter_b_summary),
     }
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
 
@@ -161,6 +189,10 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
     # user_content already prepared and passed as p2_input_state, merge with rolls
     user_payload = {**p2_input_state, C.SUCCESSFUL_ROLLS: rolls}
+    user_payload["current_state_reminder"] = _current_state_reminder(
+        p2_input_state.get("fighter_A", {}),
+        p2_input_state.get("fighter_B", {}),
+    )
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
 
     messages = [system, user]

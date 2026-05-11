@@ -31,16 +31,26 @@ def test_combat_turn_to_text():
         turn=3,
         attempt_A="strike",
         attempt_B="parry",
-        judge_p1={"judgement_text": "A hits"},
+        judge_p1={
+            "judgement_text": "A hits",
+            "attempt_A_valid": True,
+            "attempt_A_prob": "0.8",
+            "attempt_B_valid": False,
+            "attempt_B_prob": "0.1",
+            "explanation": "The parry starts too late.",
+        },
         judge_p2={C.NARRATION: "A wounds B"},
     )
 
     text = turn.to_text()
     assert "Turn 3" in text
-    assert "A: strike" in text
-    assert "B: parry" in text
-    assert "Judge: A hits" in text
-    assert "Narration: A wounds B" in text
+    assert "Fighter A attempt: strike" in text
+    assert "Fighter B attempt: parry" in text
+    assert "Judge ruling: A hits" in text
+    assert "Fighter A: valid, success p=0.8" in text
+    assert "Fighter B: invalid, success p=0.1" in text
+    assert "Reasoning: The parry starts too late." in text
+    assert "Outcome: A wounds B" in text
 
 
 def test_combat_turn_to_simple_text():
@@ -59,8 +69,9 @@ def test_combat_turn_to_simple_text():
     text = turn.to_simple_text()
     lines = text.splitlines()
     assert lines[0].startswith("Turn 4")
-    assert "A: swing" in lines[1]
-    assert "B: block" in lines[2]
-    assert any("Judge: A misses" in l for l in lines)
-    assert any("Narration: B blocks" in l for l in lines)
+    assert "Fighter A attempt: swing" in lines[1]
+    assert "Fighter B attempt: block" in lines[2]
+    assert any("Judge ruling:" in l for l in lines)
+    assert any("A misses" in l for l in lines)
+    assert any("Outcome: B blocks" in l for l in lines)
     assert any("Status changes:" in l and "B unconscious" in l for l in lines)

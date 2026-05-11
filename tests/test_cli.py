@@ -4,7 +4,9 @@ from llm_fight.cli import app
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 from click import ClickException
+from logging import CRITICAL
 from llm_fight.engine import constants as C
+from llm_fight.engine.combat_log import CombatLog, CombatTurn
 
 
 def test_cli_help():
@@ -103,6 +105,71 @@ def test_cli_play_simple_output_no_rich():
         return_log=True,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
+
+
+def test_cli_play_simple_output_separates_turn_phases():
+    runner = CliRunner()
+    log = CombatLog()
+    log.append(
+        CombatTurn(
+            turn=1,
+            attempt_A="A raises a shield",
+            attempt_B="B throws smoke",
+            judge_p1={
+                "judgement_text": "The shield is ready before the smoke spreads.",
+                "attempt_A_valid": True,
+                "attempt_A_prob": "0.8",
+                "attempt_B_valid": True,
+                "attempt_B_prob": "0.4",
+            },
+            judge_p2={C.NARRATION: "A keeps their footing while B gains partial cover."},
+        )
+    )
+    with (
+        patch(
+            "llm_fight.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: C.DRAW, C.LOG_TURN: "1"}, log)),
+        ),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["play", "--simple-output"])
+
+    assert result.exit_code == 0
+    assert "Fighter A attempt: A raises a shield" in result.output
+    assert "Fighter B attempt: B throws smoke" in result.output
+    assert "Judge ruling:" in result.output
+    assert "The shield is ready before the smoke spreads." in result.output
+    assert "Outcome: A keeps their footing while B gains partial cover." in result.output
+    assert result.output.index("Fighter B attempt") < result.output.index("Judge ruling:")
+    assert result.output.index("Judge ruling:") < result.output.index("Outcome:")
+
+
+def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_enabled(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "logs.ini"
+    cfg.write_text("[General]\nlog_combat_turns = true\n")
+    log = MagicMock(turns=[])
+
+    from llm_fight import config as config_mod
+
+    original = config_mod.CONFIG
+    with (
+        patch("llm_fight.engine.logger.update_logger_level") as mock_update,
+        patch("llm_fight.engine.logger.logger") as mock_logger,
+        patch(
+            "llm_fight.simulation._single_fight",
+            new=AsyncMock(return_value=({C.WINNER: C.DRAW, C.LOG_TURN: "1"}, log)),
+        ),
+        patch("llm_fight.cli.render") as mock_render,
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        mock_render.RICH_AVAILABLE = True
+        result = runner.invoke(app, ["play", "--config", str(cfg)])
+
+    assert result.exit_code == 0
+    mock_update.assert_called_once()
+    mock_logger.setLevel.assert_called_once_with(CRITICAL)
+    config_mod.CONFIG = original
 
 
 def test_cli_simulate(tmp_path):

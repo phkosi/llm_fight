@@ -6,10 +6,14 @@ Pain: {pain_desc}   Exhaustion: {exhaustion_desc}   Heat: {heat_desc}
 Active effects: {effects_list}
 Last {turn_window} turns:
 {recent_log}
+Current state reminder: active effects right now are {effects_list}. Older temporary effects not listed here have ended.
+{temporary_effect_instruction}
 Your equipment: {loadout}
 ---
 Respond with {sentence_limit} sentence describing what you attempt next. <= {word_limit} words.
-Use only environment features that are explicitly established above or in the recent log.
+Current state is authoritative. Treat the recent log as history, not active state.
+Do not rely on temporary effects from the recent log unless they are still listed in Active effects.
+Use only the current environment, active effects, equipment, and durable changes established above.
 Do not invent walls, pillars, corridors, shadows, cover, terrain, or objects.
 (No outcome narration. Raw text only.)
 """
@@ -23,6 +27,8 @@ Your role is to determine the validity of each attempt and the probability of it
 Consider the fighters' states, their proposed actions, and the general context of a duel.
 You are also provided with a short snippet of the recent combat log under 'recent_combat_log'.
 Each fighter summary includes class, loadout, environment, active effects, valid_target_parts, and damaged_parts.
+Current fighter summaries are authoritative. Treat the recent combat log as history, not active state.
+Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still listed in buffs/debuffs or are created by the current attempts.
 Return JSON only, adhering to the following schema:
 {
   "judgement_text": "string (your overall assessment of the turn, qualitatively describing the interaction of attempts)",
@@ -40,6 +46,8 @@ JUDGE_P2_SYSTEM_PROMPT = """
 You are the combat narrator. Based on the fighters' states (fighter_A, fighter_B), the attempted actions (attempt_A, attempt_B), the full previous phase result (p1_result), the outcomes of the dice rolls (successful_rolls), and the recent combat log (recent_combat_log, combat_log_turns), narrate the events of the turn.
 Then, determine the precise changes (delta) to each fighter's state as a result of the turn's actions.
 Use only body parts from the fighters' valid_target_parts lists. Use "fire" for burn wounds, not "burning".
+Current fighter states and active effects are authoritative. Treat the recent combat log as history, not active state.
+Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still present in the current fighter states or are created by a successful current action.
 Output JSON ONLY, adhering to the following schema:
 {
   "narration": "string (a vivid, engaging description of what happened this turn based on successful actions and context)",

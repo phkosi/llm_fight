@@ -14,6 +14,7 @@ from .logger import logger
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _EMPTY_ACTION_FALLBACK = "I keep my guard up and look for an opening."
+_TEMPORARY_EFFECT_TERMS = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
 
 
 def _clean_fighter_action(text: str) -> str:
@@ -22,6 +23,18 @@ def _clean_fighter_action(text: str) -> str:
     if cleaned.lower().startswith("<think>"):
         return ""
     return cleaned
+
+
+def _temporary_effect_instruction(effects_list: str) -> str:
+    if effects_list == "none":
+        return (
+            f"No temporary effects are active right now. Do not describe {_TEMPORARY_EFFECT_TERMS} "
+            "as current conditions unless your new action creates them."
+        )
+    return (
+        f"Only these temporary effects are active right now: {effects_list}. "
+        f"Do not describe other old {_TEMPORARY_EFFECT_TERMS} as current conditions."
+    )
 
 
 def describe_pain(pain_level: int) -> str:
@@ -120,6 +133,7 @@ async def get_fighter_attempt(
         exhaustion_desc=exhaustion_desc,
         heat_desc=heat_desc,
         effects_list=effects_list,
+        temporary_effect_instruction=_temporary_effect_instruction(effects_list),
         turn_window=turn_window,
         recent_log=current_recent_log,
         loadout=loadout,

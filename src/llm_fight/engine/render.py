@@ -12,6 +12,7 @@ from . import constants as C
 try:
     from rich.table import Table
     from rich.console import Console as RichConsole
+    from rich.text import Text
 
     RICH_AVAILABLE = True
     Console = RichConsole
@@ -33,11 +34,21 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
             return turn.to_simple_text()
         return turn.to_text()
 
-    table = Table(title=f"Turn {turn.turn}")
-    table.add_column("Fighter A", style="cyan")
-    table.add_column("Fighter B", style="magenta")
-    table.add_row(turn.attempt_A, turn.attempt_B)
-    table.add_row(turn.judge_p1.get("judgement_text", ""), turn.narration)
+    table = Table(title=f"Turn {turn.turn}", show_lines=True)
+    table.add_column("Phase", style="bold", no_wrap=True)
+    table.add_column("Details")
+    if turn.attempt_A:
+        table.add_row("Fighter A attempt", Text(turn.attempt_A, style="cyan"))
+    if turn.attempt_B:
+        table.add_row("Fighter B attempt", Text(turn.attempt_B, style="magenta"))
+    judge = turn.judge_ruling_text()
+    if judge:
+        table.add_row("Judge ruling", Text(judge, style="yellow"))
+    if turn.narration:
+        table.add_row("Outcome", Text(turn.narration, style="green"))
+    changes = turn.status_changes_text()
+    if changes:
+        table.add_row("Status changes", changes)
     return table
 
 

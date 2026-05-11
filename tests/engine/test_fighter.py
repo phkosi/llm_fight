@@ -1,7 +1,7 @@
 import pytest
 from llm_fight.engine.fighter import describe_pain, describe_exhaustion, describe_heat
 from unittest.mock import patch, AsyncMock, MagicMock
-from llm_fight.engine.fighter import get_fighter_attempt
+from llm_fight.engine.fighter import _temporary_effect_instruction, get_fighter_attempt
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
 from llm_fight.engine import constants as C
@@ -75,6 +75,21 @@ def test_describe_exhaustion(exhaustion_level, expected_description):
 )
 def test_describe_heat(heat_level, expected_description):
     assert describe_heat(heat_level) == expected_description
+
+
+def test_temporary_effect_instruction_blocks_stale_effects_when_none_active():
+    instruction = _temporary_effect_instruction("none")
+
+    assert "No temporary effects are active right now" in instruction
+    assert "smoke" in instruction
+    assert "unless your new action creates them" in instruction
+
+
+def test_temporary_effect_instruction_limits_effects_to_active_list():
+    instruction = _temporary_effect_instruction("obscured")
+
+    assert "Only these temporary effects are active right now: obscured" in instruction
+    assert "Do not describe other old smoke" in instruction
 
 
 @pytest.fixture
@@ -171,6 +186,7 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
             exhaustion_desc=expected_exhaustion_desc,
             heat_desc=expected_heat_desc,
             effects_list=expected_effects_list,
+            temporary_effect_instruction=_temporary_effect_instruction(expected_effects_list),
             turn_window=turn_window_input,
             recent_log=recent_log_input,
             loadout=expected_loadout,

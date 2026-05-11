@@ -64,6 +64,8 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert user_payload[f"{C.ATTEMPT}_{C.FIGHTER_A}"] == MOCK_ATTEMPT_A
     assert user_payload[f"{C.ATTEMPT}_{C.FIGHTER_B}"] == MOCK_ATTEMPT_B
     assert user_payload["recent_combat_log"] == "Turn 1"
+    assert "current_state_reminder" in user_payload
+    assert "Temporary effects not listed here are inactive" in user_payload["current_state_reminder"]
 
     mock_guarded_call.assert_called_once()
     assert mock_guarded_call.call_args[0][1] == JudgeP1Schema
@@ -117,6 +119,8 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert user_payload[C.SUCCESSFUL_ROLLS] == MOCK_ROLLS
     # Check if other parts of MOCK_P2_INPUT_STATE are present (they are merged)
     assert user_payload["fighter_A"] == MOCK_FIGHTER_A_STATE
+    assert "current_state_reminder" in user_payload
+    assert "Temporary effects not listed here are inactive" in user_payload["current_state_reminder"]
 
     chat_call_kwargs = mock_chat.call_args[1]
     from llm_fight.utils.token_counter import compute_completion_tokens

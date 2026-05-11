@@ -71,11 +71,11 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-005: Unvalidated effect payloads can crash, inject prompts, or become permanent junk state
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Effect Payload Safety Gate
 - Source: codebase review
 - Area: Security, validation, effects
-- Evidence: `effects_added` accepts any object in `src/llm_fight/validation.py:78`; `apply_delta()` trusts raw `name`, `value`/`magnitude`, `ttl`, `on_apply`, `on_tick`, and `metadata` in `src/llm_fight/state.py:321`; active effect names are replayed into prompts in `src/llm_fight/engine/fighter.py:107` and `src/llm_fight/judge.py:82`.
+- Evidence: `effects_added` accepts any object in `src/llm_fight/validation.py:78`; `apply_delta()` trusts raw `name`, `value`/`magnitude`, `ttl`, `on_apply`, `on_tick`, and `metadata` in `src/llm_fight/state.py:321`; active effect names are replayed into prompts in `src/llm_fight/engine/fighter.py:107` and `src/llm_fight/judge.py:82`. Playtest loop `transcripts\playtest_loop_20260512_010010` ran 34 `uv run llmfight play` attempts over 614.1 seconds; runs 12, 13, and 20 crashed with `TypeError: '>' not supported between instances of 'NoneType' and 'int'` at `Effect.tick()` in `src/llm_fight/state.py:77` after `apply_effects()`.
 - Impact: Schema-valid effects can crash ticking with non-integer TTLs, reduce stats with negative magnitudes, persist instruction-like names with `ttl=-1`, or silently become permanent inert typo-effects.
 - Suggested fix: Add strict `EffectSchema` plus defensive runtime validation: safe identifier/name length, bounded positive magnitude, `ttl == -1 or ttl >= 1` with max, known type enum, limited metadata keys, `additionalProperties: false`.
 - Tests: Reject missing name, non-integer TTL, `ttl=0`, `ttl<-1`, negative magnitude, oversized/instruction-like names, non-object metadata, and unknown properties. Add integration coverage that rejected effects do not reach next prompts.
@@ -141,7 +141,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 - Task: TODO.md - Terminal Fight Startup And Progress Feedback
 - Source: codebase review
 - Area: UX, terminal rendering
-- Evidence: `play` awaits `_single_fight(... return_log=True)` at `src/llm_fight/cli.py:232`, then prints all turn tables afterward at `src/llm_fight/cli.py:240`.
+- Evidence: `play` awaits `_single_fight(... return_log=True)` at `src/llm_fight/cli.py:232`, then prints all turn tables afterward at `src/llm_fight/cli.py:240`. Playtest loop `transcripts\playtest_loop_20260512_010010` captured non-crashing runs where the first visible output line was `Turn 1`, with no pre-fight fighter design view or progress/status surface before the turn table.
 - Impact: Slow local LLM runs look frozen for the full fight.
 - Suggested fix: Add an `on_turn` callback or async event stream, render each turn as it completes, and show Rich status/spinners for fighter/judge phases.
 - Tests: Fake a multi-turn fight/event stream and assert turn 1 renders before turn 2 completes.

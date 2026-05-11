@@ -214,7 +214,6 @@ def play(
 ):
     """Run a single fight and print the winner."""
     from logging import CRITICAL
-    from . import config as config_mod
     from .engine.logger import update_logger_level, logger
 
     if not render.RICH_AVAILABLE and not simple_output:
@@ -223,8 +222,7 @@ def play(
     _load_config(config)
     _apply_simulation_overrides(max_turns=max_turns)
     update_logger_level()
-    log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
-    if not verbose and not log_turns:
+    if not verbose:
         logger.setLevel(CRITICAL)
 
     _run_async(ping_ollama())
