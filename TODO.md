@@ -150,3 +150,411 @@ Required tests:
 - Add tests rejecting instruction-like, oversized, or control-character `on_apply`, `on_tick`, and `metadata` values.
 - Add prompt/integration coverage where a malicious or invalid effect from mocked Judge Phase 2 is rejected, the next turn continues, and the rejected name/text/metadata is absent from fighter/judge prompt payloads.
 - Keep or add property-style coverage that fuzzes mixed effect payloads through `apply_delta()` and asserts no crash, no active `ttl=0` effects, and no duplicate permanent effects.
+
+## P2 Authorization And Terminal Outcome Gate
+
+Addresses: ISSUE-003, ISSUE-004
+
+- [ ] Add a deterministic post-Phase-2 authorization gate before `FighterState.apply_delta()` and before accepting `fight_end` or `winner`. Python state remains authoritative: judge-declared endings are ignored unless authorized deltas and effect ticks produce terminal fighter state.
+
+Acceptance goals:
+
+- If no fighter has both a valid Phase 1 attempt and a successful roll, all Phase 2 deltas, `fight_end`, and `winner` are stripped before state mutation.
+- Mixed-success turns require source attribution for Phase 2 consequences; consequences from invalid or failed actions are dropped.
+- If both fighters remain `fighting` after authorized deltas and effect ticks, judge-only `fight_end=true` and `winner` are logged and ignored.
+- Existing state-terminal outcomes still override contradictory judge winners.
+
+Required tests:
+
+- Valid attempts with both rolls false plus Phase 2 wounds/status/winner cause no mutation and no fight end.
+- One successful fighter plus one failed or invalid fighter drops failed-source consequences while applying successful-source consequences.
+- Empty delta plus `fight_end=true, winner=A` continues when both fighters remain `fighting`.
+- Existing inconsistent-judge-winner coverage still proves post-delta state outcome wins.
+
+## Effect Creation Turn Boundary
+
+Addresses: ISSUE-006
+
+- [ ] Define effect timing so effects created during turn N survive into the next fighter and judge prompt before their first tick. Newly created burn, bleed, stun, or similar effects should not apply mechanics or expire in the same post-delta tick that created them.
+
+Acceptance goals:
+
+- Effects created by Phase 2 deltas or wound side effects are present in `state_after` and in turn N+1 prompt payloads.
+- A `ttl=1` effect created on turn N is observable on turn N+1, then expires after its first eligible tick.
+- Burning or bleeding created by same-turn damage does not add extra same-turn damage or stat loss beyond the authorized Phase 2 delta.
+- Pre-existing effects continue ticking once per turn.
+
+Required tests:
+
+- Phase 2 adds `stunned` with `ttl=1`; next-turn fighter and judge inputs include it.
+- Fire wound creates burning; immediate same-turn effect tick does not add burn damage, but the next eligible tick does.
+- Existing direct `apply_effects()` tests distinguish pre-existing effects from newly created effects.
+
+## Status Invariants And Monotonic Status Changes
+
+Addresses: ISSUE-007, ISSUE-019
+
+- [ ] Make fighter status invariants run after every state-mutating path and make judge-driven status changes monotonic by default. `fighting -> unconscious -> dead` is allowed; `dead` or `unconscious` cannot be revived to `fighting` through an ordinary Phase 2 delta.
+
+Acceptance goals:
+
+- Damaging severed or destroyed parts still rechecks pain/death invariants before returning.
+- `status_change` can worsen status but cannot downgrade `dead` or `unconscious` without a future explicit recovery mechanic.
+- Direct status changes and invariant-derived status changes use the same severity ordering.
+- Invalid or downgrade status attempts are logged and leave state unchanged.
+
+Required tests:
+
+- Sever a limb, then hit it again enough to cross `MAX_PAIN_BEFORE_DEATH`; fighter becomes `dead`.
+- Destroy a non-severable part, then hit it again enough to cross the death threshold; fighter becomes `dead`.
+- `dead -> fighting`, `dead -> unconscious`, and `unconscious -> fighting` deltas are rejected.
+- `fighting -> unconscious` and `unconscious -> dead` still work.
+
+## Per-Fight RNG For Concurrent Batch Runs
+
+Addresses: ISSUE-009
+
+- [ ] Replace batch use of module-global RNG with an isolated per-fight RNG derived from `(batch_seed, run_index)`, and pass that RNG through roll resolution and effect ticking.
+
+Acceptance goals:
+
+- `_single_fight()` accepts an optional fight-local RNG and uses it for success rolls.
+- `FighterState.apply_effects()` and random effect-layer selection use the fight-local RNG instead of global `choice()`.
+- `run_batch()` derives stable per-run seeds before scheduling concurrent tasks.
+- CSV rows are written in stable run order while still flushing rows incrementally when the next ordered result is available.
+- Existing public `rng.py` helpers remain for compatibility unless all callers are migrated.
+
+Required tests:
+
+- Run the same concurrent batch twice with the same seed and varied fake async delays; ordered CSV rows are identical.
+- Changing the base seed changes deterministic roll outcomes.
+- Per-fight RNG prevents one slow fight from changing another fight's roll sequence.
+- Existing zero-run, error-row, progress-callback, and incremental-flush tests are preserved or intentionally updated.
+
+## Prompt Budget Guardrails And Context Trimming
+
+Addresses: ISSUE-008
+
+- [ ] Prevent oversized fighter and judge prompts from degrading into 1-token generations by adding phase-aware prompt budgets, deterministic combat-log trimming, and clear pre-transport failures when the required prompt cannot fit.
+
+Acceptance goals:
+
+- Over-budget prompts never call `chat()` with `max_tokens=1`.
+- Fighter, Judge Phase 1, Judge Phase 2, and Phase 2 repair calls each keep a documented minimum completion reserve.
+- Long `recent_combat_log` payloads are reduced deterministically while preserving current fighter state, attempts, rolls, valid target parts, and current effect reminders.
+- Prompt-budget failures surface as clear CLI errors, not retry storms or silent no-op turns.
+- Existing normal-size prompts keep their current token caps.
+
+Required tests:
+
+- `compute_completion_tokens` or its replacement raises or returns a typed over-budget result instead of clamping to `1`.
+- Fighter, Judge Phase 1, Judge Phase 2, and repair paths do not call `chat()` when required non-log content alone exceeds budget.
+- Long combat logs are trimmed and still leave at least the phase minimum completion budget.
+- CLI converts the typed budget error into an actionable message mentioning context, prompt size, and log-window settings.
+
+## Batch Config Validation And Failure Exit Semantics
+
+Addresses: ISSUE-010, ISSUE-025
+
+- [ ] Fail fast on invalid batch settings and make simulation error rows affect CLI exit status unless the user explicitly opts into continuing with an error-producing CSV.
+
+Acceptance goals:
+
+- `concurrent_runs=0` and negative concurrency fail immediately with a clear config or CLI error.
+- Negative `runs` fails at config/runtime boundaries as well as the existing CLI override guard.
+- Batch CSV writing remains incremental for completed runs.
+- A batch with all failed rows does not print only `Simulation saved` and exit 0.
+- Add an explicit opt-in such as `--continue-on-error` for CI/playtest cases that want a CSV even with error rows.
+- Verbose summary output includes total runs, completed rows, and error rows.
+
+Required tests:
+
+- `run_batch()` with `concurrent_runs=0` and `-1` raises quickly and does not hang or start `_single_fight`.
+- `runs=0` still writes a header-only CSV and exits successfully.
+- CLI simulate exits nonzero when every mocked fight fails.
+- CLI simulate behavior with mixed success/error rows is covered.
+- `--continue-on-error` exits 0 but prints an error-row warning.
+
+## Transport Privacy And Endpoint Mode Safety
+
+Addresses: ISSUE-012, ISSUE-031
+
+- [ ] Redact transport logs, make proxy use explicit for local endpoints, and split native Ollama behavior from OpenAI-compatible endpoint behavior.
+
+Acceptance goals:
+
+- Retry/error logs do not contain raw prompt payloads or sentinel secrets.
+- Localhost, `127.0.0.1`, and `::1` endpoints do not honor `HTTP_PROXY`/`HTTPS_PROXY` unless explicitly opted in.
+- Remote endpoint proxy behavior is documented and configurable.
+- `/v1/chat/completions` endpoints are not rejected just because `/api/tags` is unavailable.
+- Native-only options are sent only to native Ollama and produce one clear warning/doc note in OpenAI-compatible mode.
+- README, docs, and `llmfight.ini.example` document endpoint modes and proxy opt-in.
+
+Required tests:
+
+- Force 5xx, client error, timeout, and unexpected exception with sentinel prompt text; captured logs omit the sentinel and raw `messages`.
+- `ClientSession` receives `trust_env=False` for loopback by default.
+- Explicit proxy opt-in flips `trust_env=True`.
+- Mock `/v1/chat/completions` plus missing `/api/tags`; `ping_ollama()` succeeds through the compatible health path.
+- `/v1` payloads omit native `options.num_ctx`/`keep_alive` and emit the expected warning.
+
+## P2 Target Validation Gate
+
+Addresses: ISSUE-013
+
+- [ ] Post-validate Judge Phase 2 wound targets against each fighter's canonical body parts before applying deltas.
+
+Acceptance goals:
+
+- Unknown Phase 2 wound targets never reach `apply_damage_to_part()`.
+- Known aliases are accepted and rewritten to canonical part names.
+- A Phase 2 result with only invalid target damage cannot end the fight or award a winner.
+- Mixed valid/invalid wound lists apply only the valid canonicalized wounds.
+- Sanitization warnings can be surfaced later by render/transcript work without replaying unsafe raw text into prompts.
+- Existing humanoid valid-target behavior remains unchanged.
+
+Required tests:
+
+- Phase 2 returns `targeted_part="wing"` for a humanoid plus `fight_end=true`; no damage, no terminal winner, and a warning marker result.
+- Phase 2 returns `targeted_part="neck"`; it canonicalizes to `head` and applies damage.
+- Mixed valid and invalid wounds apply only the valid wound.
+- Invalid target text does not appear in subsequent fighter/judge prompt payloads except as a redacted warning code if metadata is carried forward.
+
+## P2 Fallback Visibility And Fail-Open Policy
+
+Addresses: ISSUE-024
+
+- [ ] Make Judge Phase 2 no-op fallback explicit in state, output, transcripts, and batch accounting, with a configurable fail-open/fail-closed policy.
+
+Acceptance goals:
+
+- Repeated Phase 2 parse/validation failures are visible by default in `play` output and verbose `simulate` summaries.
+- Marked fallback no-op turns remain mechanically safe: no delta, no winner, no fight end.
+- Batch results can count fallback turns separately from hard `winner=error` rows.
+- A fail-closed policy turns repeated Phase 2 failure into a fight error instead of a no-op.
+- Existing qwen-style fail-open behavior remains available when explicitly configured.
+
+Required tests:
+
+- Mock repeated Phase 2 failures and assert the recorded turn has `fallback_used=true` metadata.
+- Render/simple-output tests show a compact warning marker for fallback turns.
+- Default policy test proves the run continues but is visibly marked.
+- Fail-closed policy test proves the fight/batch returns an error row or raises through CLI as designed.
+- Batch summary tests include fallback count and hard error count separately.
+
+## Layer Health And Anatomy Consequence Policies
+
+Addresses: ISSUE-017, ISSUE-020
+
+- [ ] Split tissue maximum durability from mutable combat health, then replace coarse `is_vital` outcome logic with explicit anatomy consequence policies.
+
+Acceptance goals:
+
+- Damage lowers `current_hp` and never changes `max_hp`.
+- Existing humanoid fights serialize cleanly and run without schema or prompt regressions.
+- Status changes come from explicit consequence policies, not from counting all vital parts.
+- Heart and head destruction produce the chosen fatal outcome immediately.
+- Single-eye, both-eye, and leg destruction produce explicit non-death consequences visible in state.
+
+Required tests:
+
+- State tests for `current_hp` mutation, `max_hp` stability, overkill clamping, destruction, severing, and serialization.
+- Anatomy tests for initialized `current_hp == max_hp` and humanoid consequence tags.
+- Consequence tests for heart, head, torso, one eye, both eyes, one leg, and both legs.
+- Property tests updated so HP monotonicity checks `current_hp`, while `max_hp` remains stable.
+
+## Anatomy-Driven Bleeding, Burning, And Layer Accuracy
+
+Addresses: ISSUE-016, ISSUE-029
+
+- [ ] Make humanoid bleed/burn anatomy meaningful and make burn tick logging match the layer that actually takes damage.
+
+Acceptance goals:
+
+- Default piercing/slashing damage creates targeted bleeding on appropriate humanoid parts.
+- Parts with `bleed_rate = 0` do not auto-create bleeding.
+- A custom high-`burn_rate` part takes more burn tick damage than a normal part under the same effect.
+- Burn logs/debug reports identify the exact layer whose HP changed.
+- Burning/bleeding effects keep stable targeted metadata for later prompt and removal work.
+
+Required tests:
+
+- Default humanoid bleeding from piercing and slashing without manually setting `bleed_rate`.
+- No bleeding on a zero-bleed part.
+- Burn tick tests comparing normal and high-burn-rate parts.
+- Multilayer burn test proving the logged or returned layer is the mutated layer.
+- Regression test that a burning tick does not create duplicate burning effects for the same part.
+
+## Targeted Effect Removal And Effect Identity
+
+Addresses: ISSUE-018
+
+- [ ] Replace name-only effect removal with structured targeted removal while preserving explicit legacy remove-all behavior.
+
+Acceptance goals:
+
+- Removing bleeding from one part leaves bleeding on other parts intact.
+- Removing burning from one limb leaves burning on another limb intact.
+- Name-only removal still removes all matching effects and is documented as remove-all.
+- Buff and debuff effects with the same name can be removed separately when `type` is supplied.
+- Malformed removal objects are rejected by schema or skipped safely before state mutation.
+
+Required tests:
+
+- Validation tests for valid string removals, valid structured removals, invalid unknown fields, missing `name`, bad `type`, and unsafe `targeted_part`.
+- State tests with two bleeding effects on different parts and one targeted removal.
+- State tests for same-name buff/debuff removal by `type`.
+- Judge prompt/schema tests proving `effects_removed` documents structured targeted removal.
+- Property coverage for mixed add/remove deltas with no accidental broad deletion.
+
+## Prompt State Context And Environment-Scoped Creativity
+
+Addresses: ISSUE-014, ISSUE-015, ISSUE-030
+
+- [ ] Add shared compact fighter-state summary helpers for fighter prompts and Judge Phase 1, and rephrase environment guardrails so configured environment/equipment/effect features are usable while invented open-arena cover remains forbidden.
+
+Acceptance goals:
+
+- Fighter prompts include actionable opponent state, anatomy, damage, and effect metadata without relying on recent narration.
+- Judge Phase 1 payload includes partial injuries and structured effect details, not effect names only.
+- Explicit environments like pillars, smoke, or cover are allowed when configured; open arena prompts still forbid invented cover.
+- Prompt payloads stay compact enough for existing context-budget behavior.
+
+Required tests:
+
+- Prompt tests cover opponent loadout, custom/manual body parts, partial eye/limb damage, severed parts, effect TTL/magnitude/target, open arena guardrails, and explicit-feature environments.
+- Update `docs/Design_doc.md` or README prompt/state-summary contract if the payload shape changes.
+
+## Turn Diff And Roll Transparency
+
+Addresses: ISSUE-021, ISSUE-022
+
+- [ ] Store roll outcomes on `CombatTurn` and render visible mechanical turn diffs for roll success, stat changes, wounds, body-part changes, effects, and status changes.
+
+Acceptance goals:
+
+- Rich and simple `play` output shows whether each action succeeded or failed.
+- Mechanical changes are visible even when narration is vague.
+- No-op turns are distinguishable from turns with hidden state changes.
+- Existing turn tables remain readable and non-duplicated.
+
+Required tests:
+
+- Simulation tests prove `CombatTurn` stores roll metadata.
+- Combat-log/render snapshot-style tests cover rolls, wounds, stat deltas, effects, status changes, and no-op turns.
+- README usage/output examples are updated if the visible play format changes.
+
+## Fight-Scoped JSONL Trace Transcripts
+
+Addresses: ISSUE-026
+
+- [ ] Replace isolated prompt/response transcript fragments with one fight-scoped JSONL trace containing ordered events for each fight.
+
+Acceptance goals:
+
+- With `save_transcripts = true`, each fight produces one readable ordered trace file.
+- Every event has fight id, turn, phase, and relevant fighter metadata.
+- Failed or interrupted fights still preserve events written so far.
+- `save_transcripts = false` remains silent.
+- Existing transcript tests either remain compatible through a wrapper or are migrated cleanly.
+
+Required tests:
+
+- Transcript tests for one-file-per-fight, event order, metadata fields, disabled mode, and failure-path persistence.
+- Mocked simulation coverage proving rolls, deltas, and states appear in the trace.
+- README/docs document the trace format and config.
+
+## Configured Fighter Display Names
+
+Addresses: ISSUE-027
+
+- [ ] Implement config `name` as an end-to-end fighter display name while preserving stable ids `A` and `B` for machine logic.
+
+Acceptance goals:
+
+- `llmfight.ini.example` names appear during play.
+- Prompts make both display name and stable Fighter A/B id clear.
+- Missing names fall back to the fighter id without changing behavior.
+- Result objects and CSV winner ids remain stable, with display names added only where safe.
+
+Required tests:
+
+- Config tests for `name` loading and fallback.
+- `FighterState.from_preset`, prompt, render, transcript, and CLI winner-output tests.
+- README/config docs explain fighter names versus ids.
+
+## Runtime Config And RNG Isolation
+
+Addresses: ISSUE-028
+
+- [ ] Introduce scoped runtime ownership for config and randomness. Prefer passing an explicit runtime context/config/RNG through simulation entry points and helpers; at minimum, make CLI config replacement/restoration exception-safe and seed RNG explicitly after config loading.
+
+Acceptance goals:
+
+- Multiple CLI invocations in one process do not leak config overrides.
+- RNG imported before a config swap still uses the active entry-point seed.
+- Programmatic callers can run with explicit config without mutating global state permanently.
+- Existing simple CLI usage remains unchanged.
+
+Required tests:
+
+- `CliRunner` tests invoking different configs sequentially in one process.
+- RNG/config import-order regression tests.
+- Simulation tests for deterministic seeded runs after config load.
+- Update `docs/Design_doc.md` if a runtime-context API is introduced.
+
+## Live/Perf Gating And Installed-Package Test Workflow
+
+Addresses: ISSUE-032, ISSUE-035
+
+- [ ] Centralize live/perf test gating and stop bypassing installed package behavior.
+
+Acceptance goals:
+
+- `uv sync --locked --dev && uv run pytest -q` collects and runs without the `live` extra.
+- `--run-live` runs quick live smoke tests only when `API_URL` is set.
+- Heavy perf tests require an explicit separate opt-in such as `--run-perf`.
+- CI exercises the installed package path and console script behavior.
+
+Required tests:
+
+- Add pytester-style tests for live/perf marker gating if practical.
+- Add packaging smoke coverage for import and `llmfight --help` without manual `sys.path` insertion.
+- Update README, AGENTS live-test commands, and CI notes.
+
+## Current Gameplay And Retry Contract Docs
+
+Addresses: ISSUE-033
+
+- [ ] Document the current runtime contracts honestly until the larger gameplay/UX tasks land: fixed humanoid anatomy, mostly prose non-humanoid concepts, post-fight `play` output until streaming progress is implemented, and capped Judge Phase 2 no-op fallback behavior.
+
+Acceptance goals:
+
+- New users are not led to expect custom anatomy, live turn streaming, or unlimited retry recovery.
+- Troubleshooting distinguishes stronger-model/token advice from capped Phase 2 fallback behavior.
+- Docs remain easy to update once the corresponding TODO items are implemented.
+
+Required tests:
+
+- README Known Limitations and Troubleshooting updates.
+- `docs/Design_doc.md` current-contract note.
+- Optional docs consistency check for referenced commands/config keys.
+
+## Library-Friendly Logger Setup
+
+Addresses: ISSUE-034
+
+- [ ] Make package logging library-friendly by using a `NullHandler` by default, avoiding stdout handlers at import time, checking direct `logger.handlers` rather than `hasHandlers()`, and configuring CLI-owned handlers to stderr only when running CLI commands.
+
+Acceptance goals:
+
+- Importing `llm_fight` does not write to stdout or attach a visible console handler.
+- Host applications with root handlers do not suppress or duplicate package handlers unexpectedly.
+- CLI verbose/log output goes to stderr and does not corrupt normal stdout output.
+- Repeated imports or CLI invocations do not add duplicate handlers.
+
+Required tests:
+
+- Logger reload tests for root-handler, direct-handler, propagation, and duplicate-handler cases.
+- CLI tests asserting logs use stderr.
+- Update developer docs only if logging behavior or troubleshooting changes.

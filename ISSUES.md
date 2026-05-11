@@ -49,8 +49,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-003: Judge P2 deltas can bypass validity and dice rolls
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - P2 Authorization And Terminal Outcome Gate
 - Source: codebase review
 - Area: Security, simulation correctness
 - Evidence: P2 receives `successful_rolls` in `src/llm_fight/simulation.py:157`, but returned deltas are applied directly at `src/llm_fight/simulation.py:171`. `_clear_invalid_turn_result()` only clears the narrow case where both attempts are invalid and both rolls failed in `src/llm_fight/simulation.py:55`.
@@ -60,8 +60,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-004: Judge-only winners can end fights without terminal state
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - P2 Authorization And Terminal Outcome Gate
 - Source: codebase review
 - Area: Simulation correctness
 - Evidence: `_judge_outcome()` accepts `fight_end=true, winner="A"` in `src/llm_fight/simulation.py:30`; `_single_fight()` accepts judge outcome when `_status_outcome()` is `None` in `src/llm_fight/simulation.py:197`.
@@ -82,8 +82,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-006: Newly created effects tick and expire before the next turn can observe them
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Effect Creation Turn Boundary
 - Source: codebase review
 - Area: Gameplay logic, effect timing
 - Evidence: `_single_fight()` applies deltas, then immediately calls `apply_effects()` in `src/llm_fight/simulation.py:171`; `Effect.tick()` removes `ttl=1` effects in `src/llm_fight/state.py:395`.
@@ -93,8 +93,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-007: Damaging severed/destroyed parts bypasses status invariants
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Status Invariants And Monotonic Status Changes
 - Source: codebase review
 - Area: State invariants
 - Evidence: The severed/destroyed branch in `src/llm_fight/state.py:195` adds pain at line 198 and returns without `_update_status_from_invariants()`.
@@ -104,8 +104,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-008: Oversized prompts degrade into 1-token generations
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Prompt Budget Guardrails And Context Trimming
 - Source: codebase review
 - Area: LLM transport, reliability
 - Evidence: `compute_completion_tokens()` clamps over-budget prompts to at least `1` in `src/llm_fight/utils/token_counter.py:57`; default `judge_log_window` is `9999`.
@@ -115,8 +115,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-009: Global RNG makes concurrent batch runs non-reproducible
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Per-Fight RNG For Concurrent Batch Runs
 - Source: codebase review
 - Area: Simulation correctness, reproducibility
 - Evidence: `run_batch()` seeds one module-global RNG in `src/llm_fight/simulation.py:243`, then starts concurrent `_single_fight()` tasks at `src/llm_fight/simulation.py:267`; rolls consume global `rand()` after async waits.
@@ -126,8 +126,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-010: Invalid batch concurrency can hang forever
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Batch Config Validation And Failure Exit Semantics
 - Source: codebase review
 - Area: CLI/config reliability
 - Evidence: `run_batch()` reads `concurrent_runs` in `src/llm_fight/simulation.py:245` and constructs `asyncio.Semaphore(concurrency)` at line 248. With `0`, tasks block forever.
@@ -148,8 +148,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-012: Prompt payloads can leak through error logs and proxies
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Transport Privacy And Endpoint Mode Safety
 - Source: codebase review
 - Area: Security, privacy
 - Evidence: `_post_json()` logs `Payload: {payload}` on retry/failure paths in `src/llm_fight/agents.py:147`, `154`, `159`, `166`, and `169`; `ClientSession(trust_env=True)` is used for chat and ping in `src/llm_fight/agents.py:111` and `242`.
@@ -161,8 +161,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-013: P2 target validity is prompt-only
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - P2 Target Validation Gate
 - Source: codebase review
 - Area: Validation, gameplay state
 - Evidence: `targeted_part` is any string in `src/llm_fight/validation.py:67`; valid target parts are only sent as prompt/input context in `src/llm_fight/simulation.py:150`; unknown parts are warned and ignored in `src/llm_fight/state.py:184`.
@@ -172,8 +172,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-014: Fighter prompts omit opponent state, anatomy, and effect metadata
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Prompt State Context And Environment-Scoped Creativity
 - Source: codebase review
 - Area: Prompts, gameplay quality
 - Evidence: Fighter prompt generation includes acting fighter pain/exhaustion/heat/effect names/loadout in `src/llm_fight/engine/fighter.py:104`; the user prompt only says opponent is visible in `src/llm_fight/engine/fighter.py:147`.
@@ -183,8 +183,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-015: Judge Phase 1 drops partial injury and effect details
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Prompt State Context And Environment-Scoped Creativity
 - Source: codebase review
 - Area: Prompts, judge quality
 - Evidence: `_fighter_summary()` returns effect names only in `src/llm_fight/judge.py:82`; `_damaged_parts()` only reports non-intact/severed/fully depleted layers in `src/llm_fight/judge.py:54`.
@@ -194,8 +194,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-016: Default humanoid bleed/burn anatomy is mostly inert
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Anatomy-Driven Bleeding, Burning, And Layer Accuracy
 - Source: codebase review
 - Area: Gameplay mechanics
 - Evidence: `BodyPart.bleed_rate` and `burn_rate` default to `0` in `src/llm_fight/anatomy.py:24`; `compose_humanoid()` never sets them; bleeding only auto-creates when `part.bleed_rate > 0` in `src/llm_fight/state.py:268`; burn ticking ignores `burn_rate`.
@@ -205,8 +205,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-017: Vital-part consequences are too coarse
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Layer Health And Anatomy Consequence Policies
 - Source: codebase review
 - Area: Gameplay mechanics
 - Evidence: Death by anatomy requires all vital parts destroyed in `src/llm_fight/state.py:166`; one destroyed vital only causes unconsciousness in `src/llm_fight/state.py:171`; heart/head/torso are all `is_vital` in `src/llm_fight/anatomy.py:47`.
@@ -216,8 +216,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-018: Effect removal is name-only and cannot target one wound
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Targeted Effect Removal And Effect Identity
 - Source: codebase review
 - Area: Effects
 - Evidence: `effects_removed` is an array of strings in `src/llm_fight/validation.py:79`; `apply_delta()` removes every buff/debuff with matching name in `src/llm_fight/state.py:337`.
@@ -227,8 +227,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-019: Judge deltas can revive terminal fighters
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Status Invariants And Monotonic Status Changes
 - Source: codebase review
 - Area: State invariants
 - Evidence: `status_change` accepts all fighter statuses in `src/llm_fight/validation.py:80`; `apply_delta()` assigns the new status directly in `src/llm_fight/state.py:344`.
@@ -238,8 +238,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-020: Tissue `max_hp` is used as current HP
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Layer Health And Anatomy Consequence Policies
 - Source: codebase review
 - Area: State model
 - Evidence: `TissueLayer` only has `max_hp` in `src/llm_fight/anatomy.py:11`; damage subtracts from it in `src/llm_fight/state.py:205`; `CURRENT_HP` exists but is unused in `src/llm_fight/engine/constants.py:20`.
@@ -249,8 +249,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-021: Combat state changes are mostly hidden in terminal output
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Turn Diff And Roll Transparency
 - Source: codebase review
 - Area: UX, rendering
 - Evidence: `CombatTurn` stores before/after state, but `status_changes_text()` only reports status changes in `src/llm_fight/engine/combat_log.py:47`; render only adds that row in `src/llm_fight/engine/render.py:49`.
@@ -260,8 +260,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-022: Roll outcomes are not visible to players
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Turn Diff And Roll Transparency
 - Source: codebase review
 - Area: UX, transparency
 - Evidence: `rolls` is computed in `src/llm_fight/simulation.py:116` and passed to P2, but `CombatTurn` has no field for it in `src/llm_fight/engine/combat_log.py:12`.
@@ -282,8 +282,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-024: P2 failures are hidden as normal no-op turns
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - P2 Fallback Visibility And Fail-Open Policy
 - Source: codebase review
 - Area: Reliability, observability
 - Evidence: Judge Phase 2 catches repeated parse failures and returns `_phase2_noop_result()` in `src/llm_fight/judge.py:247`.
@@ -293,8 +293,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-025: Batch simulations can hide total failure behind exit 0
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Batch Config Validation And Failure Exit Semantics
 - Source: codebase review
 - Area: CLI reliability
 - Evidence: `run_batch()` catches exceptions and returns `{winner: "error"}` in `src/llm_fight/simulation.py:252`; CLI prints `Simulation saved to ...` in `src/llm_fight/cli.py:174`.
@@ -304,8 +304,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-026: Transcripts are raw exchange fragments, not fight traces
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Fight-Scoped JSONL Trace Transcripts
 - Source: codebase review
 - Area: Observability, transcripts
 - Evidence: `log_exchange()` writes one timestamped prompt/response fragment in `src/llm_fight/transcripts.py:31`; it has no fight id, turn, phase, rolls, deltas, state snapshots, token metrics, or outcome.
@@ -315,8 +315,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-027: Example fighter names are ignored
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Configured Fighter Display Names
 - Source: codebase review
 - Area: Config, UX
 - Evidence: `llmfight.ini.example` defines `name` at `llmfight.ini.example:39`, but `get_fighter_settings()` returns only class/loadout/environment in `src/llm_fight/config.py:161`; prompts use `fighter.id` in `src/llm_fight/engine/fighter.py:129`.
@@ -326,8 +326,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-028: Config and RNG rely on process-global state
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Runtime Config And RNG Isolation
 - Source: codebase review
 - Area: Best practices, reproducibility
 - Evidence: `CONFIG = Config()` loads at import time in `src/llm_fight/config.py:186`; CLI replaces/mutates it in `src/llm_fight/cli.py:28` and `src/llm_fight/cli.py:42`; RNG initializes from current config at `src/llm_fight/rng.py:8`.
@@ -339,8 +339,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-029: Burn tick logs a random layer but damages the normal outer layer
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Anatomy-Driven Bleeding, Burning, And Layer Accuracy
 - Source: codebase review
 - Area: Gameplay logging
 - Evidence: `apply_effects()` chooses `random_layer_to_burn` for logging in `src/llm_fight/state.py:371`, then calls `apply_damage_to_part()`, whose loop starts at the first positive layer in `src/llm_fight/state.py:201`.
@@ -350,8 +350,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-030: Environment guardrail can suppress explicit environment/equipment creativity
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Prompt State Context And Environment-Scoped Creativity
 - Source: codebase review
 - Area: Prompts
 - Evidence: Fighter prompt says not to invent walls, pillars, corridors, shadows, cover, terrain, or objects in `src/llm_fight/engine/prompts.py:17`.
@@ -361,8 +361,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-031: OpenAI-compatible endpoint support conflicts with native Ollama assumptions
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Transport Privacy And Endpoint Mode Safety
 - Source: codebase review
 - Area: Transport, docs
 - Evidence: `get_ollama_url()` accepts `/v1/chat/completions` in `src/llm_fight/agents.py:14`, but `ping_ollama()` always checks `/api/tags` in `src/llm_fight/agents.py:238`; `/v1` payloads omit native `num_ctx`/`keep_alive` in `src/llm_fight/agents.py:199`.
@@ -372,8 +372,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-032: Live/perf test gating and docs are inconsistent
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Live/Perf Gating And Installed-Package Test Workflow
 - Source: codebase review
 - Area: Test workflow, docs
 - Evidence: Live tests require `--run-live` in `tests/conftest.py:15`, but some tests also require `API_URL`; `tests/test_memory_usage.py:3` imports optional `ollama` at collection time; AGENTS live command can include heavy perf coverage while README omits newer live simulation smoke.
@@ -383,8 +383,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-033: Docs do not clearly state current fixed-humanoid/retry/progress contracts
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Current Gameplay And Retry Contract Docs
 - Source: codebase review
 - Area: Documentation
 - Evidence: README known limitations do not state that anatomy is fixed humanoid despite `src/llm_fight/simulation.py:95`; troubleshooting suggests increasing `max_retries` in `README.md:205` but P2 parse retries are capped and can no-op in `src/llm_fight/judge.py:200`; play docs do not warn that output is printed after completion.
@@ -394,8 +394,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-034: Logger setup is not library-friendly
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Library-Friendly Logger Setup
 - Source: codebase review
 - Area: Best practices
 - Evidence: Package logger attaches a stdout `StreamHandler` at import in `src/llm_fight/engine/logger.py:13`, checks `hasHandlers()`, and leaves propagation enabled.
@@ -405,8 +405,8 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-035: Test suite bypasses installed package behavior
 
-- Status: open
-- Task: none
+- Status: tasked
+- Task: TODO.md - Live/Perf Gating And Installed-Package Test Workflow
 - Source: codebase review
 - Area: Test workflow
 - Evidence: `tests/conftest.py:5` inserts `src` directly into `sys.path`.
