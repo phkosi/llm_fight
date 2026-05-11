@@ -50,3 +50,8 @@ def compute_max_tokens(messages: List[Dict[str, str]], limit: int) -> int:
     used = count_message_tokens(messages)
     remaining = limit - used
     return max(1, remaining)
+
+
+def compute_completion_tokens(messages: List[Dict[str, str]], requested_max_tokens: int, context_limit: int) -> int:
+    """Return a generation cap that fits inside the configured context."""
+    return max(1, min(requested_max_tokens, compute_max_tokens(messages, context_limit)))

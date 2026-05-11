@@ -110,6 +110,8 @@ Minimal local settings:
 [General]
 ollama_default_model = llama3.2:3b
 ollama_api_url = http://localhost:11434/api/chat
+ollama_keep_alive = 10m
+ollama_num_ctx = 32768
 max_tokens_fighter = 512
 max_tokens_judge = 4096
 best_of_fighter = 1
@@ -122,6 +124,8 @@ max_turns = 2
 ```
 
 The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endpoints are also supported:
+
+For native Ollama, `ollama_keep_alive` is sent with each chat request so the model can stay resident between fighter and judge calls during local playtests. `ollama_num_ctx` is the fixed context window sent to every fighter and judge call in a run; keep it stable to avoid runner reloads caused by alternating context sizes. Increase `ollama_keep_alive` for long runs if you want the model resident after the CLI exits, and lower it if you want VRAM freed sooner.
 
 ```ini
 ollama_api_url = http://localhost:11434/v1/chat/completions

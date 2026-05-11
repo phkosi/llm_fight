@@ -8,7 +8,7 @@ from jsonschema import ValidationError, validate
 from .utils.json_parser import parse_json_from_text
 
 from .agents import chat
-from .utils.token_counter import compute_max_tokens
+from .utils.token_counter import compute_completion_tokens
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from . import config as config_mod
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
@@ -70,6 +70,10 @@ def _judge_settings() -> tuple[int, int, int]:
     )
 
 
+def _ollama_num_ctx(fallback: int) -> int:
+    return config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int, fallback=fallback)
+
+
 def _parse_first_json_response(response_texts: list[str]) -> dict[str, Any]:
     last_error: json.JSONDecodeError | None = None
     for txt in response_texts:
@@ -122,13 +126,14 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
 
     messages = [system, user]
     max_tok_j, best_j, max_retries = _judge_settings()
-    max_tok = compute_max_tokens(messages, max_tok_j)
+    context_limit = _ollama_num_ctx(max_tok_j)
+    max_tok = compute_completion_tokens(messages, max_tok_j, context_limit)
 
     async def _call():
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
-            num_ctx=max_tok_j,
+            num_ctx=context_limit,
             best_of=best_j,
             schema=JudgeP1Schema,
             retries=max_retries,
@@ -161,13 +166,14 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
     messages = [system, user]
     max_tok_j, best_j, max_retries = _judge_settings()
     parse_retries = min(max_retries, 2)
-    max_tok = compute_max_tokens(messages, max_tok_j)
+    context_limit = _ollama_num_ctx(max_tok_j)
+    max_tok = compute_completion_tokens(messages, max_tok_j, context_limit)
 
     async def _call_with_schema() -> dict[str, Any]:
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
-            num_ctx=max_tok_j,
+            num_ctx=context_limit,
             best_of=best_j,
             schema=JudgeP2Schema,
             retries=max_retries,
@@ -189,7 +195,7 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
         response_texts = await chat(
             repair_messages,
             max_tokens=max_tok,
-            num_ctx=max_tok_j,
+            num_ctx=context_limit,
             best_of=max(1, best_j),
             retries=max_retries,
         )

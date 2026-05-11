@@ -5,7 +5,7 @@ from typing import Union, Optional
 
 from ..state import FighterState  # Relative import from parent package
 from ..agents import chat
-from ..utils.token_counter import compute_max_tokens
+from ..utils.token_counter import compute_completion_tokens
 from .. import config as config_mod
 from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from . import constants as C  # Added import
@@ -135,7 +135,13 @@ async def get_fighter_attempt(
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
 
     messages = [system, user]
-    context_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
+    generation_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
+    context_limit = config_mod.CONFIG.get(
+        C.CONFIG_GENERAL,
+        C.CONFIG_OLLAMA_NUM_CTX,
+        int,
+        fallback=generation_limit,
+    )
     best_of = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1)
     max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
     empty_action_retries = min(max_retries, 1)
@@ -151,7 +157,7 @@ async def get_fighter_attempt(
                 ),
             }
             active_messages = [system, user, retry_user]
-        active_max_tokens = compute_max_tokens(active_messages, context_limit)
+        active_max_tokens = compute_completion_tokens(active_messages, generation_limit, context_limit)
 
         texts = await chat(
             active_messages,

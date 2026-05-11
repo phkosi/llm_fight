@@ -190,6 +190,7 @@ async def chat(
     cfg = config_mod.CONFIG
     model = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
     temp = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
+    keep_alive = cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, str, fallback="10m")
     url = get_ollama_url()
     use_openai = _uses_openai_compat(url)
 
@@ -216,6 +217,7 @@ async def chat(
                     C.AGENT_MESSAGES: messages,
                     C.AGENT_STREAM: False,
                     C.AGENT_THINK: False,
+                    C.AGENT_KEEP_ALIVE: keep_alive,
                     C.AGENT_OPTIONS: options,
                 }
                 if schema is not None:

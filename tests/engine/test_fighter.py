@@ -142,9 +142,9 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         call_args = mock_chat_func.call_args[0][0]  # Messages list
         call_kwargs = mock_chat_func.call_args[1]
 
-        from llm_fight.utils.token_counter import compute_max_tokens
+        from llm_fight.utils.token_counter import compute_completion_tokens
 
-        expected_max = compute_max_tokens(call_args, 150)
+        expected_max = compute_completion_tokens(call_args, 150, 150)
         assert call_kwargs["max_tokens"] == expected_max
         assert call_kwargs["num_ctx"] == 150
         assert call_kwargs["best_of"] == 1
@@ -215,6 +215,36 @@ async def test_get_fighter_attempt_retries_empty_responses(mock_fighter_state, m
 
     assert actual_response == "I slash at the opening."
     assert mock_chat_func.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_fighter_attempt_uses_fixed_ollama_context(mock_fighter_state, mock_opponent_state):
+    mock_config_get = MagicMock()
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=["I strike."]) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
+    ):
+        await get_fighter_attempt(
+            fighter=mock_fighter_state,
+            opponent=mock_opponent_state,
+            combat_log="Nothing happened.",
+            turn_window=0,
+        )
+
+    assert mock_chat_func.call_args.kwargs["num_ctx"] == 32768
+    assert 1 <= mock_chat_func.call_args.kwargs["max_tokens"] <= 64
 
 
 @pytest.mark.asyncio

@@ -87,7 +87,8 @@ Native Ollama requests use:
 
 - `format` for JSON schema structured outputs.
 - `options.num_predict` for generation limit.
-- `options.num_ctx` for context size.
+- fixed `options.num_ctx` from `ollama_num_ctx` for every fighter and judge call.
+- top-level `keep_alive` for model residency between turn requests.
 - `stream: false`.
 
 OpenAI-compatible `/v1/chat/completions` endpoints remain supported and use `response_format`.
@@ -102,6 +103,8 @@ Important keys:
 [General]
 ollama_default_model = llama3.2:3b
 ollama_api_url = http://localhost:11434/api/chat
+ollama_keep_alive = 10m
+ollama_num_ctx = 32768
 max_tokens_fighter = 512
 max_tokens_judge = 4096
 ollama_temperature = 0.4

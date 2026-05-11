@@ -174,6 +174,14 @@ def test_default_max_turns_loaded(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 2
 
 
+def test_default_ollama_keep_alive_loaded(temp_config_instance):
+    assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, str) == "10m"
+
+
+def test_default_ollama_num_ctx_loaded(temp_config_instance):
+    assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 32768
+
+
 def test_fighter_section_names(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str) == "FighterA"
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str) == "FighterB"

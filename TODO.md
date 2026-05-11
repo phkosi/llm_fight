@@ -52,7 +52,7 @@ Initial acceptance status: the model completed 3 runs without runtime or JSON/sc
 
 - [x] Fix the fighter prompt grammar for article-bearing environments. Gemma transcript files such as `transcripts\gemma4_26b_playtest\20260511_220734_906188.json` showed `currently fighting inside a an open arena`, which is confusing prompt UX and can leak awkward wording into model behavior.
 - [x] Reject zero-value wounds at schema validation time. The initial gemma run logged `Ignoring non-positive damage amount 0 to neck for fighter A`, meaning Judge Phase 2 emitted a wound object that passed schema validation but could not affect combat state.
-- [ ] Investigate suspected Ollama model unload/reload or VRAM residency churn during live playtests. Evidence: user-observed Windows Task Manager screenshot during local Ollama playtesting on 2026-05-11 showed RTX 5090 dedicated GPU memory repeatedly dropping and refilling. Reproduction command: run a live batch such as `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_vram_probe.csv --verbose` while sampling `ollama ps` and GPU memory; check whether request cadence, `keep_alive`, context size, model switches, or Ollama scheduling causes repeated reloads.
+- [x] Investigate suspected Ollama model unload/reload or VRAM residency churn during live playtests. Evidence: user-observed Windows Task Manager screenshots during local Ollama playtesting on 2026-05-11 showed RTX 5090 dedicated GPU memory repeatedly dropping and refilling. Initial `keep_alive` alone was not enough. Follow-up evidence in `transcripts\gemma4_26b_playtest\ctx32768_probe_samples.log` showed the likely cause was alternating runner context sizes: a previously loaded `CONTEXT 4096` runner switched to a stable `CONTEXT 32768` runner once the app sent fixed `ollama_num_ctx = 32768` for every fighter and judge call. During the fixed-context run, `ollama ps` stayed on `gemma4:26b`, `100% GPU`, `CONTEXT 32768`, `UNTIL 9 minutes`, and GPU memory stayed near 22.5 GB through the batch and post-run sample.
 
 Acceptance run after fixes:
 
@@ -62,3 +62,19 @@ Acceptance run after fixes:
 - Error rows: 0
 - Winner summary: `draw: 3`
 - Notes: post-fix transcript prompts say `inside an open arena`; `sim_after_fixes.out.log` has no non-positive wound warning, no validation failure, and no fallback/no-op warning.
+
+## Gemma 4 26B Fixed-Context Playtest Follow-Ups
+
+Evidence: ran `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_ctx32768_probe.csv --verbose` with Ollama model `gemma4:26b`, `ollama_keep_alive = 10m`, and `ollama_num_ctx = 32768` on 2026-05-11. Results were 3 draws, 0 error rows, 4 turns each.
+
+- [x] Reduce environment-feature hallucinations in fighter actions. In `sim_ctx32768_probe.out.log`, gemma used nonexistent `arena pillars`, `arena wall`, and `shadows of the arena's edge` despite the configured environment being `an open arena`; Judge Phase 1 sometimes caught these as physically inconsistent, but the fighter prompt should prevent invented cover/geometry earlier. Reproduction command: `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_ctx32768_probe.csv --verbose`.
+
+Acceptance run after fixed context and environment-prompt fixes:
+
+- Command: `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_final_ctx32768.csv --verbose`
+- Output CSV: `transcripts\gemma4_26b_playtest\sim_results_final_ctx32768.csv`
+- Result rows: 3
+- Error rows: 0
+- Winner summary: `draw: 3`
+- Residency evidence: `transcripts\gemma4_26b_playtest\final_ctx32768_samples.log` stayed on `gemma4:26b`, `100% GPU`, `CONTEXT 32768`, and roughly 22.7-23.0 GB GPU memory throughout the run and post-run sample.
+- Notes: `sim_final_ctx32768.out.log` had no validation failures, fallback/no-op warnings, non-positive wound warnings, or new nonexistent pillar/corridor arena geometry in fighter actions.

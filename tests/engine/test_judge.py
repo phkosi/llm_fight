@@ -45,13 +45,14 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     msg_payload = chat_call_positional[0]
     assert len(msg_payload) == 2
     assert msg_payload[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
-    from llm_fight.utils.token_counter import compute_max_tokens
+    from llm_fight.utils.token_counter import compute_completion_tokens
 
     max_tok_j = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int)
+    num_ctx = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int, fallback=max_tok_j)
     best_j = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
-    expected_max = compute_max_tokens(msg_payload, max_tok_j)
+    expected_max = compute_completion_tokens(msg_payload, max_tok_j, num_ctx)
     assert chat_call_kwargs["max_tokens"] == expected_max
-    assert chat_call_kwargs["num_ctx"] == max_tok_j
+    assert chat_call_kwargs["num_ctx"] == num_ctx
     assert chat_call_kwargs["best_of"] == best_j
     # We can add more specific checks for prompt content if needed
 
@@ -118,12 +119,13 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert user_payload["fighter_A"] == MOCK_FIGHTER_A_STATE
 
     chat_call_kwargs = mock_chat.call_args[1]
-    from llm_fight.utils.token_counter import compute_max_tokens
+    from llm_fight.utils.token_counter import compute_completion_tokens
 
     max_tok_j = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int)
-    expected_max = compute_max_tokens(chat_call_args, max_tok_j)
+    num_ctx = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int, fallback=max_tok_j)
+    expected_max = compute_completion_tokens(chat_call_args, max_tok_j, num_ctx)
     assert chat_call_kwargs["max_tokens"] == expected_max
-    assert chat_call_kwargs["num_ctx"] == max_tok_j
+    assert chat_call_kwargs["num_ctx"] == num_ctx
     mock_guarded_call.assert_called_once()
     assert mock_guarded_call.call_args[0][1] == JudgeP2Schema
 

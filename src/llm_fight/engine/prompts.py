@@ -9,6 +9,8 @@ Last {turn_window} turns:
 Your equipment: {loadout}
 ---
 Respond with {sentence_limit} sentence describing what you attempt next. <= {word_limit} words.
+Use only environment features that are explicitly established above or in the recent log.
+Do not invent walls, pillars, corridors, shadows, cover, terrain, or objects.
 (No outcome narration. Raw text only.)
 """
 

@@ -2,6 +2,8 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import csv
+import json
+import os
 
 import llm_fight.simulation as sim_module
 from llm_fight.state import FighterState  # Keep for spec
@@ -92,6 +94,80 @@ async def test_single_fight_runs_to_completion(
     fighter_b_mock.apply_delta.assert_called_with({C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS})
     assert fighter_b_mock.status == C.FighterStatus.UNCONSCIOUS
     assert fighter_a_mock.status == C.FighterStatus.FIGHTING  # A should be unchanged
+
+
+@pytest.mark.asyncio
+async def test_single_fight_uses_one_fixed_ollama_context_for_all_native_calls():
+    old_values = {
+        (C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, str),
+        (C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, str),
+        (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, str),
+        (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, str),
+        (C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, str),
+        (C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, str),
+        (C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, str),
+        (C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, str),
+        (C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS): CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str),
+    }
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, "32768")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, "10m")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, "64")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, "128")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, "1")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, "1")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, "0")
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, "false")
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    payloads = []
+
+    async def fake_post_json(session, payload, retries=0):
+        payloads.append(payload)
+        schema = payload.get(C.AGENT_FORMAT)
+        if not schema:
+            return "I make a cautious attack."
+
+        properties = schema.get(C.SCHEMA_PROPERTIES, {})
+        if C.NARRATION in properties:
+            return json.dumps(
+                {
+                    C.NARRATION: "Both fighters test range and reset.",
+                    C.DELTA: {},
+                    C.FIGHT_END: False,
+                    C.WINNER: None,
+                }
+            )
+        return json.dumps(
+            {
+                "judgement_text": "Both attacks are plausible.",
+                f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+                f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+                f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+                f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            }
+        )
+
+    try:
+        with (
+            patch("llm_fight.agents._post_json", new=fake_post_json),
+            patch.dict(os.environ, {"API_URL": "http://localhost:11434/api/chat"}),
+        ):
+            result = await sim_module._single_fight()
+    finally:
+        for (section, key), value in old_values.items():
+            CONFIG.set(section, key, value)
+
+    assert result == {C.WINNER: C.DRAW, C.LOG_TURN: "1"}
+    assert len(payloads) == 4
+    assert {payload[C.AGENT_OPTIONS][C.NUM_CTX] for payload in payloads} == {32768}
+    assert {payload[C.AGENT_KEEP_ALIVE] for payload in payloads} == {"10m"}
+
+    fighter_payloads = [payload for payload in payloads if C.AGENT_FORMAT not in payload]
+    judge_payloads = [payload for payload in payloads if C.AGENT_FORMAT in payload]
+    assert len(fighter_payloads) == 2
+    assert len(judge_payloads) == 2
+    assert all(1 <= payload[C.AGENT_OPTIONS][C.AGENT_NUM_PREDICT] <= 64 for payload in fighter_payloads)
+    assert all(1 <= payload[C.AGENT_OPTIONS][C.AGENT_NUM_PREDICT] <= 128 for payload in judge_payloads)
 
 
 @pytest.mark.asyncio

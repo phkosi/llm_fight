@@ -68,6 +68,7 @@ async def test_chat_single_call_success():
             C.AGENT_MESSAGES: messages,
             C.AGENT_STREAM: False,
             C.AGENT_THINK: False,
+            C.AGENT_KEEP_ALIVE: "10m",
             C.AGENT_OPTIONS: {
                 C.TEMPERATURE: DEFAULT_TEMP,
                 C.AGENT_NUM_PREDICT: max_tokens,
@@ -133,6 +134,7 @@ async def test_chat_best_of_n_calls_success():
         C.AGENT_MESSAGES: messages,
         C.AGENT_STREAM: False,
         C.AGENT_THINK: False,
+        C.AGENT_KEEP_ALIVE: "10m",
         C.AGENT_OPTIONS: {
             C.TEMPERATURE: DEFAULT_TEMP,
             C.AGENT_NUM_PREDICT: max_tokens,
@@ -241,6 +243,32 @@ async def test_chat_native_payload_sanitizes_schema_for_ollama():
 
 
 @pytest.mark.asyncio
+async def test_chat_native_payload_keeps_num_ctx_separate_from_generation_limit():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    with patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
+        await chat(messages=messages, max_tokens=64, num_ctx=32768, session=session)
+
+    payload = session.post.call_args.kwargs["json"]
+    assert payload[C.AGENT_OPTIONS][C.NUM_CTX] == 32768
+    assert payload[C.AGENT_OPTIONS][C.AGENT_NUM_PREDICT] == 64
+    assert payload[C.AGENT_KEEP_ALIVE] == "10m"
+
+
+@pytest.mark.asyncio
 async def test_chat_reads_model_api_and_retry_config_at_call_time(tmp_path, monkeypatch):
     cfg_path = tmp_path / "llmfight.ini"
     cfg_path.write_text(
@@ -248,6 +276,7 @@ async def test_chat_reads_model_api_and_retry_config_at_call_time(tmp_path, monk
         "ollama_default_model = config-model\n"
         "ollama_api_url = http://configured-host:11434/api/chat\n"
         "ollama_temperature = 0.25\n"
+        "ollama_keep_alive = 30m\n"
         "max_retries = 7\n"
     )
     old_config = config_mod.CONFIG
@@ -279,6 +308,7 @@ async def test_chat_reads_model_api_and_retry_config_at_call_time(tmp_path, monk
     payload = session.post.call_args.kwargs["json"]
     assert payload[C.AGENT_MODEL] == "config-model"
     assert payload[C.AGENT_THINK] is False
+    assert payload[C.AGENT_KEEP_ALIVE] == "30m"
     assert payload[C.AGENT_OPTIONS][C.TEMPERATURE] == 0.25
 
 
