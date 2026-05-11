@@ -165,9 +165,6 @@ CONFIG_FIGHTER_WORD_LIMIT = "fighter_word_limit"
 CONFIG_FIGHTER_A_SECTION = "fighter_A"  # Config section for fighter A settings
 CONFIG_FIGHTER_B_SECTION = "fighter_B"  # Config section for fighter B settings
 CONFIG_DEFAULT_FIGHTER = "DEFAULT_FIGHTER"  # Section for fallback fighter stats
-CONFIG_DISCORD = "DISCORD"
-CONFIG_DISCORD_TOKEN = "discord_token"
-CONFIG_DISCORD_CHANNEL = "discord_channel"
 
 # Prompting
 CONTEXT_PAIN_DESCRIPTION = "pain_description"

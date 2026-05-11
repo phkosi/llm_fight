@@ -23,12 +23,6 @@ uv run llmfight play
 uv run llmfight simulate
 ```
 
-Run the optional Discord bot:
-
-```bash
-uv run llmfight-discord
-```
-
 Run quality checks:
 
 ```bash
@@ -49,7 +43,6 @@ uv run pytest -q --run-live
 - `src/llm_fight/anatomy.py` - body part presets and tissue layers.
 - `src/llm_fight/cli.py` - Typer command line interface.
 - `src/llm_fight/config.py` - INI loader.
-- `src/llm_fight/discord_bot.py` - optional Discord integration.
 - `src/llm_fight/judge.py` - judge orchestration.
 - `src/llm_fight/rng.py` - central random number generator.
 - `src/llm_fight/simulation.py` - fight loop and batch harness.

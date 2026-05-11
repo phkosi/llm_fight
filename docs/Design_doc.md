@@ -15,10 +15,8 @@ Python owns deterministic mechanics: configuration, RNG, schema validation, retr
 - Runtime package: `llm_fight`, located at `src/llm_fight/`.
 - CLI scripts:
   - `llmfight = llm_fight.cli:app`
-  - `llmfight-discord = llm_fight.discord_bot:run_bot`
 - Core runtime deps: `aiohttp`, `jsonschema`, `rich`, `typer`, `click`.
 - Optional extras:
-  - `discord` for Discord bot support.
   - `tokens` for `tiktoken` token counting.
   - `live` for Ollama helper package experiments.
 
@@ -30,7 +28,6 @@ src/llm_fight/
 |-- anatomy.py         # body presets and fresh tissue layers
 |-- cli.py             # Typer CLI
 |-- config.py          # INI loader
-|-- discord_bot.py     # optional Discord bot
 |-- judge.py           # judge phase orchestration
 |-- rng.py             # central PRNG
 |-- simulation.py      # fight loop and batch runs

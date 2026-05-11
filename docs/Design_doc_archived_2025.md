@@ -5,7 +5,7 @@ This file preserves the original design for historical reference.
 > Do not use this document for setup or current commands. It predates the Python 3.14 `uv` workflow, the `llm_fight` package rename, and the native Ollama `/api/chat` default. Use `README.md` and `docs/Design_doc.md` instead.
 
 
-> **Status · 2025‑05‑31**  This document defines the first working milestone of the local‑LLM 1‑vs‑1 fighting simulator.  It is formatted in GitHub‑flavoured Markdown and should render correctly in most viewers (Discord, GitHub, VS Code, etc.).
+> **Status · 2025‑05‑31**  This document defines the first working milestone of the local‑LLM 1‑vs‑1 fighting simulator.  It is formatted in GitHub‑flavoured Markdown and should render correctly in common viewers such as GitHub and VS Code.
 
 ---
 
@@ -215,9 +215,8 @@ seed               = 42
 
 ## 9  Future Work
 
-1. **Discord bot** using Ollama’s OpenAI‑compat endpoint.  Per‑channel fight sessions.
-2. **Visualiser** (Godot) that replays combat log with sprite limb masking.
-3. **Infection & weather** modifiers after MVP is stable.
+1. **Visualiser** (Godot) that replays combat log with sprite limb masking.
+2. **Infection & weather** modifiers after MVP is stable.
 
 ---
 

@@ -49,10 +49,6 @@ DEFAULTS = {
         C.CONFIG_FIGHTER_CLASS: "Cunning Assassin",
         C.CONFIG_FIGHTER_LOADOUT: "poison dagger and smoke bombs",
     },
-    C.CONFIG_DISCORD: {
-        C.CONFIG_DISCORD_TOKEN: "",
-        C.CONFIG_DISCORD_CHANNEL: "",
-    },
 }
 
 

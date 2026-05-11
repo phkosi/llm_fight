@@ -23,10 +23,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-discord = [
-    "audioop-lts>=0.2; python_version >= '3.13'",
-    "discord.py>=2.7.1,<3",
-]
 live = [
     "ollama>=0.6.2,<1",
 ]
@@ -36,7 +32,6 @@ tokens = [
 
 [project.scripts]
 llmfight = "llm_fight.cli:app"
-llmfight-discord = "llm_fight.discord_bot:run_bot"
 
 [dependency-groups]
 dev = [

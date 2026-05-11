@@ -42,7 +42,3 @@ loadout = longsword and tower shield
 name = Shade
 class = Cunning Assassin
 loadout = poison dagger and smoke bombs
-
-[DISCORD]
-discord_token =
-discord_channel =

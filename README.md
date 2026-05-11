@@ -1,106 +1,110 @@
 # LLM Fighters Combat Engine
 
-A turn-based duel between two LLM agents, the Fighters, adjudicated by a third LLM, the Judge/Narrator. Python owns randomness, state updates, validation, retries, logging, and CLI workflow. Ollama runs the models locally by default.
+[![CI](https://github.com/phkosi/llm_fight/actions/workflows/ci.yml/badge.svg)](https://github.com/phkosi/llm_fight/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](pyproject.toml)
 
-## Overview
+LLM Fighters is an experimental local-first combat simulator where two LLM-controlled fighters duel under a third LLM judge. Python owns the mechanics: state, randomness, validation, retries, logging, and CLI workflow. Ollama runs the models locally by default.
 
-LLM Fighters is a combat simulator where local LLM agents propose free-text actions in a detailed damage model inspired by layered anatomy systems. The Judge estimates each action's success probability, Python rolls the dice, and the Judge narrates the result as a structured state delta.
+## Project Status
 
-## Key Features
+This project is a playable proof of concept, not a stable game engine yet. It is built to explore free-text combat actions, structured LLM judging, and layered anatomy state. Expect model-dependent behavior, nondeterministic outcomes, and occasional structured-output failures with smaller local models.
 
-- Free-text fighter actions for creative combat maneuvers.
-- Multi-layer body parts with pain, bleeding, burning, unconsciousness, death, and limb loss.
-- Two-phase judge flow: probability assessment first, narration and state delta second.
-- Native Ollama `/api/chat` structured-output calls by default, with `/v1/chat/completions` compatibility.
-- JSON Schema validation with retry handling for brittle model output.
-- Typer CLI commands for single fights and batch simulation.
-- Optional Discord bot entrypoint.
+Current defaults are tuned for a cheap local smoke test with `llama3.2:3b`. Stronger models will usually produce better narration and more coherent combat deltas.
+
+## What It Does
+
+- Lets two fighters propose free-text combat actions.
+- Uses a two-phase Judge/Narrator LLM flow: probability assessment, then narration and state delta.
+- Applies Python-side dice rolls, JSON Schema validation, retries, damage, effects, KO/death checks, and winner consistency.
+- Models multi-layer body parts with pain, bleeding, burning, unconsciousness, death, and limb loss.
+- Provides a Typer CLI for single fights and batch simulations.
 
 ## Requirements
 
 - Python 3.14 or newer.
-- `uv` for locked dependency management.
-- Ollama running locally with a cheap model such as `llama3.2:3b`.
+- [`uv`](https://docs.astral.sh/uv/) for the locked development workflow.
+- [Ollama](https://ollama.com/) running locally.
+- A pulled Ollama model. The default tested smoke model is `llama3.2:3b`.
 
-Install `uv` if it is not already available:
+Install `uv` if needed:
 
 ```bash
 python -m pip install "uv>=0.11.13,<0.12"
 ```
 
-## Installation
+If Python 3.14 is not already available, `uv` can install it:
 
 ```bash
-git clone <repository_url>
-cd llm_fight
-uv sync --locked
-cp llmfight.ini.example llmfight.ini
+uv python install 3.14
 ```
 
-On PowerShell, copy the example config with:
+## Quick Start
+
+PowerShell:
 
 ```powershell
-Copy-Item llmfight.ini.example llmfight.ini
-```
-
-`pyproject.toml` is the source of truth for dependencies. `uv.lock` is committed. `requirements.txt` and `requirements-dev.txt` are compatibility exports generated from the lockfile.
-
-For development with all extras and tools:
-
-```bash
+git clone https://github.com/phkosi/llm_fight.git
+cd llm_fight
+uv python install 3.14
 uv sync --locked --all-extras --dev
+Copy-Item llmfight.ini.example llmfight.ini
+ollama pull llama3.2:3b
+uv run llmfight play --max-turns 2 --simple-output
 ```
 
-## Running The Game
-
-Start Ollama and make sure your configured model is pulled:
+Bash:
 
 ```bash
+git clone https://github.com/phkosi/llm_fight.git
+cd llm_fight
+uv python install 3.14
+uv sync --locked --all-extras --dev
+cp llmfight.ini.example llmfight.ini
 ollama pull llama3.2:3b
+uv run llmfight play --max-turns 2 --simple-output
 ```
 
-Run a single fight:
+Make sure the Ollama server is running before `play` or `simulate`. The CLI checks the configured endpoint before starting a fight.
+
+## Usage
+
+Run a short single-fight smoke test:
 
 ```bash
 uv run llmfight play --max-turns 2 --simple-output
 ```
 
-Run a batch simulation:
+Run a one-fight batch simulation:
 
 ```bash
-uv run llmfight simulate --runs 1 --max-turns 2
+uv run llmfight simulate --runs 1 --max-turns 2 --output-csv sim_results.csv
 ```
 
-Both commands accept `--config PATH`, `--fighter-a SECTION`, and `--fighter-b SECTION`.
-Use `--max-turns N` for a short single-fight smoke test. `simulate` also accepts `--runs N`.
-
-## Discord Bot
-
-Install with the Discord extra:
+Use an alternate config file:
 
 ```bash
-uv sync --locked --extra discord
+uv run llmfight play --config path/to/llmfight.ini --max-turns 2
 ```
 
-Configure `llmfight.ini`:
-
-```ini
-[DISCORD]
-discord_token = your-bot-token
-discord_channel = channel-name-or-id
-```
-
-Run the bot:
+Select fighter sections from the config:
 
 ```bash
-uv run llmfight-discord
+uv run llmfight play --fighter-a A --fighter-b B
 ```
 
-The bot exposes `/fight start`, `/fight status`, and `/fight stop`.
+Useful command options:
+
+- `--max-turns N`: cap a fight quickly during smoke tests.
+- `--runs N`: override batch simulation run count.
+- `--simple-output`: print plain text instead of Rich tables.
+- `--verbose`: show more progress/debug output.
 
 ## Configuration
 
-Copy `llmfight.ini.example` to `llmfight.ini` and edit as needed.
+Copy [llmfight.ini.example](llmfight.ini.example) to `llmfight.ini` and adjust it locally. Local `.ini` files are ignored by Git so secrets and machine-specific settings are not committed.
+
+Minimal local settings:
 
 ```ini
 [General]
@@ -108,60 +112,30 @@ ollama_default_model = llama3.2:3b
 ollama_api_url = http://localhost:11434/api/chat
 max_tokens_fighter = 512
 max_tokens_judge = 4096
-ollama_temperature = 0.4
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
-log_level = INFO
-log_combat_turns = false
-save_transcripts = false
-transcript_dir = transcripts
-fighter_sentence_limit = 1
-fighter_word_limit = 30
-fighter_A = A
-fighter_B = B
-
-[CONTEXT]
-fighter_log_window = 10
-judge_log_window = 9999
 
 [SIMULATION]
 runs = 1
-seed = 42
-concurrent_runs = 1
 max_turns = 2
-
-[DEFAULTS]
-environment = an open arena
-
-[DEFAULT_FIGHTER]
-class = Generic Fighter
-loadout = their bare fists and wits
-
-[A]
-name = Sir Galant
-class = Veteran Knight
-loadout = longsword and tower shield
-
-[B]
-name = Shade
-class = Cunning Assassin
-loadout = poison dagger and smoke bombs
 ```
 
-The default endpoint is native Ollama `/api/chat`. If you need the OpenAI-compatible endpoint, set:
+The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endpoints are also supported:
 
 ```ini
 ollama_api_url = http://localhost:11434/v1/chat/completions
 ```
 
-You can also override the endpoint at runtime:
+You can override the endpoint at runtime.
+
+Bash:
 
 ```bash
 export API_URL="http://localhost:11434/api/chat"
 ```
 
-On PowerShell:
+PowerShell:
 
 ```powershell
 $env:API_URL = "http://localhost:11434/api/chat"
@@ -169,65 +143,71 @@ $env:API_URL = "http://localhost:11434/api/chat"
 
 ## Testing And Quality
 
+Run the standard local checks:
+
 ```bash
 uv run black --check .
 uv run flake8
 uv run pytest -q
 ```
 
-Live Ollama tests are skipped by default. Opt in explicitly:
+Run the CI-equivalent test command:
 
 ```bash
-uv run pytest -q --run-live
-```
-
-CI uses Python 3.14 and runs:
-
-```bash
-uv sync --locked --all-extras --dev
-uv run black --check .
-uv run flake8
 uv run pytest -q --cov=llm_fight
 ```
 
-## Architecture
+Live Ollama tests are skipped by default. To opt in, set `API_URL` and run only the live tests:
 
-The installable package lives under `src/llm_fight/`.
+Bash:
 
-```text
-src/llm_fight/
-|-- agents.py          # async Ollama client
-|-- anatomy.py         # body part presets and tissue layers
-|-- cli.py             # Typer commands
-|-- config.py          # INI loader and migrations
-|-- discord_bot.py     # optional Discord integration
-|-- judge.py           # phase-1 and phase-2 orchestration
-|-- rng.py             # central PRNG
-|-- simulation.py      # single-fight and batch simulation loops
-|-- state.py           # FighterState and delta/effect application
-|-- transcripts.py     # prompt/response transcript logging
-|-- validation.py      # JSON schemas and guarded_call
-|-- engine/
-|   |-- combat_log.py
-|   |-- constants.py
-|   |-- fighter.py
-|   |-- logger.py
-|   |-- prompts.py
-|   `-- render.py
-`-- utils/
-    |-- json_parser.py
-    `-- token_counter.py
+```bash
+export API_URL="http://localhost:11434/api/chat"
+uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py
 ```
 
-`run.py` is kept as a compatibility shim; prefer `llmfight`.
+PowerShell:
 
-## Turn Flow
+```powershell
+$env:API_URL = "http://localhost:11434/api/chat"
+uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py
+```
+
+CI runs on Python 3.14 using the locked `uv` workflow. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+## Architecture
+
+The installable package lives under `src/llm_fight/`. The core flow is:
 
 1. Fighter A and Fighter B propose actions concurrently.
-2. Judge Phase 1 validates plausibility and returns success probabilities.
+2. Judge Phase 1 returns validity and success probabilities.
 3. Python rolls against those probabilities.
-4. Judge Phase 2 receives the attempts, full P1 result, successful rolls, combat log, valid body parts, and current fighter state.
+4. Judge Phase 2 receives attempts, the full P1 result, successful rolls, combat log, valid body parts, and fighter state.
 5. Python validates and applies deltas, ticks effects, and resolves winner consistency from the resulting state.
+
+For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
+
+## Known Limitations
+
+- Combat balance and judge consistency are still evolving.
+- Output quality depends heavily on the local model.
+- Small models may occasionally fail strict JSON output even with retries.
+- Formal releases are not established yet; `main` is the current development line.
+
+## Troubleshooting
+
+- `Cannot reach Ollama server`: start Ollama and confirm `http://localhost:11434/api/tags` responds.
+- `model not found`: run `ollama pull llama3.2:3b` or set `ollama_default_model` to a model you have locally.
+- `LLM output could not be parsed`: try a stronger model, increase `max_tokens_judge`, or increase `max_retries`.
+- `uv sync` cannot find Python 3.14: run `uv python install 3.14`.
+
+## Contributing And Support
+
+Contributions are welcome for bug reports, documentation, tests, and small gameplay fixes. Please open an issue before large architecture or combat-system changes.
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+- Use [GitHub Issues](https://github.com/phkosi/llm_fight/issues) for bugs, questions, and feature ideas. Include your OS, Python version, Ollama version, model name, command, and relevant logs with secrets removed.
+- See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 ## License
 
