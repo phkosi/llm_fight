@@ -320,9 +320,25 @@ def test_delta_schema_rejects_unknown_status_change():
     _validate_against_schema(unknown_status, DeltaSchema, False)
 
 
-def test_delta_schema_allows_additional_properties():
+def test_delta_schema_rejects_additional_properties():
     extra_prop = {"mood_change": "angry"}
-    _validate_against_schema(extra_prop, DeltaSchema, True)
+    _validate_against_schema(extra_prop, DeltaSchema, False)
+
+
+def test_judge_p2_schema_rejects_misplaced_result_fields_inside_delta():
+    invalid_data = {
+        C.NARRATION: "A strange nested result appears.",
+        C.DELTA: {
+            C.FIGHTER_A: {
+                C.PAIN_INCREASE: 1,
+                C.FIGHT_END: True,
+                C.WINNER: C.FIGHTER_A,
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+    _validate_against_schema(invalid_data, JudgeP2Schema, False)
 
 
 def test_delta_schema_damage_types_match_constants():

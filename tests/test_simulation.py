@@ -186,6 +186,48 @@ async def test_run_batch_progress_callback(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_batch_flushes_each_completed_result(tmp_path):
+    calls = 0
+    first_progress_rows = []
+
+    async def fake_fight(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0)
+        return {C.WINNER: "A" if calls == 1 else "B", C.LOG_TURN: str(calls)}
+
+    out_file = tmp_path / "incremental.csv"
+
+    def progress(done, total):
+        if done == 1:
+            with open(out_file, newline="") as fp:
+                first_progress_rows.extend(csv.DictReader(fp))
+
+    with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
+        orig_get = sim_module.config_mod.CONFIG.get
+
+        def fake_get(section, key, cast=str, fallback=None):
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+                return 2
+            if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+                return 1
+            return orig_get(section, key, cast, fallback)
+
+        with patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get):
+            path = await sim_module.run_batch(out_file, progress=progress)
+
+    assert path == out_file
+    assert first_progress_rows == [{C.WINNER: "A", C.LOG_TURN: "1"}]
+
+    with open(out_file, newline="") as fp:
+        final_rows = list(csv.DictReader(fp))
+    assert final_rows == [
+        {C.WINNER: "A", C.LOG_TURN: "1"},
+        {C.WINNER: "B", C.LOG_TURN: "2"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_run_batch_handles_errors(tmp_path):
     async def failing_fight(*args, **kwargs):
         raise RuntimeError("boom")
@@ -282,3 +324,53 @@ async def test_turn_logging_respects_setting():
     CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, str(original_setting).lower())
 
     assert any("Turn 1" in call.args[0] for call in mock_info.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_invalid_failed_attempts_cannot_apply_p2_damage_or_winner():
+    fighters = []
+    original_from_preset = sim_module.FighterState.from_preset
+
+    def capture_from_preset(id_, preset, config_section=None):
+        fighter = original_from_preset(id_, preset, config_section=config_section)
+        fighters.append(fighter)
+        return fighter
+
+    async def fake_get_attempt(*args, **kwargs):
+        return ""
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": False,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "Both attempts are empty.",
+            "explanation": "No valid actions.",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "The judge wrongly invents a decisive wound.",
+            C.DELTA: {C.FIGHTER_A: {}, C.FIGHTER_B: {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    with (
+        patch.object(sim_module.FighterState, "from_preset", side_effect=capture_from_preset),
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module.logger, "warning") as mock_warning,
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert fighters[1].status == C.FighterStatus.FIGHTING
+    assert any("both attempts were invalid and failed" in call.args[0] for call in mock_warning.call_args_list)

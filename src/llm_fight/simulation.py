@@ -3,7 +3,7 @@
 import asyncio
 import csv
 from pathlib import Path
-from typing import Dict, Callable
+from typing import Any, Dict, Callable
 
 from .state import FighterState
 from .rng import rand, seed
@@ -27,7 +27,7 @@ def _status_outcome(A: FighterState, B: FighterState) -> str | None:
     return None
 
 
-def _judge_outcome(p2: Dict[str, str]) -> str | None:
+def _judge_outcome(p2: Dict[str, Any]) -> str | None:
     if not p2.get(C.FIGHT_END, False):
         if p2.get(C.WINNER) is not None:
             logger.warning("Judge supplied winner without fight_end=true; ignoring winner.")
@@ -41,6 +41,29 @@ def _judge_outcome(p2: Dict[str, str]) -> str | None:
     if winner_id is None:
         return C.DRAW
     return "ended_no_clear_winner"
+
+
+def _attempts_both_invalid_and_failed(p1: Dict[str, Any], rolls: Dict[str, bool]) -> bool:
+    return (
+        not rolls.get(C.FIGHTER_A, False)
+        and not rolls.get(C.FIGHTER_B, False)
+        and not p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_valid", False)
+        and not p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_valid", False)
+    )
+
+
+def _clear_invalid_turn_result(p2: Dict[str, Any], p1: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
+    if not _attempts_both_invalid_and_failed(p1, rolls):
+        return p2
+
+    if p2.get(C.DELTA) or p2.get(C.FIGHT_END) or p2.get(C.WINNER) is not None:
+        logger.warning("Ignoring Judge Phase 2 damage/end result because both attempts were invalid and failed.")
+
+    sanitized = dict(p2)
+    sanitized[C.DELTA] = {}
+    sanitized[C.FIGHT_END] = False
+    sanitized[C.WINNER] = None
+    return sanitized
 
 
 async def _single_fight(
@@ -132,6 +155,7 @@ async def _single_fight(
             "recent_combat_log": judge_recent_log,
         }
         p2 = await judge_phase2(p2_input_state, rolls)
+        p2 = _clear_invalid_turn_result(p2, p1, rolls)
 
         turn_entry = CombatTurn(
             turn=turn,
@@ -221,7 +245,6 @@ async def run_batch(
     runs = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
     concurrency = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
-    res = []
     sem = asyncio.Semaphore(concurrency)
 
     async def sem_fight():
@@ -235,23 +258,17 @@ async def run_batch(
                 logger.exception("_single_fight failed")
                 return {C.WINNER: "error", C.LOG_TURN: "0"}
 
-    tasks = [asyncio.create_task(sem_fight()) for _ in range(runs)]
-    for idx, coro in enumerate(asyncio.as_completed(tasks), start=1):
-        res.append(await coro)
-        if progress:
-            progress(idx, runs)
-
     csv_path = Path(output_csv)
-    if not res:
-        # When the number of runs is zero we still create the CSV but with only headers
-        with csv_path.open("w", newline="") as fp:
-            writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
-            writer.writeheader()
-        return csv_path
-
     with csv_path.open("w", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=res[0].keys())
+        writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
         writer.writeheader()
-        writer.writerows(res)
+        fp.flush()
+
+        tasks = [asyncio.create_task(sem_fight()) for _ in range(runs)]
+        for idx, coro in enumerate(asyncio.as_completed(tasks), start=1):
+            writer.writerow(await coro)
+            fp.flush()
+            if progress:
+                progress(idx, runs)
 
     return csv_path

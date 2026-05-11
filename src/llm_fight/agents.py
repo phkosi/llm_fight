@@ -215,6 +215,7 @@ async def chat(
                     C.AGENT_MODEL: model,
                     C.AGENT_MESSAGES: messages,
                     C.AGENT_STREAM: False,
+                    C.AGENT_THINK: False,
                     C.AGENT_OPTIONS: options,
                 }
                 if schema is not None:

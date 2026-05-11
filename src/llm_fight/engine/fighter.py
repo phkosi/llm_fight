@@ -1,5 +1,6 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
 
+import re
 from typing import Union, Optional
 
 from ..state import FighterState  # Relative import from parent package
@@ -9,6 +10,18 @@ from .. import config as config_mod
 from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from . import constants as C  # Added import
 from .combat_log import CombatLog
+from .logger import logger
+
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+_EMPTY_ACTION_FALLBACK = "I keep my guard up and look for an opening."
+
+
+def _clean_fighter_action(text: str) -> str:
+    """Strip whitespace and common reasoning-only wrappers from model output."""
+    cleaned = _THINK_BLOCK_RE.sub("", text or "").strip()
+    if cleaned.lower().startswith("<think>"):
+        return ""
+    return cleaned
 
 
 def describe_pain(pain_level: int) -> str:
@@ -123,13 +136,40 @@ async def get_fighter_attempt(
 
     messages = [system, user]
     context_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
-    max_tokens = compute_max_tokens(messages, context_limit)
-    texts = await chat(
-        messages,
-        max_tokens=max_tokens,
-        num_ctx=context_limit,
-        best_of=config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1),
-        retries=config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0),
-    )
-    txt = texts[0]
-    return txt.strip()
+    best_of = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1)
+    max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
+    empty_action_retries = min(max_retries, 1)
+
+    for attempt in range(empty_action_retries + 1):
+        active_messages = messages
+        if attempt:
+            retry_user = {
+                C.AGENT_ROLE: C.AGENT_USER,
+                C.AGENT_CONTENT: (
+                    f"Your previous response was empty. Give one concrete physical action for {fighter.id} now. "
+                    "Raw action text only."
+                ),
+            }
+            active_messages = [system, user, retry_user]
+        active_max_tokens = compute_max_tokens(active_messages, context_limit)
+
+        texts = await chat(
+            active_messages,
+            max_tokens=active_max_tokens,
+            num_ctx=context_limit,
+            best_of=best_of,
+            retries=max_retries,
+        )
+        for txt in texts:
+            cleaned = _clean_fighter_action(txt)
+            if cleaned:
+                return cleaned
+        logger.warning(
+            "Fighter %s returned only empty action text on attempt %s/%s.",
+            fighter.id,
+            attempt + 1,
+            empty_action_retries + 1,
+        )
+
+    logger.warning("Fighter %s produced no usable action; using fallback guard action.", fighter.id)
+    return _EMPTY_ACTION_FALLBACK

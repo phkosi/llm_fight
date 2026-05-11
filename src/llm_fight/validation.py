@@ -72,6 +72,7 @@ DeltaSchema = {
                     },
                 },
                 C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE],
+                C.SCHEMA_ADDITIONAL_PROPERTIES: False,
             },
         },
         C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_OBJECT}},
@@ -81,7 +82,7 @@ DeltaSchema = {
             C.SCHEMA_ENUM: [status.value for status in C.FighterStatus],
         },
     },
-    C.SCHEMA_ADDITIONAL_PROPERTIES: True,
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
 }
 
 JudgeP2Schema = {

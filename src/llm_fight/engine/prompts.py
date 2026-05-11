@@ -60,6 +60,8 @@ The DeltaSchema for each fighter includes fields like:
    - omit if the fighter's status does not change
 
 Your narration should be consistent with the deltas you provide.
+Only create wounds, effects, major pain/exhaustion/heat increases, fight_end, or a winner from actions that are both valid in p1_result and successful in successful_rolls.
+If both attempts are invalid and both successful_rolls are false, return an empty delta, fight_end false, and winner null.
 If an action was successful (based on `successful_rolls`), describe its impact. If an action failed, describe that too.
 Be creative and fair.
 """

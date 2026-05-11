@@ -67,6 +67,7 @@ async def test_chat_single_call_success():
             C.AGENT_MODEL: DEFAULT_MODEL,
             C.AGENT_MESSAGES: messages,
             C.AGENT_STREAM: False,
+            C.AGENT_THINK: False,
             C.AGENT_OPTIONS: {
                 C.TEMPERATURE: DEFAULT_TEMP,
                 C.AGENT_NUM_PREDICT: max_tokens,
@@ -131,6 +132,7 @@ async def test_chat_best_of_n_calls_success():
         C.AGENT_MODEL: DEFAULT_MODEL,
         C.AGENT_MESSAGES: messages,
         C.AGENT_STREAM: False,
+        C.AGENT_THINK: False,
         C.AGENT_OPTIONS: {
             C.TEMPERATURE: DEFAULT_TEMP,
             C.AGENT_NUM_PREDICT: max_tokens,
@@ -276,6 +278,7 @@ async def test_chat_reads_model_api_and_retry_config_at_call_time(tmp_path, monk
     assert session.post.call_args.args[0] == "http://configured-host:11434/api/chat"
     payload = session.post.call_args.kwargs["json"]
     assert payload[C.AGENT_MODEL] == "config-model"
+    assert payload[C.AGENT_THINK] is False
     assert payload[C.AGENT_OPTIONS][C.TEMPERATURE] == 0.25
 
 

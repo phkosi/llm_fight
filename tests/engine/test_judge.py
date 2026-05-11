@@ -166,3 +166,55 @@ async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
 
     result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
     assert result["narration"] == "done"
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_retries_empty_structured_response_as_plain_json(mock_chat):
+    repaired = {
+        C.NARRATION: "The fighters reset after a messy exchange.",
+        C.DELTA: {},
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+    mock_chat.side_effect = [[""], [json.dumps(repaired)]]
+
+    with patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 0)):
+        result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+
+    assert result == repaired
+    assert mock_chat.call_count == 2
+    assert mock_chat.call_args_list[0].kwargs["schema"] == JudgeP2Schema
+    assert "schema" not in mock_chat.call_args_list[1].kwargs
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_returns_noop_when_all_json_attempts_fail(mock_chat):
+    mock_chat.side_effect = [[""], [""]]
+
+    with patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 0)):
+        result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+
+    assert result == {
+        C.NARRATION: "The exchange is inconclusive; both fighters keep their guard and reset distance.",
+        C.DELTA: {},
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.validation.asyncio.sleep", new_callable=AsyncMock)
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_caps_parse_retries_for_empty_responses(mock_chat, mock_sleep):
+    mock_chat.return_value = [""]
+
+    with patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 8)):
+        result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+
+    assert result[C.DELTA] == {}
+    assert result[C.FIGHT_END] is False
+    assert result[C.WINNER] is None
+    assert mock_chat.call_count == 6
+    assert mock_sleep.await_count == 2

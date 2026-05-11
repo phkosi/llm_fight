@@ -3,6 +3,8 @@
 import json
 from typing import Dict, Any
 
+from jsonschema import ValidationError, validate
+
 from .utils.json_parser import parse_json_from_text
 
 from .agents import chat
@@ -11,6 +13,7 @@ from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from . import config as config_mod
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from .engine import constants as C
+from .engine.logger import logger
 
 # -------------------------------------------------------------------
 
@@ -67,6 +70,31 @@ def _judge_settings() -> tuple[int, int, int]:
     )
 
 
+def _parse_first_json_response(response_texts: list[str]) -> dict[str, Any]:
+    last_error: json.JSONDecodeError | None = None
+    for txt in response_texts:
+        if not (txt or "").strip():
+            last_error = json.JSONDecodeError("LLM response was empty.", "", 0)
+            continue
+        try:
+            return parse_json_from_text(txt)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+    if last_error:
+        raise last_error
+    raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)
+
+
+def _phase2_noop_result() -> dict[str, Any]:
+    return {
+        C.NARRATION: "The exchange is inconclusive; both fighters keep their guard and reset distance.",
+        C.DELTA: {},
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+
 async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> Dict[str, Any]:
     """
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
@@ -105,12 +133,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
             schema=JudgeP1Schema,
             retries=max_retries,
         )
-        for txt in response_texts:
-            try:
-                return parse_json_from_text(txt)
-            except json.JSONDecodeError:
-                continue  # Try next response
-        raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
+        return _parse_first_json_response(response_texts)
 
     result = await guarded_call(_call, JudgeP1Schema, max_retries=max_retries)
     return result
@@ -137,9 +160,10 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
 
     messages = [system, user]
     max_tok_j, best_j, max_retries = _judge_settings()
+    parse_retries = min(max_retries, 2)
     max_tok = compute_max_tokens(messages, max_tok_j)
 
-    async def _call():
+    async def _call_with_schema() -> dict[str, Any]:
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
@@ -148,12 +172,41 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
             schema=JudgeP2Schema,
             retries=max_retries,
         )
-        for txt in response_texts:
-            try:
-                return parse_json_from_text(txt)
-            except json.JSONDecodeError:
-                continue  # Try next response
-        raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
+        return _parse_first_json_response(response_texts)
 
-    result = await guarded_call(_call, JudgeP2Schema, max_retries=max_retries)
+    async def _call_without_schema() -> dict[str, Any]:
+        repair_payload = {
+            **user_payload,
+            "strict_output_reminder": (
+                "Return one compact JSON object only with keys narration, delta, fight_end, and winner. "
+                "Use no markdown, no prose outside JSON, and no reasoning text."
+            ),
+        }
+        repair_messages = [
+            system,
+            {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(repair_payload)},
+        ]
+        response_texts = await chat(
+            repair_messages,
+            max_tokens=max_tok,
+            num_ctx=max_tok_j,
+            best_of=max(1, best_j),
+            retries=max_retries,
+        )
+        return _parse_first_json_response(response_texts)
+
+    async def _call() -> dict[str, Any]:
+        try:
+            data = await _call_with_schema()
+            validate(data, JudgeP2Schema)
+            return data
+        except (json.JSONDecodeError, ValidationError) as exc:
+            logger.warning("Judge Phase 2 structured response failed; retrying as plain JSON: %s", exc)
+            return await _call_without_schema()
+
+    try:
+        result = await guarded_call(_call, JudgeP2Schema, max_retries=parse_retries)
+    except RuntimeError as exc:
+        logger.warning("Judge Phase 2 failed after retries; using no-op turn result: %s", exc)
+        result = _phase2_noop_result()
     return result
