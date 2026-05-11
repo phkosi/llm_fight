@@ -93,7 +93,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-007: Damaging severed/destroyed parts bypasses status invariants
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Status Invariants And Monotonic Status Changes
 - Source: codebase review
 - Area: State invariants
@@ -227,7 +227,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-019: Judge deltas can revive terminal fighters
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Status Invariants And Monotonic Status Changes
 - Source: codebase review
 - Area: State invariants

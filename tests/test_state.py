@@ -71,6 +71,31 @@ def test_apply_damage_to_severed_part_no_layer_damage(humanoid_fighter: FighterS
     assert fighter.pain == initial_pain_after_sever + (20 // 2)
 
 
+def test_damage_to_severed_part_updates_death_invariants(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "left_arm"
+    total_arm_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    fighter.apply_damage_to_part(part_name, total_arm_hp + 10, C.DamageType.SLASHING)
+    fighter.pain = C.MAX_PAIN_BEFORE_DEATH - 5
+
+    fighter.apply_damage_to_part(part_name, 10, C.DamageType.SLASHING)
+
+    assert fighter.status == C.FighterStatus.DEAD
+
+
+def test_damage_to_destroyed_part_updates_death_invariants(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "left_eye"
+    total_eye_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    fighter.apply_damage_to_part(part_name, total_eye_hp + 1, C.DamageType.PIERCING)
+    fighter.status = C.FighterStatus.FIGHTING
+    fighter.pain = C.MAX_PAIN_BEFORE_DEATH - 5
+
+    fighter.apply_damage_to_part(part_name, 10, C.DamageType.PIERCING)
+
+    assert fighter.status == C.FighterStatus.DEAD
+
+
 def test_apply_fire_damage_adds_burning_effect(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "torso"
@@ -183,6 +208,19 @@ def test_vital_part_destruction_leads_to_unconscious(humanoid_fighter: FighterSt
 
     assert fighter.parts[part_name].status == C.IS_DESTROYED
     assert fighter.status == C.FighterStatus.UNCONSCIOUS
+
+
+def test_vital_part_destruction_does_not_revive_dead_fighter(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "head"
+    fighter.status = C.FighterStatus.DEAD
+    fighter.pain = 0
+    total_head_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+
+    fighter.apply_damage_to_part(part_name, total_head_hp + 1, C.DamageType.PIERCING)
+
+    assert fighter.parts[part_name].status == C.IS_DESTROYED
+    assert fighter.status == C.FighterStatus.DEAD
 
 
 def test_effect_tick_reduces_ttl_and_expires():
@@ -339,6 +377,37 @@ def test_apply_delta_changes_status(humanoid_fighter: FighterState):
     assert fighter.status == C.FighterStatus.FIGHTING
     fighter.apply_delta(delta)
     assert fighter.status == C.FighterStatus.UNCONSCIOUS
+
+
+@pytest.mark.parametrize(
+    ("start_status", "requested_status"),
+    [
+        (C.FighterStatus.DEAD, C.FighterStatus.FIGHTING),
+        (C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS),
+        (C.FighterStatus.UNCONSCIOUS, C.FighterStatus.FIGHTING),
+    ],
+)
+def test_apply_delta_rejects_non_monotonic_status_changes(
+    humanoid_fighter: FighterState,
+    start_status: C.FighterStatus,
+    requested_status: C.FighterStatus,
+):
+    fighter = humanoid_fighter
+    fighter.status = start_status
+
+    fighter.apply_delta({C.STATUS_CHANGE: requested_status})
+
+    assert fighter.status == start_status
+
+
+def test_apply_delta_allows_monotonic_status_changes(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_delta({C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS})
+    assert fighter.status == C.FighterStatus.UNCONSCIOUS
+
+    fighter.apply_delta({C.STATUS_CHANGE: C.FighterStatus.DEAD})
+    assert fighter.status == C.FighterStatus.DEAD
 
 
 def test_apply_delta_pain_induces_unconsciousness(humanoid_fighter: FighterState):

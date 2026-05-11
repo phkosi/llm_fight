@@ -194,7 +194,7 @@ Required tests:
 
 Addresses: ISSUE-007, ISSUE-019
 
-- [ ] Make fighter status invariants run after every state-mutating path and make judge-driven status changes monotonic by default. `fighting -> unconscious -> dead` is allowed; `dead` or `unconscious` cannot be revived to `fighting` through an ordinary Phase 2 delta.
+- [x] Make fighter status invariants run after every state-mutating path and make judge-driven status changes monotonic by default. `fighting -> unconscious -> dead` is allowed; `dead` or `unconscious` cannot be revived to `fighting` through an ordinary Phase 2 delta.
 
 Acceptance goals:
 

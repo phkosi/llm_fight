@@ -66,6 +66,11 @@ DAMAGE_TYPE_ALIASES = {
 
 _SAFE_EFFECT_NAME_RE = re.compile(C.EFFECT_SAFE_NAME_PATTERN)
 _SAFE_EFFECT_TEXT_RE = re.compile(C.EFFECT_SAFE_TEXT_PATTERN)
+_STATUS_SEVERITY = {
+    C.FighterStatus.FIGHTING: 0,
+    C.FighterStatus.UNCONSCIOUS: 1,
+    C.FighterStatus.DEAD: 2,
+}
 
 
 @dataclass
@@ -307,6 +312,28 @@ class FighterState:
             self.status = C.FighterStatus.UNCONSCIOUS
             logger.info(f"Fighter {self.id} fell unconscious due to destruction of a vital part.")
 
+    def _apply_status_change(self, new_status: Any) -> None:
+        if new_status in (None, ""):
+            return
+        if not isinstance(new_status, C.FighterStatus):
+            try:
+                new_status = C.FighterStatus(new_status)
+            except ValueError:
+                logger.warning(f"Unknown status '{new_status}' for fighter {self.id}")
+                return
+
+        current_severity = _STATUS_SEVERITY[self.status]
+        new_severity = _STATUS_SEVERITY[new_status]
+        if new_severity < current_severity:
+            logger.warning(
+                "Ignoring non-monotonic status change for fighter %s: %s -> %s",
+                self.id,
+                self.status.value,
+                new_status.value,
+            )
+            return
+        self.status = new_status
+
     def apply_damage_to_part(self, part_name: str, damage_amount: int, damage_type: C.DamageType | str):
         """Applies damage to a specific body part and its tissue layers."""
         if damage_amount <= 0:
@@ -331,6 +358,7 @@ class FighterState:
             logger.debug(f"Attempted to damage already severed/destroyed part: {part_name} for fighter {self.id}")
             # Optionally, apply pain or other effects even if part is gone/destroyed
             self.pain += damage_amount // 2  # Reduced pain for hitting a gone part
+            self._update_status_from_invariants()
             return
 
         for layer in part.layers:
@@ -367,7 +395,7 @@ class FighterState:
                 part.status = C.IS_DESTROYED
             logger.info(f"{self.id}:{part_name} has been {part.status}.")
             if part.is_vital:
-                self.status = C.FighterStatus.UNCONSCIOUS
+                self._apply_status_change(C.FighterStatus.UNCONSCIOUS)
 
         # Apply bleeding or burning effects based on damage type
         if dt == C.DamageType.FIRE.value:
@@ -470,16 +498,7 @@ class FighterState:
                 logger.debug(f"Effect '{name_removed}' removed from {self.id} via delta.")
 
         if C.STATUS_CHANGE in delta:
-            new_status = delta[C.STATUS_CHANGE]
-            if new_status in (None, ""):
-                pass
-            elif isinstance(new_status, C.FighterStatus):
-                self.status = new_status
-            else:
-                try:
-                    self.status = C.FighterStatus(new_status)
-                except ValueError:
-                    logger.warning(f"Unknown status '{new_status}' for fighter {self.id}")
+            self._apply_status_change(delta[C.STATUS_CHANGE])
 
         self._update_status_from_invariants()
 
