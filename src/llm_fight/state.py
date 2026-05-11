@@ -9,7 +9,55 @@ from .rng import choice
 from .anatomy import BodyPart, PRESETS
 from .engine import constants as C
 from .engine.logger import logger
-from .config import CONFIG
+from . import config as config_mod
+
+PART_ALIASES = {
+    "body": "torso",
+    "chest": "torso",
+    "core": "torso",
+    "abdomen": "torso",
+    "stomach": "torso",
+    "neck": "head",
+    "throat": "head",
+    "face": "head",
+    "skull": "head",
+    "left arm": "left_arm",
+    "left-arm": "left_arm",
+    "left hand": "left_arm",
+    "left-hand": "left_arm",
+    "right arm": "right_arm",
+    "right-arm": "right_arm",
+    "right hand": "right_arm",
+    "right-hand": "right_arm",
+    "hand": "right_arm",
+    "arm": "right_arm",
+    "left leg": "left_leg",
+    "left-leg": "left_leg",
+    "left foot": "left_leg",
+    "left-foot": "left_leg",
+    "right leg": "right_leg",
+    "right-leg": "right_leg",
+    "right foot": "right_leg",
+    "right-foot": "right_leg",
+    "foot": "right_leg",
+    "leg": "right_leg",
+    "eye": "left_eye",
+    "left eye": "left_eye",
+    "left-eye": "left_eye",
+    "right eye": "right_eye",
+    "right-eye": "right_eye",
+}
+
+
+DAMAGE_TYPE_ALIASES = {
+    "burn": C.DamageType.FIRE.value,
+    "burning": C.DamageType.FIRE.value,
+    "cut": C.DamageType.SLASHING.value,
+    "slash": C.DamageType.SLASHING.value,
+    "stab": C.DamageType.PIERCING.value,
+    "poison": C.DamageType.GENERIC.value,
+    C.EFFECT_FIRE_FROM_EFFECT: C.DamageType.FIRE.value,
+}
 
 
 @dataclass
@@ -59,7 +107,7 @@ class FighterState:
         parts_copy = copy.deepcopy(preset.parts)
 
         section = config_section or id_
-        settings = CONFIG.get_fighter_settings(section)
+        settings = config_mod.CONFIG.get_fighter_settings(section)
 
         return cls(
             id=id_,
@@ -74,15 +122,74 @@ class FighterState:
         """Serializes the fighter's state to a JSON-compatible dictionary."""
         return asdict(self)
 
+    def normalize_part_name(self, part_name: str) -> str | None:
+        """Return a known body-part key for common natural-language names."""
+        if part_name in self.parts:
+            return part_name
+
+        raw = str(part_name).strip().lower().strip(".,;:!?")
+        normalized = raw.replace("-", "_").replace(" ", "_")
+        if normalized in self.parts:
+            return normalized
+
+        alias = PART_ALIASES.get(raw) or PART_ALIASES.get(normalized)
+        if alias in self.parts:
+            logger.debug("Normalized body part '%s' to '%s' for fighter %s", part_name, alias, self.id)
+            return alias
+
+        return None
+
+    def normalize_damage_type(self, damage_type: C.DamageType | str) -> str:
+        """Return a known damage type, mapping common LLM aliases."""
+        if isinstance(damage_type, C.DamageType):
+            return damage_type.value
+        normalized = str(damage_type).strip().lower()
+        return DAMAGE_TYPE_ALIASES.get(normalized, normalized)
+
+    def _update_status_from_invariants(self) -> None:
+        """Apply status invariants after any state mutation."""
+        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.FighterStatus.FIGHTING:
+            logger.info(f"{self.id} fell unconscious due to pain: {self.pain}. Current status: {self.status}")
+            self.status = C.FighterStatus.UNCONSCIOUS
+            logger.info(f"{self.id} status is now {self.status}")
+
+        logger.debug(
+            f"Checking death by pain for {self.id}: Pain={self.pain} (Limit={C.MAX_PAIN_BEFORE_DEATH}), Status={self.status}"
+        )
+        if self.pain >= C.MAX_PAIN_BEFORE_DEATH and self.status != C.FighterStatus.DEAD:
+            logger.info(f"{self.id} met conditions for death by pain. Current status before change: {self.status}")
+            self.status = C.FighterStatus.DEAD
+            logger.info(f"{self.id} died from excessive pain: {self.pain}. Status is now {self.status}")
+        else:
+            logger.debug(f"{self.id} did NOT meet conditions for death by pain.")
+
+        vital_parts = [part for part in self.parts.values() if part.is_vital]
+        destroyed_vital_parts = [part for part in vital_parts if part.status == C.IS_DESTROYED]
+        if vital_parts and len(destroyed_vital_parts) == len(vital_parts) and self.status != C.FighterStatus.DEAD:
+            self.status = C.FighterStatus.DEAD
+            logger.info(f"Fighter {self.id} died due to destruction of all vital parts.")
+        elif destroyed_vital_parts and self.status == C.FighterStatus.FIGHTING:
+            self.status = C.FighterStatus.UNCONSCIOUS
+            logger.info(f"Fighter {self.id} fell unconscious due to destruction of a vital part.")
+
     def apply_damage_to_part(self, part_name: str, damage_amount: int, damage_type: C.DamageType | str):
         """Applies damage to a specific body part and its tissue layers."""
-        if part_name not in self.parts:
+        if damage_amount <= 0:
+            logger.warning(
+                "Ignoring non-positive damage amount %s to %s for fighter %s", damage_amount, part_name, self.id
+            )
+            self._update_status_from_invariants()
+            return
+
+        resolved_part_name = self.normalize_part_name(part_name)
+        if resolved_part_name is None:
             logger.warning(f"Attempted to damage non-existent part: {part_name} for fighter {self.id}")
             return
 
+        part_name = resolved_part_name
         part = self.parts[part_name]
         remaining_damage = damage_amount
-        dt = damage_type.value if isinstance(damage_type, C.DamageType) else damage_type
+        dt = self.normalize_damage_type(damage_type)
 
         # If part is already severed or destroyed, no more damage can be applied to its layers
         if part.severed or part.status == C.IS_DESTROYED:
@@ -171,10 +278,13 @@ class FighterState:
                 )
                 logger.debug(f"{self.id}:{part_name} is now bleeding.")
 
+        self._update_status_from_invariants()
+
     def apply_delta(self, delta: Dict[str, Any]):
         """Applies changes from a Judge P2 delta to the fighter's state."""
         if not delta:
-            return
+            self._update_status_from_invariants()
+            return self
 
         self.pain += delta.get(C.PAIN_INCREASE, 0)
         self.exhaustion += delta.get(C.EXHAUSTION_INCREASE, 0)
@@ -210,7 +320,7 @@ class FighterState:
 
                 new_effect = Effect(
                     name=effect_name,
-                    magnitude=eff_data.get(C.VALUE, 1.0),
+                    magnitude=eff_data.get(C.VALUE, eff_data.get("magnitude", 1.0)),
                     ttl=eff_data.get(C.EFFECT_TTL, -1),
                     on_apply=eff_data.get(C.EFFECT_ON_APPLY, f"{effect_name} applied."),
                     on_tick=eff_data.get(C.EFFECT_ON_TICK),
@@ -233,7 +343,9 @@ class FighterState:
 
         if C.STATUS_CHANGE in delta:
             new_status = delta[C.STATUS_CHANGE]
-            if isinstance(new_status, C.FighterStatus):
+            if new_status in (None, ""):
+                pass
+            elif isinstance(new_status, C.FighterStatus):
                 self.status = new_status
             else:
                 try:
@@ -241,40 +353,7 @@ class FighterState:
                 except ValueError:
                     logger.warning(f"Unknown status '{new_status}' for fighter {self.id}")
 
-        # Check for status changes due to pain
-        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.FighterStatus.FIGHTING:
-            logger.info(f"{self.id} fell unconscious due to pain: {self.pain}. Current status: {self.status}")
-            self.status = C.FighterStatus.UNCONSCIOUS
-            logger.info(f"{self.id} status is now {self.status}")
-
-        # Check for death by pain AFTER unconsciousness check
-        logger.debug(
-            f"Checking death by pain for {self.id}: Pain={self.pain} (Limit={C.MAX_PAIN_BEFORE_DEATH}), Status={self.status}"
-        )
-        if self.pain >= C.MAX_PAIN_BEFORE_DEATH and self.status != C.FighterStatus.DEAD:
-            logger.info(f"{self.id} met conditions for death by pain. Current status before change: {self.status}")
-            self.status = C.FighterStatus.DEAD
-            logger.info(f"{self.id} died from excessive pain: {self.pain}. Status is now {self.status}")
-        else:
-            logger.debug(f"{self.id} did NOT meet conditions for death by pain.")
-
-        vital_parts_destroyed = 0
-        total_vital_parts = 0
-        for part in self.parts.values():
-            if part.is_vital:
-                total_vital_parts += 1
-                if part.status == C.IS_DESTROYED:
-                    vital_parts_destroyed += 1
-
-        if total_vital_parts > 0 and vital_parts_destroyed == total_vital_parts and self.status != C.FighterStatus.DEAD:
-            self.status = C.FighterStatus.DEAD
-            logger.info(f"Fighter {self.id} died due to destruction of all vital parts.")
-        elif (
-            any(p.is_vital and p.status == C.IS_DESTROYED for p in self.parts.values())
-            and self.status == C.FighterStatus.FIGHTING
-        ):
-            self.status = C.FighterStatus.UNCONSCIOUS
-            logger.info(f"Fighter {self.id} fell unconscious due to destruction of a vital part.")
+        self._update_status_from_invariants()
 
         return self  # Allow chaining or inspection
 
@@ -317,3 +396,4 @@ class FighterState:
                 if expired:
                     logger.info(f"Effect {eff.name} on {self.id} expired.")
                     eff_list.remove(eff)
+        self._update_status_from_invariants()

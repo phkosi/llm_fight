@@ -35,21 +35,21 @@ class Preset:
 
 
 def compose_humanoid() -> Preset:
-    base_layers = [
-        TissueLayer("skin", 10),
-        TissueLayer("fat", 5),
-        TissueLayer("muscle", 15),
-        TissueLayer("bone", 10),
-    ]
+    def base_layers() -> List[TissueLayer]:
+        return [
+            TissueLayer("skin", 10),
+            TissueLayer("fat", 5),
+            TissueLayer("muscle", 15),
+            TissueLayer("bone", 10),
+        ]
+
     parts = {
-        "head": BodyPart("head", base_layers.copy(), is_vital=True, can_be_severed=False),
-        "torso": BodyPart(
-            "torso", base_layers.copy() + [TissueLayer("organs", 20)], is_vital=True, can_be_severed=False
-        ),
-        "left_arm": BodyPart("left_arm", base_layers.copy(), can_be_severed=True),
-        "right_arm": BodyPart("right_arm", base_layers.copy(), can_be_severed=True),
-        "left_leg": BodyPart("left_leg", base_layers.copy(), can_be_severed=True),
-        "right_leg": BodyPart("right_leg", base_layers.copy(), can_be_severed=True),
+        "head": BodyPart("head", base_layers(), is_vital=True, can_be_severed=False),
+        "torso": BodyPart("torso", base_layers() + [TissueLayer("organs", 20)], is_vital=True, can_be_severed=False),
+        "left_arm": BodyPart("left_arm", base_layers(), can_be_severed=True),
+        "right_arm": BodyPart("right_arm", base_layers(), can_be_severed=True),
+        "left_leg": BodyPart("left_leg", base_layers(), can_be_severed=True),
+        "right_leg": BodyPart("right_leg", base_layers(), can_be_severed=True),
         "heart": BodyPart("heart", [TissueLayer("muscle", 20)], is_vital=True, can_be_severed=False),
         "left_eye": BodyPart(
             "left_eye", [TissueLayer("soft", 5)], can_be_severed=False

@@ -1,4 +1,4 @@
-"""Judge orchestration (Phase‑1 probability, RNG, Phase‑2 narration)."""
+﻿"""Judge orchestration (Phase-1 probability, RNG, Phase-2 narration)."""
 
 import json
 from typing import Dict, Any
@@ -8,14 +8,63 @@ from .utils.json_parser import parse_json_from_text
 from .agents import chat
 from .utils.token_counter import compute_max_tokens
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
-from .config import CONFIG
+from . import config as config_mod
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from .engine import constants as C
 
-MAX_TOK_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int)
-BEST_J = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
-
 # -------------------------------------------------------------------
+
+
+def _status_value(value: Any) -> Any:
+    return value.value if hasattr(value, "value") else value
+
+
+def _effect_names(effects: list[dict[str, Any]]) -> list[str]:
+    return [effect.get(C.NAME, "") for effect in effects if effect.get(C.NAME)]
+
+
+def _damaged_parts(parts: dict[str, Any]) -> dict[str, Any]:
+    damaged = {}
+    for name, part in parts.items():
+        status = part.get(C.STATUS, "intact")
+        layers = part.get("layers", [])
+        damaged_layers = [
+            {"name": layer.get(C.NAME), "hp": layer.get(C.MAX_HP)} for layer in layers if layer.get(C.MAX_HP, 0) <= 0
+        ]
+        if status != "intact" or part.get("severed") or damaged_layers:
+            damaged[name] = {
+                C.STATUS: status,
+                "severed": part.get("severed", False),
+                "damaged_layers": damaged_layers,
+            }
+    return damaged
+
+
+def _fighter_summary(state: dict[str, Any]) -> dict[str, Any]:
+    parts = state.get("parts", {})
+    return {
+        "id": state.get("id"),
+        "class": state.get("class_"),
+        C.LOADOUT: state.get(C.LOADOUT),
+        "environment": state.get("environment"),
+        C.STATUS: _status_value(state.get(C.STATUS)),
+        C.PAIN: state.get(C.PAIN),
+        C.EXHAUSTION: state.get(C.EXHAUSTION),
+        C.HEAT: state.get(C.HEAT),
+        C.BUFFS: _effect_names(state.get(C.BUFFS, [])),
+        C.DEBUFFS: _effect_names(state.get(C.DEBUFFS, [])),
+        "valid_target_parts": sorted(parts.keys()),
+        "damaged_parts": _damaged_parts(parts),
+    }
+
+
+def _judge_settings() -> tuple[int, int, int]:
+    cfg = config_mod.CONFIG
+    return (
+        cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int),
+        cfg.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int),
+        cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int),
+    )
 
 
 async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> Dict[str, Any]:
@@ -35,14 +84,8 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     system_prompt_content = JUDGE_P1_SYSTEM_PROMPT
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
     user_content = {
-        f"fighter_{C.FIGHTER_A}_state_summary": {
-            C.STATUS: state.get(C.FIGHTER_A, {}).get(C.STATUS),
-            C.PAIN: state.get(C.FIGHTER_A, {}).get(C.PAIN),
-        },
-        f"fighter_{C.FIGHTER_B}_state_summary": {
-            C.STATUS: state.get(C.FIGHTER_B, {}).get(C.STATUS),
-            C.PAIN: state.get(C.FIGHTER_B, {}).get(C.PAIN),
-        },
+        f"fighter_{C.FIGHTER_A}_state_summary": _fighter_summary(state.get(C.FIGHTER_A, {})),
+        f"fighter_{C.FIGHTER_B}_state_summary": _fighter_summary(state.get(C.FIGHTER_B, {})),
         f"{C.ATTEMPT}_{C.FIGHTER_A}": attemptA,
         f"{C.ATTEMPT}_{C.FIGHTER_B}": attemptB,
         "recent_combat_log": recent_log,
@@ -50,15 +93,17 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
 
     messages = [system, user]
-    max_tok = compute_max_tokens(messages, MAX_TOK_J)
+    max_tok_j, best_j, max_retries = _judge_settings()
+    max_tok = compute_max_tokens(messages, max_tok_j)
 
     async def _call():
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
-            num_ctx=MAX_TOK_J,
-            best_of=BEST_J,
+            num_ctx=max_tok_j,
+            best_of=best_j,
             schema=JudgeP1Schema,
+            retries=max_retries,
         )
         for txt in response_texts:
             try:
@@ -67,7 +112,7 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
                 continue  # Try next response
         raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
 
-    result = await guarded_call(_call, JudgeP1Schema)
+    result = await guarded_call(_call, JudgeP1Schema, max_retries=max_retries)
     return result
 
 
@@ -87,19 +132,21 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
     system_prompt_content = JUDGE_P2_SYSTEM_PROMPT
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
     # user_content already prepared and passed as p2_input_state, merge with rolls
-    user_payload = {**p2_input_state, C.PREDICTION: rolls}
+    user_payload = {**p2_input_state, C.SUCCESSFUL_ROLLS: rolls}
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
 
     messages = [system, user]
-    max_tok = compute_max_tokens(messages, MAX_TOK_J)
+    max_tok_j, best_j, max_retries = _judge_settings()
+    max_tok = compute_max_tokens(messages, max_tok_j)
 
     async def _call():
         response_texts = await chat(
             messages,
             max_tokens=max_tok,
-            num_ctx=MAX_TOK_J,
-            best_of=BEST_J,
+            num_ctx=max_tok_j,
+            best_of=best_j,
             schema=JudgeP2Schema,
+            retries=max_retries,
         )
         for txt in response_texts:
             try:
@@ -108,5 +155,5 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
                 continue  # Try next response
         raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)  # All failed
 
-    result = await guarded_call(_call, JudgeP2Schema)
+    result = await guarded_call(_call, JudgeP2Schema, max_retries=max_retries)
     return result

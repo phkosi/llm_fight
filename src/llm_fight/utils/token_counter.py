@@ -7,23 +7,25 @@ try:  # tiktoken is optional for more accurate counts
     import tiktoken
 
     _ENCODING = None
+    _ENCODING_MODEL = None
 
     def _get_encoding() -> "tiktoken.Encoding":
         """Return a tiktoken encoding for the configured model."""
-        global _ENCODING
-        if _ENCODING is None:
-            from ..config import CONFIG
+        global _ENCODING, _ENCODING_MODEL
+        from .. import config as config_mod
 
-            model = CONFIG.get(
-                C.CONFIG_GENERAL,
-                C.CONFIG_LLAMA_DEFAULT_MODEL,
-                str,
-                fallback="",
-            )
+        model = config_mod.CONFIG.get(
+            C.CONFIG_GENERAL,
+            C.CONFIG_LLAMA_DEFAULT_MODEL,
+            str,
+            fallback="",
+        )
+        if _ENCODING is None or _ENCODING_MODEL != model:
             try:
                 _ENCODING = tiktoken.encoding_for_model(model)
             except Exception:
                 _ENCODING = tiktoken.get_encoding("cl100k_base")
+            _ENCODING_MODEL = model
         return _ENCODING
 
     def count_tokens(text: str) -> int:

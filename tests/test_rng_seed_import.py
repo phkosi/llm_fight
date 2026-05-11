@@ -1,9 +1,9 @@
 import importlib
 import random
 
-from src import rng
-from src.config import CONFIG
-from src.engine import constants as C
+from llm_fight import rng
+from llm_fight.config import CONFIG
+from llm_fight.engine import constants as C
 
 
 def test_rng_seed_import(monkeypatch):

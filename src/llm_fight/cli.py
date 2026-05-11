@@ -1,18 +1,68 @@
-"""Typer‑powered CLI front‑end."""
+﻿"""Typer-powered CLI front-end."""
 
+import asyncio
+import configparser
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
 import typer
 
 from .engine import render
 from .engine import constants as C
 from .agents import ping_ollama
-import asyncio
 from click import ClickException
 
-
 app = typer.Typer()
+
+
+def _load_config(config_path: Optional[Path]) -> None:
+    if config_path is None:
+        return
+    if not config_path.exists():
+        raise ClickException(f"Config file not found: {config_path}")
+
+    from . import config as config_mod
+
+    try:
+        config_mod.CONFIG = config_mod.Config(config_path)
+    except configparser.Error as exc:
+        raise ClickException(f"Could not read config file {config_path}: {exc}") from exc
+
+
+def _apply_simulation_overrides(runs: Optional[int] = None, max_turns: Optional[int] = None) -> None:
+    if runs is None and max_turns is None:
+        return
+
+    from . import config as config_mod
+
+    if runs is not None:
+        if runs < 0:
+            raise ClickException("--runs must be 0 or greater")
+        config_mod.CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_RUNS, runs)
+    if max_turns is not None:
+        if max_turns < 1:
+            raise ClickException("--max-turns must be 1 or greater")
+        config_mod.CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, max_turns)
+
+
+def _run_async(coro):
+    try:
+        return asyncio.run(coro)
+    except ConnectionError as exc:
+        raise ClickException(str(exc)) from exc
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        raise ClickException(
+            f"Ollama request failed: {exc}. Make sure Ollama is running, the model is pulled, "
+            "and ollama_api_url or API_URL points to the correct endpoint."
+        ) from exc
+    except RuntimeError as exc:
+        if "Validation/JSON parsing failed" in str(exc):
+            raise ClickException(
+                f"LLM output could not be parsed after retries: {exc}. "
+                "Try a stronger model, increasing max_tokens_judge, or increasing max_retries."
+            ) from exc
+        raise
 
 
 @app.command()
@@ -41,6 +91,16 @@ def simulate(
         "-B",
         help="INI section to use for fighter B",
     ),
+    runs: Optional[int] = typer.Option(
+        None,
+        "--runs",
+        help="Override [SIMULATION] runs for this invocation",
+    ),
+    max_turns: Optional[int] = typer.Option(
+        None,
+        "--max-turns",
+        help="Override [SIMULATION] max_turns for this invocation",
+    ),
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -48,7 +108,7 @@ def simulate(
         help="Show progress bar and summary table",
     ),
 ):
-    """Run self‑play batch using config.ini parameters."""
+    """Run self-play batch using llmfight.ini parameters."""
     from logging import CRITICAL
     from . import config as config_mod
     from .engine.logger import update_logger_level, logger
@@ -56,14 +116,14 @@ def simulate(
     if not render.RICH_AVAILABLE:
         raise ClickException("The 'rich' library is required for this command")
 
-    if config is not None:
-        config_mod.CONFIG = config_mod.Config(config)
+    _load_config(config)
+    _apply_simulation_overrides(runs=runs, max_turns=max_turns)
     update_logger_level()
     log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
     if not verbose and not log_turns:
         logger.setLevel(CRITICAL)
 
-    asyncio.run(ping_ollama())
+    _run_async(ping_ollama())
 
     from .simulation import run_batch
 
@@ -86,7 +146,7 @@ def simulate(
 
         progress_cb = update
         with progress:
-            path = asyncio.run(
+            path = _run_async(
                 run_batch(
                     output_csv,
                     fighter_a_section=fighter_a,
@@ -95,7 +155,7 @@ def simulate(
                 )
             )
     else:
-        path = asyncio.run(
+        path = _run_async(
             run_batch(
                 output_csv,
                 fighter_a_section=fighter_a,
@@ -134,6 +194,11 @@ def play(
         "-B",
         help="INI section to use for fighter B",
     ),
+    max_turns: Optional[int] = typer.Option(
+        None,
+        "--max-turns",
+        help="Override [SIMULATION] max_turns for this invocation",
+    ),
     simple_output: bool = typer.Option(
         False,
         "--simple-output",
@@ -155,18 +220,18 @@ def play(
     if not render.RICH_AVAILABLE and not simple_output:
         raise ClickException("The 'rich' library is required for this command")
 
-    if config is not None:
-        config_mod.CONFIG = config_mod.Config(config)
+    _load_config(config)
+    _apply_simulation_overrides(max_turns=max_turns)
     update_logger_level()
     log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
     if not verbose and not log_turns:
         logger.setLevel(CRITICAL)
 
-    asyncio.run(ping_ollama())
+    _run_async(ping_ollama())
 
     from .simulation import _single_fight
 
-    result, log = asyncio.run(
+    result, log = _run_async(
         _single_fight(
             fighter_a_section=fighter_a,
             fighter_b_section=fighter_b,

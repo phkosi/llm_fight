@@ -2,6 +2,8 @@
 # LLM Fighters Combat Engine – Detailed Design Document (v0.5)
 This file preserves the original design for historical reference.
 
+> Do not use this document for setup or current commands. It predates the Python 3.14 `uv` workflow, the `llm_fight` package rename, and the native Ollama `/api/chat` default. Use `README.md` and `docs/Design_doc.md` instead.
+
 
 > **Status · 2025‑05‑31**  This document defines the first working milestone of the local‑LLM 1‑vs‑1 fighting simulator.  It is formatted in GitHub‑flavoured Markdown and should render correctly in most viewers (Discord, GitHub, VS Code, etc.).
 

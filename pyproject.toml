@@ -11,45 +11,51 @@ version = "0.1.0"
 description = "Turn-based combat simulator with local LLMs"
 readme = "README.md"
 authors = [{name = "LLM Fighters Project"}]
-license = {file = "LICENSE"}
-requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
 dependencies = [
-    "annotated-types==0.7.0",
-    "anyio==4.9.0",
-    "attrs==25.3.0",
-    "certifi==2025.4.26",
-    "click==8.2.1",
-    "colorama==0.4.6",
-    "h11==0.16.0",
-    "httpcore==1.0.9",
-    "httpx==0.28.1",
-    "aiohttp==3.9.5",
-    "fastapi>=0.111",
-    "idna==3.10",
-    "iniconfig==2.1.0",
-    "jsonschema==4.24.0",
-    "jsonschema-specifications==2025.4.1",
-    "markdown-it-py==3.0.0",
-    "mdurl==0.1.2",
-    "ollama==0.5.1",
-    "packaging==25.0",
-    "pluggy==1.6.0",
-    "pydantic==2.11.5",
-    "pydantic_core==2.33.2",
-    "Pygments==2.19.1",
-    "pytest==8.4.0",
-    "pytest-asyncio==1.0.0",
-    "referencing==0.36.2",
-    "rich==14.0.0",
-    "rpds-py==0.25.1",
-    "shellingham==1.5.4",
-    "sniffio==1.3.1",
-    "typer==0.16.0",
-    "typing-inspection==0.4.1",
-    "typing_extensions==4.14.0",
-    "discord.py==2.3.2",
-    "tiktoken==0.7.0",
+    "aiohttp>=3.13.5,<4",
+    "click>=8.2.1,<9",
+    "jsonschema>=4.26,<5",
+    "rich>=15,<16",
+    "typer>=0.25.1,<1",
 ]
+
+[project.optional-dependencies]
+discord = [
+    "audioop-lts>=0.2; python_version >= '3.13'",
+    "discord.py>=2.7.1,<3",
+]
+live = [
+    "ollama>=0.6.2,<1",
+]
+tokens = [
+    "tiktoken>=0.12,<1",
+]
+
+[project.scripts]
+llmfight = "llm_fight.cli:app"
+llmfight-discord = "llm_fight.discord_bot:run_bot"
+
+[dependency-groups]
+dev = [
+    "black>=26.3,<27",
+    "flake8>=7.3,<8",
+    "hypothesis>=6.152,<7",
+    "pytest>=9,<10",
+    "pytest-asyncio>=1.3,<2",
+    "pytest-cov>=7.1,<8",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: requires an explicitly configured live Ollama endpoint",
+    "perf: long-running local performance checks",
+]

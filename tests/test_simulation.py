@@ -3,19 +3,19 @@ import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import csv
 
-import src.simulation as sim_module
-from src.state import FighterState  # Keep for spec
+import llm_fight.simulation as sim_module
+from llm_fight.state import FighterState  # Keep for spec
 
-# from src.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
-from src.engine import constants as C
-from src.config import CONFIG
+# from llm_fight.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
+from llm_fight.engine import constants as C
+from llm_fight.config import CONFIG
 
 
 @pytest.mark.asyncio
-@patch("src.simulation.get_fighter_attempt", new_callable=AsyncMock)
-@patch("src.simulation.judge_phase1", new_callable=AsyncMock)
-@patch("src.simulation.judge_phase2", new_callable=AsyncMock)
-@patch("src.state.FighterState.from_preset")  # This is the crucial mock for instances inside _single_fight
+@patch("llm_fight.simulation.get_fighter_attempt", new_callable=AsyncMock)
+@patch("llm_fight.simulation.judge_phase1", new_callable=AsyncMock)
+@patch("llm_fight.simulation.judge_phase2", new_callable=AsyncMock)
+@patch("llm_fight.state.FighterState.from_preset")  # This is the crucial mock for instances inside _single_fight
 async def test_single_fight_runs_to_completion(
     mock_from_preset,  # Renamed for clarity, this is the mock for FighterState.from_preset
     mock_judge_p2,
@@ -29,6 +29,7 @@ async def test_single_fight_runs_to_completion(
     fighter_a_mock = MagicMock(spec=FighterState)
     fighter_a_mock.id = "A"
     fighter_a_mock.status = C.FighterStatus.FIGHTING
+    fighter_a_mock.parts = {"head": object(), "torso": object()}
     fighter_a_mock.to_json.return_value = {
         "id": "A",
         C.STATUS: C.FighterStatus.FIGHTING,
@@ -40,6 +41,7 @@ async def test_single_fight_runs_to_completion(
     fighter_b_mock = MagicMock(spec=FighterState)
     fighter_b_mock.id = "B"
     fighter_b_mock.status = C.FighterStatus.FIGHTING
+    fighter_b_mock.parts = {"head": object(), "torso": object()}
     fighter_b_mock.to_json.return_value = {"id": "B", C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0}
 
     # Define side effect for B's apply_delta to change status
@@ -111,7 +113,7 @@ async def test_run_batch_concurrency(tmp_path):
         return {C.WINNER: "A", C.LOG_TURN: "1"}
 
     with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
-        orig_get = sim_module.CONFIG.get
+        orig_get = sim_module.config_mod.CONFIG.get
 
         def fake_get(section, key, cast=str, fallback=None):
             if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
@@ -120,7 +122,7 @@ async def test_run_batch_concurrency(tmp_path):
                 return 2
             return orig_get(section, key, cast, fallback)
 
-        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+        with patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get):
             out_file = tmp_path / "result.csv"
             ret = await sim_module.run_batch(out_file)
 
@@ -139,7 +141,7 @@ async def test_run_batch_exact_runs(tmp_path):
         return {C.WINNER: "A", C.LOG_TURN: "1"}
 
     with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
-        orig_get = sim_module.CONFIG.get
+        orig_get = sim_module.config_mod.CONFIG.get
 
         def fake_get(section, key, cast=str, fallback=None):
             if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
@@ -148,7 +150,7 @@ async def test_run_batch_exact_runs(tmp_path):
                 return 1
             return orig_get(section, key, cast, fallback)
 
-        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+        with patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get):
             await sim_module.run_batch(tmp_path / "result.csv")
 
     assert calls == 3
@@ -163,7 +165,7 @@ async def test_run_batch_progress_callback(tmp_path):
     progress_calls = []
 
     with patch.object(sim_module, "_single_fight", side_effect=fake_fight):
-        orig_get = sim_module.CONFIG.get
+        orig_get = sim_module.config_mod.CONFIG.get
 
         def fake_get(section, key, cast=str, fallback=None):
             if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
@@ -172,7 +174,7 @@ async def test_run_batch_progress_callback(tmp_path):
                 return 1
             return orig_get(section, key, cast, fallback)
 
-        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+        with patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get):
             out_file = tmp_path / "prog.csv"
 
             def cb(done, total):
@@ -189,7 +191,7 @@ async def test_run_batch_handles_errors(tmp_path):
         raise RuntimeError("boom")
 
     with patch.object(sim_module, "_single_fight", side_effect=failing_fight):
-        orig_get = sim_module.CONFIG.get
+        orig_get = sim_module.config_mod.CONFIG.get
 
         def fake_get(section, key, cast=str, fallback=None):
             if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
@@ -199,7 +201,7 @@ async def test_run_batch_handles_errors(tmp_path):
             return orig_get(section, key, cast, fallback)
 
         with (
-            patch.object(sim_module.CONFIG, "get", side_effect=fake_get),
+            patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
             patch.object(sim_module.logger, "exception") as mock_exc,
         ):
             out_file = tmp_path / "err.csv"
@@ -219,7 +221,7 @@ async def test_run_batch_zero_runs(tmp_path):
     out_file = tmp_path / "empty.csv"
 
     with patch.object(sim_module, "_single_fight", side_effect=RuntimeError("should not run")) as mock_fight:
-        orig_get = sim_module.CONFIG.get
+        orig_get = sim_module.config_mod.CONFIG.get
 
         def fake_get(section, key, cast=str, fallback=None):
             if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
@@ -228,7 +230,7 @@ async def test_run_batch_zero_runs(tmp_path):
                 return 1
             return orig_get(section, key, cast, fallback)
 
-        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+        with patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get):
             path = await sim_module.run_batch(out_file)
 
     assert path == out_file

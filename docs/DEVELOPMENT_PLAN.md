@@ -36,3 +36,10 @@ This document summarizes outstanding tasks for ongoing development and tracks co
   - Check that invalid model names or configuration paths produce helpful
     error messages and non-zero exit codes.
   - Cover mutually exclusive options and missing required parameters.
+- Python 3.14 stack update completed
+  - Package renamed to `llm_fight` under `src/llm_fight/`.
+  - Dependency management moved to locked `uv` workflow.
+  - Native Ollama `/api/chat` structured outputs are the default.
+  - Runtime config is read at call time instead of copied into stale module globals.
+  - Regression tests cover tissue isolation, config reload behavior, Ollama payloads,
+    successful rolls, body-part normalization, effect-triggered KO/death, and winner consistency.

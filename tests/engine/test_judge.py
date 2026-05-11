@@ -2,9 +2,10 @@ import pytest
 from unittest.mock import AsyncMock, patch
 import json
 
-from src.judge import judge_phase1, judge_phase2, MAX_TOK_J, BEST_J
-from src.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
-from src.engine import constants as C
+from llm_fight import config as config_mod
+from llm_fight.judge import judge_phase1, judge_phase2
+from llm_fight.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
+from llm_fight.engine import constants as C
 
 # Mock states and attempts for testing
 MOCK_FIGHTER_A_STATE = {C.STATUS: "conscious", C.PAIN: 10}
@@ -15,8 +16,8 @@ MOCK_ATTEMPT_B = "Fighter B dodges."
 
 
 @pytest.mark.asyncio
-@patch("src.judge.guarded_call")  # Patch guarded_call first
-@patch("src.judge.chat", new_callable=AsyncMock)  # Then patch chat
+@patch("llm_fight.judge.guarded_call")  # Patch guarded_call first
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)  # Then patch chat
 async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_call):
     mock_chat.return_value = [
         json.dumps(
@@ -32,7 +33,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     ]
 
     # Mock guarded_call to return the first (and only) parsed chat response
-    async def mock_gc_logic(call_func, schema):
+    async def mock_gc_logic(call_func, schema, max_retries=None):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -44,17 +45,21 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     msg_payload = chat_call_positional[0]
     assert len(msg_payload) == 2
     assert msg_payload[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
-    from src.utils.token_counter import compute_max_tokens
+    from llm_fight.utils.token_counter import compute_max_tokens
 
-    expected_max = compute_max_tokens(msg_payload, MAX_TOK_J)
+    max_tok_j = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int)
+    best_j = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_JUDGE, int)
+    expected_max = compute_max_tokens(msg_payload, max_tok_j)
     assert chat_call_kwargs["max_tokens"] == expected_max
-    assert chat_call_kwargs["num_ctx"] == MAX_TOK_J
-    assert chat_call_kwargs["best_of"] == BEST_J
+    assert chat_call_kwargs["num_ctx"] == max_tok_j
+    assert chat_call_kwargs["best_of"] == best_j
     # We can add more specific checks for prompt content if needed
 
     user_payload = json.loads(msg_payload[1][C.AGENT_CONTENT])
-    assert user_payload[f"fighter_{C.FIGHTER_A}_state_summary"] == MOCK_FIGHTER_A_STATE
-    assert user_payload[f"fighter_{C.FIGHTER_B}_state_summary"] == MOCK_FIGHTER_B_STATE
+    assert user_payload[f"fighter_{C.FIGHTER_A}_state_summary"][C.STATUS] == MOCK_FIGHTER_A_STATE[C.STATUS]
+    assert user_payload[f"fighter_{C.FIGHTER_A}_state_summary"][C.PAIN] == MOCK_FIGHTER_A_STATE[C.PAIN]
+    assert user_payload[f"fighter_{C.FIGHTER_B}_state_summary"][C.STATUS] == MOCK_FIGHTER_B_STATE[C.STATUS]
+    assert user_payload[f"fighter_{C.FIGHTER_B}_state_summary"][C.PAIN] == MOCK_FIGHTER_B_STATE[C.PAIN]
     assert user_payload[f"{C.ATTEMPT}_{C.FIGHTER_A}"] == MOCK_ATTEMPT_A
     assert user_payload[f"{C.ATTEMPT}_{C.FIGHTER_B}"] == MOCK_ATTEMPT_B
     assert user_payload["recent_combat_log"] == "Turn 1"
@@ -81,8 +86,8 @@ MOCK_ROLLS = {C.FIGHTER_A: True, C.FIGHTER_B: False}
 
 
 @pytest.mark.asyncio
-@patch("src.judge.guarded_call")
-@patch("src.judge.chat", new_callable=AsyncMock)
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_call):
     mock_chat.return_value = [
         json.dumps(
@@ -95,7 +100,7 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
         )
     ]
 
-    async def mock_gc_logic(call_func, schema):
+    async def mock_gc_logic(call_func, schema, max_retries=None):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -108,28 +113,37 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     assert chat_call_args[0][C.AGENT_ROLE] == C.AGENT_SYSTEM
 
     user_payload = json.loads(chat_call_args[1][C.AGENT_CONTENT])
-    assert user_payload[C.PREDICTION] == MOCK_ROLLS
+    assert user_payload[C.SUCCESSFUL_ROLLS] == MOCK_ROLLS
     # Check if other parts of MOCK_P2_INPUT_STATE are present (they are merged)
     assert user_payload["fighter_A"] == MOCK_FIGHTER_A_STATE
 
     chat_call_kwargs = mock_chat.call_args[1]
-    from src.utils.token_counter import compute_max_tokens
+    from llm_fight.utils.token_counter import compute_max_tokens
 
-    expected_max = compute_max_tokens(chat_call_args, MAX_TOK_J)
+    max_tok_j = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int)
+    expected_max = compute_max_tokens(chat_call_args, max_tok_j)
     assert chat_call_kwargs["max_tokens"] == expected_max
-    assert chat_call_kwargs["num_ctx"] == MAX_TOK_J
+    assert chat_call_kwargs["num_ctx"] == max_tok_j
     mock_guarded_call.assert_called_once()
     assert mock_guarded_call.call_args[0][1] == JudgeP2Schema
 
 
 @pytest.mark.asyncio
-@patch("src.judge.guarded_call")
-@patch("src.judge.chat", new_callable=AsyncMock)
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
-    fenced = f"```json\n{json.dumps({'judgement_text': 'ok'})}\n```"
+    fenced = f"""```json
+{json.dumps({
+        "judgement_text": "ok",
+        "attempt_A_valid": True,
+        "attempt_A_prob": "0.5",
+        "attempt_B_valid": True,
+        "attempt_B_prob": "0.5",
+    })}
+```"""
     mock_chat.return_value = [fenced]
 
-    async def mock_gc_logic(call_func, schema):
+    async def mock_gc_logic(call_func, schema, max_retries=None):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -139,13 +153,13 @@ async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
 
 
 @pytest.mark.asyncio
-@patch("src.judge.guarded_call")
-@patch("src.judge.chat", new_callable=AsyncMock)
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
     fenced = f"```json\n{json.dumps({'narration': 'done', 'delta': {}, 'fight_end': False, 'winner': None})}\n```"
     mock_chat.return_value = [fenced]
 
-    async def mock_gc_logic(call_func, schema):
+    async def mock_gc_logic(call_func, schema, max_retries=None):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic

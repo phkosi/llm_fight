@@ -129,6 +129,8 @@ OLLAMA_CHOICES = "choices"  # Added for Ollama specific response
 OLLAMA_MESSAGE = "message"  # Added for Ollama specific response
 TEMPERATURE = "temperature"  # Added for payload key
 AGENT_MAX_TOKENS = "max_tokens"  # Added for payload key
+AGENT_NUM_PREDICT = "num_predict"
+AGENT_RESPONSE_FORMAT = "response_format"
 CONTENT_TYPE = "Content-Type"  # Added for headers
 APPLICATION_JSON = "application/json"  # Added for headers
 
@@ -209,6 +211,7 @@ TARGETED_PART = "targeted_part"
 AGGRESSION = "aggression"
 DEFENSIVENESS = "defensiveness"
 PREDICTION = "prediction"
+SUCCESSFUL_ROLLS = "successful_rolls"
 OUTCOME = "outcome"
 IN_PROGRESS = "in_progress"
 DRAW = "draw"

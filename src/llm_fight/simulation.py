@@ -1,4 +1,4 @@
-"""Batch self‑play simulation harness."""
+﻿"""Batch self-play simulation harness."""
 
 import asyncio
 import csv
@@ -8,11 +8,39 @@ from typing import Dict, Callable
 from .state import FighterState
 from .rng import rand, seed
 from .judge import judge_phase1, judge_phase2
-from .config import CONFIG
+from . import config as config_mod
 from .engine.fighter import get_fighter_attempt
 from .engine import constants as C
 from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
+
+
+def _status_outcome(A: FighterState, B: FighterState) -> str | None:
+    a_out = A.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}
+    b_out = B.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}
+    if a_out and b_out:
+        return C.DRAW
+    if a_out:
+        return B.id
+    if b_out:
+        return A.id
+    return None
+
+
+def _judge_outcome(p2: Dict[str, str]) -> str | None:
+    if not p2.get(C.FIGHT_END, False):
+        if p2.get(C.WINNER) is not None:
+            logger.warning("Judge supplied winner without fight_end=true; ignoring winner.")
+        return None
+
+    winner_id = p2.get(C.WINNER)
+    if winner_id == C.FIGHTER_A:
+        return C.FIGHTER_A
+    if winner_id == C.FIGHTER_B:
+        return C.FIGHTER_B
+    if winner_id is None:
+        return C.DRAW
+    return "ended_no_clear_winner"
 
 
 async def _single_fight(
@@ -37,17 +65,17 @@ async def _single_fight(
         the :class:`CombatLog` for the fight.
     """
     if fighter_a_section is None:
-        fighter_a_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")
+        fighter_a_section = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str, fallback="A")
     if fighter_b_section is None:
-        fighter_b_section = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str, fallback="B")
+        fighter_b_section = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str, fallback="B")
 
     A = FighterState.from_preset("A", "humanoid", config_section=fighter_a_section)
     B = FighterState.from_preset("B", "humanoid", config_section=fighter_b_section)
     turn = 0
     outcome = None
     combat_log = CombatLog()
-    fighter_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
-    judge_log_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)  # For Judge P2
+    fighter_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
+    judge_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)
 
     while not outcome:
         turn += 1
@@ -91,8 +119,15 @@ async def _single_fight(
         p2_input_state = {
             "fighter_A": A.to_json(),
             "fighter_B": B.to_json(),
+            C.LOG_ATTEMPT_A: attemptA,
+            C.LOG_ATTEMPT_B: attemptB,
+            "p1_result": p1,
             "p1_judgement": p1.get("judgement_text", ""),
             "p1_explanation": p1.get("explanation", ""),
+            "valid_target_parts": {
+                C.FIGHTER_A: sorted(A.parts.keys()),
+                C.FIGHTER_B: sorted(B.parts.keys()),
+            },
             "combat_log_turns": len(combat_log),
             "recent_combat_log": judge_recent_log,
         }
@@ -121,27 +156,23 @@ async def _single_fight(
         turn_entry.state_B_after = B.to_json()
 
         combat_log.append(turn_entry)
-        if CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
+        if config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
             logger.info(turn_entry.to_simple_text())
 
         # Check for fight end conditions
-        if p2.get("fight_end", False):
-            winner_id = p2.get("winner")
-            if winner_id == "A":
-                outcome = A.id
-            elif winner_id == "B":
-                outcome = B.id
-            elif winner_id is None:  # Could be a draw declared by judge
-                outcome = "draw"
-            else:  # Unspecified winner but fight_end is true, could be a mutual kill or environmental factor
-                outcome = "ended_no_clear_winner"
-        elif A.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}:
-            outcome = B.id  # B wins if A is out
-        elif B.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}:
-            outcome = A.id  # A wins if B is out
-        elif turn >= CONFIG.get(
-            C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100
-        ):  # Max turn limit, used constant
+        status_outcome = _status_outcome(A, B)
+        judge_outcome = _judge_outcome(p2)
+        if status_outcome:
+            if judge_outcome and judge_outcome != status_outcome:
+                logger.warning(
+                    "Judge outcome %s contradicted post-delta state outcome %s; using state outcome.",
+                    judge_outcome,
+                    status_outcome,
+                )
+            outcome = status_outcome
+        elif judge_outcome:
+            outcome = judge_outcome
+        elif turn >= config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100):
             outcome = C.DRAW
         # else: outcome remains None, loop continues
 
@@ -185,10 +216,10 @@ async def run_batch(
     Path
         Path object for the created CSV file.
     """
-    seed(CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
+    seed(config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
 
-    runs = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
-    concurrency = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
+    runs = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
+    concurrency = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
     res = []
     sem = asyncio.Semaphore(concurrency)

@@ -2,10 +2,10 @@
 
 import random
 from typing import Any
-from .config import CONFIG
+from . import config as config_mod
 from .engine import constants as C
 
-_random = random.Random(int(CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int)))
+_random = random.Random(int(config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int)))
 
 __all__ = ["rand", "dice", "seed", "choice"]
 

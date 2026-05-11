@@ -1,8 +1,8 @@
 import pytest
-from src.state import FighterState, Effect
+from llm_fight.state import FighterState, Effect
 
 # PRESETS import ensures presets are loaded when FighterState.from_preset runs
-from src.engine import constants as C
+from llm_fight.engine import constants as C
 
 
 # Fixture to create a fresh humanoid fighter state for each test
@@ -140,6 +140,36 @@ def test_apply_damage_to_non_existent_part(humanoid_fighter: FighterState):
 
     assert fighter.pain == initial_pain  # Pain should not change if part doesn't exist
     assert len(fighter.debuffs) == initial_debuff_count  # No new effects
+
+
+def test_apply_damage_ignores_non_positive_damage(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    initial_torso_hp = sum(layer.max_hp for layer in fighter.parts["torso"].layers)
+
+    fighter.apply_damage_to_part("torso", -10, C.DamageType.GENERIC)
+    fighter.apply_damage_to_part("torso", 0, C.DamageType.GENERIC)
+
+    assert fighter.pain == 0
+    assert sum(layer.max_hp for layer in fighter.parts["torso"].layers) == initial_torso_hp
+
+
+def test_apply_delta_normalizes_body_part_aliases(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    initial_torso_hp = sum(layer.max_hp for layer in fighter.parts["torso"].layers)
+
+    fighter.apply_delta({C.WOUNDS: [{C.TARGETED_PART: "chest.", C.VALUE: 7, C.TYPE: "slash"}]})
+
+    assert sum(layer.max_hp for layer in fighter.parts["torso"].layers) == initial_torso_hp - 7
+    assert fighter.pain == 7
+
+
+def test_apply_delta_accepts_effect_magnitude_alias(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_delta({C.EFFECTS_ADDED: [{C.NAME: C.EFFECT_BURNING, "magnitude": 2.5, C.EFFECT_TTL: 2}]})
+
+    assert fighter.debuffs[0].name == C.EFFECT_BURNING
+    assert fighter.debuffs[0].magnitude == 2.5
 
 
 def test_vital_part_destruction_leads_to_unconscious(humanoid_fighter: FighterState):
@@ -338,6 +368,23 @@ def test_apply_effects_bleeding_increases_stats(humanoid_fighter: FighterState):
     assert fighter.pain == current_pain + int(bleeding_effect.magnitude * 1)
     assert fighter.exhaustion == current_exhaustion + int(bleeding_effect.magnitude * 0.5)
     assert not any(eff.name == C.EFFECT_BLEEDING for eff in fighter.debuffs)  # Expired
+
+
+def test_apply_effects_can_trigger_death_from_status_invariants(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    fighter.debuffs.append(
+        Effect(
+            name=C.EFFECT_BLEEDING,
+            magnitude=float(C.MAX_PAIN_BEFORE_DEATH),
+            ttl=1,
+            on_apply="Massive bleeding",
+            metadata={C.TARGETED_PART: "torso"},
+        )
+    )
+
+    fighter.apply_effects()
+
+    assert fighter.status == C.FighterStatus.DEAD
 
 
 def test_apply_delta_removes_effects(humanoid_fighter: FighterState):

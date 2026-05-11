@@ -1,8 +1,8 @@
 from hypothesis import given, settings, strategies as st
 
-from src.state import FighterState
-from src.anatomy import PRESETS
-from src.engine import constants as C
+from llm_fight.state import FighterState
+from llm_fight.anatomy import PRESETS
+from llm_fight.engine import constants as C
 
 
 @st.composite

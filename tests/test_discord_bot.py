@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-import src.discord_bot as discord_bot
-from src.discord_bot import (
+import llm_fight.discord_bot as discord_bot
+from llm_fight.discord_bot import (
     FightSession,
     session,
     fight_start,
@@ -11,7 +11,7 @@ from src.discord_bot import (
     run_bot,
     bot,
 )
-from src.engine import constants as C
+from llm_fight.engine import constants as C
 
 
 class DummyResponse:
@@ -62,7 +62,7 @@ async def test_command_flow():
 @pytest.mark.asyncio
 async def test_channel_restriction(monkeypatch):
     session.stop()
-    monkeypatch.setattr("src.discord_bot.ALLOWED_CHANNEL", "allowed")
+    monkeypatch.setattr("llm_fight.discord_bot.ALLOWED_CHANNEL", "allowed")
 
     wrong = DummyInteraction("other")
     await fight_start.callback(wrong)
@@ -83,7 +83,7 @@ def _patch_config(monkeypatch, token: str, channel: str):
             return channel
         return fallback
 
-    monkeypatch.setattr("src.discord_bot.CONFIG.get", fake_get)
+    monkeypatch.setattr("llm_fight.discord_bot.config_mod.CONFIG.get", fake_get)
 
 
 def test_run_bot_missing_token(monkeypatch):

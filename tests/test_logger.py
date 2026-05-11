@@ -1,8 +1,8 @@
 import importlib
 import logging
-from src.config import Config
-from src.engine import constants as C
-import src.engine.logger as logger_module
+from llm_fight.config import Config
+from llm_fight.engine import constants as C
+import llm_fight.engine.logger as logger_module
 
 
 def test_logger_level_respected(monkeypatch, tmp_path):
@@ -17,7 +17,7 @@ def test_logger_level_respected(monkeypatch, tmp_path):
     for h in logger_module.logger.handlers[:]:
         logger_module.logger.removeHandler(h)
 
-    import src.config as config_module
+    import llm_fight.config as config_module
 
     monkeypatch.setattr(config_module, "CONFIG", custom_cfg)
     importlib.reload(logger_module)
@@ -41,7 +41,7 @@ def test_update_logger_level(monkeypatch, tmp_path):
     for h in logger_module.logger.handlers[:]:
         logger_module.logger.removeHandler(h)
 
-    import src.config as config_module
+    import llm_fight.config as config_module
 
     monkeypatch.setattr(config_module, "CONFIG", cfg)
     importlib.reload(logger_module)

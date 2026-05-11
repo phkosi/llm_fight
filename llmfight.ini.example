@@ -1,12 +1,12 @@
 [General]
-ollama_default_model = llama3.2
-ollama_api_url = http://localhost:11434/v1/chat/completions
-max_tokens_fighter = 24000
-max_tokens_judge = 48000
-ollama_temperature = 0.8
-best_of_fighter = 3
-best_of_judge = 2
-max_retries = 2
+ollama_default_model = llama3.2:3b
+ollama_api_url = http://localhost:11434/api/chat
+max_tokens_fighter = 512
+max_tokens_judge = 4096
+ollama_temperature = 0.4
+best_of_fighter = 1
+best_of_judge = 1
+max_retries = 1
 log_level = INFO
 log_combat_turns = false
 save_transcripts = false
@@ -21,10 +21,10 @@ fighter_log_window = 10
 judge_log_window = 9999
 
 [SIMULATION]
-runs = 10
+runs = 1
 seed = 42
 concurrent_runs = 1
-max_turns = 100
+max_turns = 2
 
 [DEFAULTS]
 environment = an open arena

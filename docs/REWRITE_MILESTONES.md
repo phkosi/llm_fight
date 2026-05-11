@@ -1,4 +1,4 @@
-# Rewrite Milestones for LLM Fighters
+﻿# Rewrite Milestones for LLM Fighters
 
 This document captures a full set of milestones to rewrite weak or faulty
 parts of the project. Milestones focus on correctness, maintainability, and
@@ -6,23 +6,23 @@ observability so the combat loop remains trustworthy when orchestrated by LLMs.
 
 ## Current Pain Points (why a rewrite is needed)
 
-- **Fragile LLM client surface** — `src/agents.py` assembles payloads and
+- **Fragile LLM client surface** - `src/llm_fight/agents.py` assembles payloads and
   retries manually without a typed request/response model or centralized
   timeout/backoff policy, leaving error handling duplicated and difficult to
   test.
-- **Prompt plumbing tied to globals** — Fighter prompts embed config lookups and
-  combat-log formatting inline (see `src/engine/fighter.py`), coupling prompt
+- **Prompt plumbing tied to globals** - Fighter prompts embed config lookups and
+  combat-log formatting inline (see `src/llm_fight/engine/fighter.py`), coupling prompt
   construction to runtime state and making deterministic tests or alternate
   prompt strategies awkward.
-- **Simulation loop mixes orchestration with mutation** — The fight loop in
-  `src/simulation.py` parses probabilities, applies RNG, updates fighter state,
+- **Simulation loop mixes orchestration with mutation** - The fight loop in
+  `src/llm_fight/simulation.py` parses probabilities, applies RNG, updates fighter state,
   and writes the combat log in one monolithic coroutine, making it hard to swap
   judge implementations or replay deterministic traces.
-- **State mutation lacks guardrails** — `src/state.py` directly mutates shared
+- **State mutation lacks guardrails** - `src/llm_fight/state.py` directly mutates shared
   structures while applying deltas and ticking effects. There is no central
   invariant enforcement (e.g., pain/HP floors, bleeding stacking rules), and
   the effect pipeline is intertwined with logging side effects.
-- **Observability is ad hoc** — Transcript logging depends on globals and
+- **Observability is ad hoc** - Transcript logging depends on globals and
   scattered logger calls; there is no structured telemetry for LLM latency,
   retries, or RNG decisions to debug questionable fight outcomes.
 
@@ -77,6 +77,6 @@ observability so the combat loop remains trustworthy when orchestrated by LLMs.
 - Update CLI flows to expose the new tracing/verbosity controls and validate
   configuration before starting simulations.
 - Refresh README and design docs to reflect the new architecture, including an
-  “implementation contract” section for third-party judge providers.
+  "implementation contract" section for third-party judge providers.
 - Provide migration guidance for existing INI files and scripted integrations
   that relied on the previous globals and side effects.

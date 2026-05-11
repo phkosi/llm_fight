@@ -5,7 +5,7 @@ from typing import Union, Optional
 from ..state import FighterState  # Relative import from parent package
 from ..agents import chat
 from ..utils.token_counter import compute_max_tokens
-from ..config import CONFIG
+from .. import config as config_mod
 from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from . import constants as C  # Added import
 from .combat_log import CombatLog
@@ -85,7 +85,7 @@ async def get_fighter_attempt(
     # If turn_window is not explicitly passed, try to get it from config, else default.
     # This allows _single_fight to control it, or use a global default.
     if turn_window is None:
-        turn_window = CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
+        turn_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
 
     # Determine what snippet of combat history to include in the prompt
     if isinstance(combat_log, CombatLog):
@@ -96,8 +96,8 @@ async def get_fighter_attempt(
         else:
             current_recent_log = str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
 
-    sentence_limit = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_SENTENCE_LIMIT, int, fallback=1)
-    word_limit = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_WORD_LIMIT, int, fallback=30)
+    sentence_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_SENTENCE_LIMIT, int, fallback=1)
+    word_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_WORD_LIMIT, int, fallback=30)
 
     system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
         name=fighter.id,
@@ -122,13 +122,14 @@ async def get_fighter_attempt(
     user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
 
     messages = [system, user]
-    context_limit = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
+    context_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
     max_tokens = compute_max_tokens(messages, context_limit)
     texts = await chat(
         messages,
         max_tokens=max_tokens,
         num_ctx=context_limit,
-        best_of=CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1),
+        best_of=config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1),
+        retries=config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0),
     )
     txt = texts[0]
     return txt.strip()

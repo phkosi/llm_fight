@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import src.simulation as sim_module
-from src.state import FighterState
-from src.engine import constants as C
-from src.config import CONFIG
+import llm_fight.simulation as sim_module
+from llm_fight.state import FighterState
+from llm_fight.engine import constants as C
+from llm_fight.config import CONFIG
 
 
 @pytest.mark.asyncio
@@ -13,6 +13,7 @@ async def test_single_fight_logs_invalid_probabilities(tmp_path):
     fighter_a = MagicMock(spec=FighterState)
     fighter_a.id = "A"
     fighter_a.status = C.FighterStatus.FIGHTING
+    fighter_a.parts = {"head": object(), "torso": object()}
     fighter_a.to_json.return_value = {"id": "A", C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0}
     fighter_a.apply_delta = MagicMock()
     fighter_a.apply_effects = MagicMock()
@@ -20,6 +21,7 @@ async def test_single_fight_logs_invalid_probabilities(tmp_path):
     fighter_b = MagicMock(spec=FighterState)
     fighter_b.id = "B"
     fighter_b.status = C.FighterStatus.FIGHTING
+    fighter_b.parts = {"head": object(), "torso": object()}
     fighter_b.to_json.return_value = {"id": "B", C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0}
     fighter_b.apply_delta = MagicMock()
     fighter_b.apply_effects = MagicMock()

@@ -4,10 +4,12 @@ from jsonschema import ValidationError, validate
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, patch
 
-from src.judge import judge_phase1, judge_phase2
+from llm_fight.judge import judge_phase1, judge_phase2
 
-from src.validation import guarded_call, ActionSchema, JudgeP1Schema, JudgeP2Schema, DeltaSchema
-from src.engine import constants as C
+from llm_fight.validation import guarded_call, ActionSchema, JudgeP1Schema, JudgeP2Schema, DeltaSchema
+from llm_fight.engine import constants as C
+from llm_fight.config import Config
+from llm_fight import config as config_mod
 
 
 # --- Mocks for guarded_call tests ---
@@ -85,13 +87,12 @@ async def test_guarded_call_retry_on_json_decode_error_then_success():
 
 @pytest.mark.asyncio
 async def test_guarded_call_exponential_backoff(monkeypatch):
-    monkeypatch.setattr("src.validation.MAX_RETRIES", 2)
     sleep_calls: List[float] = []
 
     async def fake_sleep(delay: float) -> None:
         sleep_calls.append(delay)
 
-    monkeypatch.setattr("src.validation.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("llm_fight.validation.asyncio.sleep", fake_sleep)
 
     schema = {
         C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
@@ -102,15 +103,37 @@ async def test_guarded_call_exponential_backoff(monkeypatch):
     valid = {"key": "ok"}
     mock_func = MockAsyncCallable(return_values=[invalid, invalid, valid])
 
-    result = await guarded_call(mock_func, schema)
+    result = await guarded_call(mock_func, schema, max_retries=2)
     assert result == valid
     assert sleep_calls == [1, 2]
 
 
 @pytest.mark.asyncio
-async def test_guarded_call_fail_after_max_retries_validation_error(monkeypatch):
-    # Reduce MAX_RETRIES for this test for speed
-    monkeypatch.setattr("src.validation.MAX_RETRIES", 1)
+async def test_guarded_call_reads_retry_config_at_call_time(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "llmfight.ini"
+    cfg_path.write_text("[General]\nmax_retries = 2\n")
+    old_config = config_mod.CONFIG
+    config_mod.CONFIG = Config(cfg_path)
+    monkeypatch.setattr("llm_fight.validation.asyncio.sleep", AsyncMock())
+
+    schema = {
+        C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+        C.SCHEMA_PROPERTIES: {"key": {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
+        C.SCHEMA_REQUIRED: ["key"],
+    }
+    mock_func = MockAsyncCallable(return_values=[{"wrong": 1}, {"wrong": 2}, {"key": "ok"}])
+
+    try:
+        result = await guarded_call(mock_func, schema)
+    finally:
+        config_mod.CONFIG = old_config
+
+    assert result == {"key": "ok"}
+    assert mock_func.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_fail_after_max_retries_validation_error():
     schema = {
         C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
         C.SCHEMA_PROPERTIES: {"key": {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
@@ -121,13 +144,12 @@ async def test_guarded_call_fail_after_max_retries_validation_error(monkeypatch)
     mock_func = MockAsyncCallable(return_values=[invalid_data1, invalid_data2])
 
     with pytest.raises(RuntimeError, match="Validation/JSON parsing failed after 2 attempts"):
-        await guarded_call(mock_func, schema)
+        await guarded_call(mock_func, schema, max_retries=1)
     assert mock_func.call_count == 2  # Initial call + 1 retry
 
 
 @pytest.mark.asyncio
-async def test_guarded_call_fail_after_max_retries_json_decode_error(monkeypatch):
-    monkeypatch.setattr("src.validation.MAX_RETRIES", 1)
+async def test_guarded_call_fail_after_max_retries_json_decode_error():
     schema = {
         C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
         C.SCHEMA_PROPERTIES: {"key": {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
@@ -139,7 +161,7 @@ async def test_guarded_call_fail_after_max_retries_json_decode_error(monkeypatch
     )
 
     with pytest.raises(RuntimeError, match="Validation/JSON parsing failed after 2 attempts"):
-        await guarded_call(mock_func, schema)
+        await guarded_call(mock_func, schema, max_retries=1)
     assert mock_func.call_count == 2
 
 
@@ -198,9 +220,9 @@ def test_judge_p1_schema_valid_no_explanation():  # Explanation is optional
     _validate_against_schema(valid_data, JudgeP1Schema, True)
 
 
-def test_judge_p1_schema_valid_missing_attempt_fields():
-    valid_data = {"judgement_text": "Just a summary."}
-    _validate_against_schema(valid_data, JudgeP1Schema, True)
+def test_judge_p1_schema_invalid_missing_attempt_fields():
+    invalid_data = {"judgement_text": "Just a summary."}
+    _validate_against_schema(invalid_data, JudgeP1Schema, False)
 
 
 def test_judge_p1_schema_invalid_missing_required():
@@ -227,7 +249,10 @@ def test_judge_p1_schema_invalid_type():
 def test_judge_p1_schema_invalid_probability():
     invalid_data = {
         "judgement_text": "Invalid prob",
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
         f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.2",
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.5",
     }
     _validate_against_schema(invalid_data, JudgeP1Schema, False)
 
@@ -265,9 +290,9 @@ def test_delta_schema_valid_minimal():
     _validate_against_schema(valid_data_empty, DeltaSchema, True)
 
 
-def test_delta_schema_valid_blank_status_change():
+def test_delta_schema_invalid_blank_status_change():
     valid_data = {C.STATUS_CHANGE: ""}
-    _validate_against_schema(valid_data, DeltaSchema, True)
+    _validate_against_schema(valid_data, DeltaSchema, False)
 
 
 def test_delta_schema_invalid_pain_type():
@@ -285,9 +310,14 @@ def test_delta_schema_invalid_wound_missing_field():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
-def test_delta_schema_allows_unknown_status_change():
+def test_delta_schema_invalid_negative_wound_value():
+    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.VALUE: -1, C.TYPE: C.DamageType.PIERCING}]}
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+def test_delta_schema_rejects_unknown_status_change():
     unknown_status = {C.STATUS_CHANGE: "confused"}
-    _validate_against_schema(unknown_status, DeltaSchema, True)
+    _validate_against_schema(unknown_status, DeltaSchema, False)
 
 
 def test_delta_schema_allows_additional_properties():
@@ -297,7 +327,7 @@ def test_delta_schema_allows_additional_properties():
 
 def test_delta_schema_damage_types_match_constants():
     enum_list = DeltaSchema[C.SCHEMA_PROPERTIES][C.WOUNDS][C.SCHEMA_ITEMS][C.SCHEMA_PROPERTIES][C.TYPE][C.SCHEMA_ENUM]
-    assert set(enum_list) == {dt.value for dt in C.DamageType}
+    assert set(enum_list) == {dt.value for dt in C.DamageType} | {"burning"}
 
 
 # --- JudgeP2Schema Tests ---
@@ -355,23 +385,31 @@ def test_judge_p2_schema_invalid_delta_fighter_key():
 
 
 @pytest.mark.asyncio
-async def test_guarded_call_negative_max_retries(monkeypatch):
-    monkeypatch.setattr("src.validation.MAX_RETRIES", -1)
-
+async def test_guarded_call_negative_max_retries():
     async def dummy():
         return {"key": "val"}
 
     with pytest.raises(RuntimeError, match="Guarded call failed without specific error"):
-        await guarded_call(dummy, {"type": "object"})
+        await guarded_call(dummy, {"type": "object"}, max_retries=-1)
 
 
 @pytest.mark.asyncio
-@patch("src.judge.guarded_call")
-@patch("src.judge.chat", new_callable=AsyncMock)
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase1_passes_schema_to_chat(mock_chat, mock_guarded_call):
-    mock_chat.return_value = [json.dumps({"judgement_text": "ok"})]
+    mock_chat.return_value = [
+        json.dumps(
+            {
+                "judgement_text": "ok",
+                f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+                f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.5",
+                f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+                f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.5",
+            }
+        )
+    ]
 
-    async def passthrough(func, schema):
+    async def passthrough(func, schema, max_retries=None):
         return await func()
 
     mock_guarded_call.side_effect = passthrough
@@ -382,12 +420,12 @@ async def test_judge_phase1_passes_schema_to_chat(mock_chat, mock_guarded_call):
 
 
 @pytest.mark.asyncio
-@patch("src.judge.guarded_call")
-@patch("src.judge.chat", new_callable=AsyncMock)
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_passes_schema_to_chat(mock_chat, mock_guarded_call):
     mock_chat.return_value = [json.dumps({"narration": "", "delta": {}, "fight_end": False, "winner": None})]
 
-    async def passthrough(func, schema):
+    async def passthrough(func, schema, max_retries=None):
         return await func()
 
     mock_guarded_call.side_effect = passthrough

@@ -1,4 +1,4 @@
-from src.utils.json_parser import parse_json_from_text
+from llm_fight.utils.json_parser import parse_json_from_text
 
 
 def test_parse_plain_json():

@@ -1,7 +1,7 @@
 import pytest
-from src import rng  # Import the module itself to access its functions
+from llm_fight import rng  # Import the module itself to access its functions
 
-# Note: src.rng is seeded from CONFIG when it's first imported.
+# Note: llm_fight.rng is seeded from CONFIG when it's first imported.
 # Tests need to be mindful of this initial state or explicitly re-seed.
 
 

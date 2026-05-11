@@ -1,11 +1,11 @@
 import pytest
-from src.engine.fighter import describe_pain, describe_exhaustion, describe_heat
+from llm_fight.engine.fighter import describe_pain, describe_exhaustion, describe_heat
 from unittest.mock import patch, AsyncMock, MagicMock
-from src.engine.fighter import get_fighter_attempt
-from src.engine.combat_log import CombatLog, CombatTurn
-from src.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
-from src.engine import constants as C
-from src.state import FighterState, Effect  # For creating mock states
+from llm_fight.engine.fighter import get_fighter_attempt
+from llm_fight.engine.combat_log import CombatLog, CombatTurn
+from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
+from llm_fight.engine import constants as C
+from llm_fight.state import FighterState, Effect  # For creating mock states
 
 
 # Tests for describe_pain
@@ -122,8 +122,10 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
     mock_config_get.side_effect = config_get_side_effect
 
     with (
-        patch("src.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
-        patch("src.engine.fighter.CONFIG.get", mock_config_get),
+        patch(
+            "llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response
+        ) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
     ):
 
         actual_response = await get_fighter_attempt(
@@ -140,7 +142,7 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         call_args = mock_chat_func.call_args[0][0]  # Messages list
         call_kwargs = mock_chat_func.call_args[1]
 
-        from src.utils.token_counter import compute_max_tokens
+        from llm_fight.utils.token_counter import compute_max_tokens
 
         expected_max = compute_max_tokens(call_args, 150)
         assert call_kwargs["max_tokens"] == expected_max
@@ -201,8 +203,10 @@ async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_
     mock_config_get.side_effect = config_get_side_effect
 
     with (
-        patch("src.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
-        patch("src.engine.fighter.CONFIG.get", mock_config_get),
+        patch(
+            "llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response
+        ) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
     ):
 
         await get_fighter_attempt(
@@ -233,7 +237,7 @@ class MockFighterState(FighterState):
 
 
 @pytest.mark.asyncio
-@patch("src.engine.fighter.chat", new_callable=AsyncMock)  # Patching chat in the correct module
+@patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock)  # Patching chat in the correct module
 async def test_get_fighter_attempt_calls_chat(mock_chat):
     fighter_a = MockFighterState(id="FighterA")
     fighter_b = MockFighterState(id="FighterB")
@@ -282,8 +286,10 @@ async def test_get_fighter_attempt_with_combatlog_summary(mock_fighter_state, mo
     mock_config_get.side_effect = config_get_side_effect
 
     with (
-        patch("src.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
-        patch("src.engine.fighter.CONFIG.get", mock_config_get),
+        patch(
+            "llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response
+        ) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
     ):
         await get_fighter_attempt(
             fighter=mock_fighter_state,
@@ -318,8 +324,10 @@ async def test_get_fighter_attempt_turn_window_zero(mock_fighter_state, mock_opp
     mock_config_get.side_effect = config_get_side_effect
 
     with (
-        patch("src.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response) as mock_chat_func,
-        patch("src.engine.fighter.CONFIG.get", mock_config_get),
+        patch(
+            "llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=mock_chat_response
+        ) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
     ):
         await get_fighter_attempt(
             fighter=mock_fighter_state,

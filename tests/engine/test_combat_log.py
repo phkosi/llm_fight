@@ -1,5 +1,5 @@
-from src.engine.combat_log import CombatLog, CombatTurn
-from src.engine import constants as C
+from llm_fight.engine.combat_log import CombatLog, CombatTurn
+from llm_fight.engine import constants as C
 
 
 def test_combat_log_basic_usage():

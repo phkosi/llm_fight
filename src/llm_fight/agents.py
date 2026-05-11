@@ -5,37 +5,100 @@ import asyncio
 import os
 from typing import List, Dict, Any, Optional
 
-from .config import CONFIG
+from . import config as config_mod
 from .engine import constants as C
 from .engine.logger import logger
 from .transcripts import log_exchange
 
 
 def get_ollama_url() -> str:
-    """Return the Ollama chat completions endpoint.
+    """Return the configured Ollama chat endpoint.
 
-    If ``API_URL`` is provided via environment variable, ensure it points to the
-    ``/v1/chat/completions`` endpoint. This makes it easier to override the
-    base URL without needing to specify the full path.
+    ``API_URL`` may point at either Ollama's native ``/api/chat`` endpoint or
+    the OpenAI-compatible ``/v1/chat/completions`` endpoint. Bare base URLs
+    default to the native endpoint because it supports ``format`` and
+    ``options.num_ctx`` directly.
     """
 
     url = os.environ.get(
         "API_URL",
-        CONFIG.get(
+        config_mod.CONFIG.get(
             C.CONFIG_GENERAL,
             C.CONFIG_LLAMA_API_URL,
             str,
-            fallback="http://localhost:11434/v1/chat/completions",
+            fallback="http://localhost:11434/api/chat",
         ),
     )
 
-    if not url.endswith("/v1/chat/completions"):
-        url = url.rstrip("/") + "/v1/chat/completions"
+    if not (url.endswith("/api/chat") or url.endswith("/v1/chat/completions")):
+        url = url.rstrip("/") + "/api/chat"
 
     return url
 
 
 HEADERS = {C.CONTENT_TYPE: C.APPLICATION_JSON}
+
+
+def _uses_openai_compat(url: str) -> bool:
+    return url.rstrip("/").endswith("/v1/chat/completions")
+
+
+def _response_format(schema: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        C.SCHEMA_TYPE: "json_schema",
+        "json_schema": {
+            C.NAME: "llm_fight_response",
+            "schema": schema,
+        },
+    }
+
+
+UNSUPPORTED_OLLAMA_SCHEMA_KEYS = {
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "not",
+    "if",
+    "then",
+    "else",
+    "const",
+    C.SCHEMA_PATTERN,
+    C.SCHEMA_MINIMUM,
+    C.SCHEMA_MAXIMUM,
+    C.SCHEMA_MIN_PROPERTIES,
+    C.SCHEMA_MAX_PROPERTIES,
+}
+
+
+def _schema_for_ollama(schema: Any) -> Any:
+    """Return a JSON Schema subset that Ollama's grammar compiler accepts."""
+
+    if isinstance(schema, list):
+        return [_schema_for_ollama(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+
+    result: Dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in UNSUPPORTED_OLLAMA_SCHEMA_KEYS:
+            continue
+        if key == C.SCHEMA_PATTERN_PROPERTIES:
+            properties = result.setdefault(C.SCHEMA_PROPERTIES, {})
+            for pattern, subschema in value.items():
+                if pattern == f"^[{C.FIGHTER_A}{C.FIGHTER_B}]$":
+                    properties[C.FIGHTER_A] = _schema_for_ollama(subschema)
+                    properties[C.FIGHTER_B] = _schema_for_ollama(subschema)
+            continue
+        result[key] = _schema_for_ollama(value)
+    return result
+
+
+def _chat_base_url(url: str) -> str:
+    if url.endswith("/v1/chat/completions"):
+        return url[: -len("/v1/chat/completions")]
+    if url.endswith("/api/chat"):
+        return url[: -len("/api/chat")]
+    return url.rstrip("/")
 
 
 class SessionManager:
@@ -57,12 +120,13 @@ class SessionManager:
 # -------------- helper ---------------------------------------------
 async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], retries: int = 0) -> str:
     attempt = 0
+    url = get_ollama_url()
     while True:
         try:
             # Allow aiohttp to respect proxy-related environment variables
             # like HTTPS_PROXY so network-restricted environments can
             # successfully connect to remote APIs.
-            async with session.post(get_ollama_url(), json=payload, headers=HEADERS, timeout=300) as resp:
+            async with session.post(url, json=payload, headers=HEADERS, timeout=300) as resp:
                 if resp.status >= 500:
                     raise aiohttp.ClientResponseError(
                         request_info=resp.request_info,
@@ -73,7 +137,9 @@ async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], re
                     )
                 resp.raise_for_status()
                 data = await resp.json()
-                return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+                if _uses_openai_compat(url):
+                    return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+                return data[C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
 
         except aiohttp.ClientResponseError as e:
             if e.status >= 500 and attempt < retries:
@@ -121,21 +187,38 @@ async def chat(
     request fails due to network issues or 5xx responses.
     """
     tasks = []
-    model = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
-    temp = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
+    cfg = config_mod.CONFIG
+    model = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
+    temp = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
+    url = get_ollama_url()
+    use_openai = _uses_openai_compat(url)
 
     async def _collect(sess: aiohttp.ClientSession) -> List[str]:
         for _ in range(best_of):
-            payload = {
-                C.AGENT_MODEL: model,
-                C.TEMPERATURE: temp,
-                C.AGENT_MAX_TOKENS: max_tokens,
-                C.AGENT_MESSAGES: messages,
-            }
-            if num_ctx is not None:
-                payload[C.AGENT_OPTIONS] = {C.NUM_CTX: num_ctx}
-            if schema is not None:
-                payload[C.AGENT_FORMAT] = schema
+            if use_openai:
+                payload = {
+                    C.AGENT_MODEL: model,
+                    C.TEMPERATURE: temp,
+                    C.AGENT_MAX_TOKENS: max_tokens,
+                    C.AGENT_MESSAGES: messages,
+                }
+                if schema is not None:
+                    payload[C.AGENT_RESPONSE_FORMAT] = _response_format(schema)
+            else:
+                options = {
+                    C.TEMPERATURE: temp,
+                    C.AGENT_NUM_PREDICT: max_tokens,
+                }
+                if num_ctx is not None:
+                    options[C.NUM_CTX] = num_ctx
+                payload = {
+                    C.AGENT_MODEL: model,
+                    C.AGENT_MESSAGES: messages,
+                    C.AGENT_STREAM: False,
+                    C.AGENT_OPTIONS: options,
+                }
+                if schema is not None:
+                    payload[C.AGENT_FORMAT] = _schema_for_ollama(schema)
             tasks.append(_post_json(sess, payload, retries=retries))
         return await asyncio.gather(*tasks)
 
@@ -151,7 +234,7 @@ async def chat(
 
 async def ping_ollama(timeout: int = 5) -> None:
     """Raise an error if the Ollama server cannot be reached."""
-    url = get_ollama_url().split("/v1")[0].rstrip("/") + "/api/tags"
+    url = _chat_base_url(get_ollama_url()).rstrip("/") + "/api/tags"
     try:
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(url, timeout=timeout) as resp:

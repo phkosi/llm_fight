@@ -1,419 +1,234 @@
 # LLM Fighters Combat Engine
 
-A turn-based duel between two LLM agents (the *Fighters*) adjudicated by a third LLM (*Judge/Narrator*). This project uses Python for randomness, persistence, and retries, with all models running locally through Ollama.
+A turn-based duel between two LLM agents, the Fighters, adjudicated by a third LLM, the Judge/Narrator. Python owns randomness, state updates, validation, retries, logging, and CLI workflow. Ollama runs the models locally by default.
 
 ## Overview
 
-LLM Fighters is a combat simulator where AI agents, powered by local Large Language Models (LLMs), engage in strategic, turn-based combat. The engine focuses on creative, free-text actions and a detailed, *Dwarf Fortress*-inspired damage model. A Judge LLM determines the probability of success for actions, Python handles the dice rolls, and the Judge then narrates the outcomes.
+LLM Fighters is a combat simulator where local LLM agents propose free-text actions in a detailed damage model inspired by layered anatomy systems. The Judge estimates each action's success probability, Python rolls the dice, and the Judge narrates the result as a structured state delta.
 
 ## Key Features
 
-*   **Free-text Fighter Actions:** Encourages creative and descriptive combat maneuvers.
-*   **Detailed Damage Model:** Features multi-layer body parts, limb loss, pain, and bleeding mechanics.
-*   **Probabilistic Combat Resolution:** A Judge LLM assesses action success probability, with Python resolving the outcome via random number generation.
-*   **Generous Context Windows:** Supports 24k tokens per Fighter and 48k tokens for the Judge.
-*   **Robust Validation:** Utilizes `jsonschema` for validating LLM outputs.
-*   **Automatic Retries & Speculative Completions:** Implements `guarded_call()` for retries and `best_of` selection for improved output quality.
-*   **Local LLM Execution:** Designed to run with Ollama and `llama3.2:latest` on a single-GPU workstation.
+- Free-text fighter actions for creative combat maneuvers.
+- Multi-layer body parts with pain, bleeding, burning, unconsciousness, death, and limb loss.
+- Two-phase judge flow: probability assessment first, narration and state delta second.
+- Native Ollama `/api/chat` structured-output calls by default, with `/v1/chat/completions` compatibility.
+- JSON Schema validation with retry handling for brittle model output.
+- Typer CLI commands for single fights and batch simulation.
+- Optional Discord bot entrypoint.
 
-## High-Level Architecture
+## Requirements
 
-The core modules live in the `src/` directory.
+- Python 3.14 or newer.
+- `uv` for locked dependency management.
+- Ollama running locally with a cheap model such as `llama3.2:3b`.
 
-```
-src/
-├── engine/            # shared helpers
-│   ├── combat_log.py  # CombatLog container
-│   ├── constants.py   # game constants
-│   ├── fighter.py     # low-level fighter operations
-│   ├── logger.py      # logging helpers
-│   └── prompts.py     # system prompt templates
-├── agents.py          # async Ollama client
-├── anatomy.py         # presets & tissue constants
-├── config.py          # INI loader & migration
-├── discord_bot.py     # Discord integration
-├── judge.py           # phase-1 & phase-2 orchestration
-├── rng.py             # central PRNG
-├── simulation.py      # batch self-play harness
-├── state.py           # FighterState dataclasses + delta apply
-├── validation.py      # JSON schema + guarded_call()
-└── cli.py             # Typer runner (play / simulate)
-```
-
-### Turn Flow (Simultaneous Proposals)
-
-1.  **Fighter A & B Actions (Async):** Both fighters simultaneously propose their actions based on the current game state and their character prompts.
-2.  **Judge Phase 1 (Probability Assessment):** The Judge LLM receives both proposed actions and outputs a JSON object containing:
-    *   The probability of success (0-1) for each action.
-    *   A predicted brief outcome.
-    *   Potential wounds, buffs, and debuffs.
-3.  **Dice Roll (Python):** The Python engine uses the probabilities from Judge Phase 1 to perform a random roll for each fighter, determining if their action succeeds or fails.
-4.  **Judge Phase 2 (Narration & State Delta):** The Judge LLM receives the outcomes of the dice rolls and generates:
-    *   A narrative description of what happened during the turn.
-    *   A JSON delta describing changes to each fighter's state (HP, effects, etc.).
-    *   A boolean indicating if the fight has ended and the winner, if any.
-
-```
-┌── Fighter A ─┐  async   ┌── Judge P1 ─┐
-└──────────────┘          └─────────────┘
-       ▲                       │  JSON {prob}
-       │                       ▼  RNG rolls
-┌── Fighter B ─┐          ┌── Judge P2 ─┐
-└──────────────┘          └─────────────┘
-```
-
-## Getting Started
-
-### Prerequisites
-
-*   Python 3.x
-*   Ollama installed and running with the `llama3.2:latest` model (or as configured). Ensure the service is accessible and the model is pulled.
-
-### Installation
-
-1.  Clone the repository:
-    ```bash
-    git clone <repository_url>
-    cd llm_fight
-    ```
-2.  (Recommended) Create and activate a virtual environment:
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-    ```
-3.  Install the package and its runtime dependencies:
-    ```bash
-    pip install .
-    ```
-    The dependencies include `tiktoken` for accurate token counting. If
-    this optional library is missing the engine falls back to a basic
-    regex approach. The CLI requires the `rich` library to render
-    colourful tables and progress bars.
-4.  For development and testing, install the dev requirements and use editable mode:
-    ```bash
-    pip install -r requirements-dev.txt
-    pip install -e .
-    ```
-5.  Copy the example configuration and customize as needed:
-    ```bash
-    cp llmfight.ini.example llmfight.ini
-    ```
-
-### Running Tests
-
-With the dev dependencies installed you can execute the test suite using
-`pytest`:
+Install `uv` if it is not already available:
 
 ```bash
-pytest -q
+python -m pip install "uv>=0.11.13,<0.12"
 ```
 
-### Running the Linter and Formatter
-
-Use `black` to automatically format the codebase, followed by `flake8` to catch
-obvious mistakes. Run them from the repository root:
+## Installation
 
 ```bash
-black .
-flake8
+git clone <repository_url>
+cd llm_fight
+uv sync --locked
+cp llmfight.ini.example llmfight.ini
 ```
 
-CI runs `flake8` during pull requests; run `black` locally before committing.
+On PowerShell, copy the example config with:
 
-The `SessionManager` context manager in `src/agents.py` should be used when
-calling the async helpers directly:
-
-```python
-from src.agents import SessionManager, chat
-
-async def main() -> None:
-    async with SessionManager() as session:
-        await chat([{"role": "user", "content": "hi"}], max_tokens=10)
+```powershell
+Copy-Item llmfight.ini.example llmfight.ini
 ```
 
-## Running the Simulation
+`pyproject.toml` is the source of truth for dependencies. `uv.lock` is committed. `requirements.txt` and `requirements-dev.txt` are compatibility exports generated from the lockfile.
 
-The simulation harness can be run via the command-line interface.
+For development with all extras and tools:
 
 ```bash
-python -m src.cli simulate
+uv sync --locked --all-extras --dev
 ```
-This command will execute the number of simulation runs specified in the configuration file (see below) and output results to `sim_results.csv` by default. Use `--output-csv PATH` to change the file location.
-Both `simulate` and `play` accept `--config PATH` to load an alternate configuration file. Use `--fighter-a` and `--fighter-b` to select which INI sections define the combatants.
 
-To run a single fight and display the winner:
+## Running The Game
+
+Start Ollama and make sure your configured model is pulled:
 
 ```bash
-python -m src.cli play
+ollama pull llama3.2:3b
 ```
-Each turn is displayed using colourful `rich` tables so you can follow the
-narration and see HP and status changes as they occur. The CLI exits with an
-error if `rich` is missing.
+
+Run a single fight:
+
+```bash
+uv run llmfight play --max-turns 2 --simple-output
+```
+
+Run a batch simulation:
+
+```bash
+uv run llmfight simulate --runs 1 --max-turns 2
+```
+
+Both commands accept `--config PATH`, `--fighter-a SECTION`, and `--fighter-b SECTION`.
+Use `--max-turns N` for a short single-fight smoke test. `simulate` also accepts `--runs N`.
 
 ## Discord Bot
 
-This project ships with a simple Discord bot that lets you host fights in a
-Discord server. The steps below walk through creating the bot application,
-configuring `llmfight`, and running the bot. No prior Discord experience is
-assumed.
+Install with the Discord extra:
 
-1. **Create a Discord application and bot token**
-   1. Visit <https://discord.com/developers/applications> and log in.
-   2. Click **New Application**, give it a name, and confirm.
-   3. In the sidebar choose **Bot** and click **Add Bot**. Use the **Reset
-      Token** button to reveal the token and copy it somewhere safe. This token
-      allows the bot to log in – keep it private.
-
-2. **Invite the bot to your server**
-   1. In the developer portal open **OAuth2 → URL Generator**.
-   2. Under **Scopes** tick `bot` and `applications.commands`.
-   3. Under **Bot Permissions** select at minimum **Send Messages** and **Use
-      Application Commands**.
-   4. Copy the generated URL and open it in your browser to invite the bot to a
-      server where you have permission to add members.
-
-3. **Install project dependencies (FastAPI >=0.111, Pydantic 2.x)** (if you have not done so already):
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure `llmfight.ini`**
-   Create a file named `llmfight.ini` in the project root (or edit the existing
-   one) and add the following section:
-
-   ```ini
-   [DISCORD]
-   discord_token = your-bot-token       ; required
-   discord_channel = channel-name-or-id ; optional, limit commands to this channel
-   ```
-
-   The `discord_channel` option is optional. When provided, the bot only
-   responds to commands issued from that channel.
-
-5. **Run the bot**
-   ```bash
-   python -m src.discord_bot
-   ```
-
-   On first start Discord may take a minute to register the slash commands.
-   Once ready, use `/fight start` to begin a session, `/fight status` to check
-   on it, and `/fight stop` to end it. Only one fight session is kept in memory
-   at a time.
-
-## Configuration
-
-The simulation is configured using `llmfight.ini`. Start by copying `llmfight.ini.example` to `llmfight.ini` and editing values as needed. Key settings include:
-
-```ini
-[General]
-ollama_default_model = llama3.2  ; Ollama model to use
-ollama_api_url      = http://localhost:11434/v1/chat/completions ; Local Ollama endpoint
-max_tokens_fighter   = 24000     ; Context limit for fighter prompts
-max_tokens_judge     = 48000     ; Context limit for judge prompts
-ollama_temperature   = 0.8       ; Temperature for Ollama completions
-best_of_fighter      = 3         ; Number of speculative completions for fighter actions
-best_of_judge        = 2         ; Number of speculative completions for judge phases
-max_retries          = 2         ; Max retries for LLM calls on validation failure
-log_level           = INFO      ; Logging verbosity for engine output
-log_combat_turns   = false     ; Log each combat turn to the console
-save_transcripts    = false     ; Save prompt/response transcripts
-transcript_dir      = transcripts ; Directory for saved transcripts
-fighter_sentence_limit = 1     ; Number of sentences fighters may respond with
-fighter_word_limit     = 30    ; Maximum words per fighter response
-fighter_A          = A          ; INI section name for fighter A
-fighter_B          = B          ; INI section name for fighter B
-
-[CONTEXT]
-fighter_log_window = 10          ; Number of recent turns to include in fighter's context
-judge_log_window   = 9999        ; Number of recent turns for judge (effectively all)
-
-[SIMULATION]
-runs               = 10          ; Number of simulation runs
-seed               = 42          ; PRNG seed for reproducibility
-concurrent_runs    = 1           ; Number of fights to execute simultaneously
-max_turns          = 100         ; End fight in a draw after this many turns
-
-[DEFAULTS]
-environment = an open arena
-[DEFAULT_FIGHTER]
-class       = Generic Fighter
-loadout     = their bare fists and wits
+```bash
+uv sync --locked --extra discord
 ```
-`fighter_A` and `fighter_B` point to INI sections describing the two
-combatants. Create sections with those names (e.g. `[A]`, `[B]`) and
-specify `class` and `loadout` to customise each fighter. If a section
-lacks these keys, values from `[DEFAULT_FIGHTER]` are used. The fighting
-`environment` is configured globally under `[DEFAULTS]`.
-The engine subtracts prompt tokens from these context limits to calculate the
-``max_tokens`` parameter. The full context limit is also forwarded as
-``num_ctx`` in the Ollama request ``options``.
-`max_turns` ensures protracted fights conclude automatically with a draw once the limit is reached.
-Enable transcript logging for debugging by setting `save_transcripts = true`.
-Files will be written to the directory specified by `transcript_dir`.
-Transcript filenames now include microseconds to avoid collisions when multiple
-exchanges are logged within the same second.
-Set `log_combat_turns = true` if you want each turn printed to the console.
-With this option enabled the `play` command shows turn logs in real time even
-without the `--verbose` flag.
-You can also configure the Discord bot:
+
+Configure `llmfight.ini`:
 
 ```ini
 [DISCORD]
-discord_token = your-bot-token       ; required
-discord_channel = channel-name-or-id ; optional, limit commands to this channel
+discord_token = your-bot-token
+discord_channel = channel-name-or-id
 ```
-The `config.py` file is responsible for loading and managing these configurations.
 
-The Ollama endpoint defaults to `http://localhost:11434/v1/chat/completions`.
-You can change this in `llmfight.ini` using `ollama_api_url` or override it at
-runtime with the `API_URL` environment variable (useful when tunneling a remote
-service with ngrok):
+Run the bot:
 
 ```bash
-export API_URL="https://your-ngrok-url.ngrok-free.app/v1/chat/completions"
+uv run llmfight-discord
 ```
 
-To expose a local Ollama instance so that it can be reached over the
-internet, bind the service to all interfaces and tunnel it with ngrok:
+The bot exposes `/fight start`, `/fight status`, and `/fight stop`.
+
+## Configuration
+
+Copy `llmfight.ini.example` to `llmfight.ini` and edit as needed.
+
+```ini
+[General]
+ollama_default_model = llama3.2:3b
+ollama_api_url = http://localhost:11434/api/chat
+max_tokens_fighter = 512
+max_tokens_judge = 4096
+ollama_temperature = 0.4
+best_of_fighter = 1
+best_of_judge = 1
+max_retries = 1
+log_level = INFO
+log_combat_turns = false
+save_transcripts = false
+transcript_dir = transcripts
+fighter_sentence_limit = 1
+fighter_word_limit = 30
+fighter_A = A
+fighter_B = B
+
+[CONTEXT]
+fighter_log_window = 10
+judge_log_window = 9999
+
+[SIMULATION]
+runs = 1
+seed = 42
+concurrent_runs = 1
+max_turns = 2
+
+[DEFAULTS]
+environment = an open arena
+
+[DEFAULT_FIGHTER]
+class = Generic Fighter
+loadout = their bare fists and wits
+
+[A]
+name = Sir Galant
+class = Veteran Knight
+loadout = longsword and tower shield
+
+[B]
+name = Shade
+class = Cunning Assassin
+loadout = poison dagger and smoke bombs
+```
+
+The default endpoint is native Ollama `/api/chat`. If you need the OpenAI-compatible endpoint, set:
+
+```ini
+ollama_api_url = http://localhost:11434/v1/chat/completions
+```
+
+You can also override the endpoint at runtime:
+
+```bash
+export API_URL="http://localhost:11434/api/chat"
+```
+
+On PowerShell:
 
 ```powershell
-$Env:OLLAMA_HOST = "0.0.0.0:11434"
-ngrok http 11434 --host-header="localhost:11434"
-```
-Use the resulting public ngrok URL with `API_URL` as shown above.
-
-
-## Directory Structure
-
-```
-llm_fight/
-├── src/                      # Source code
-│   ├── engine/               # Logging and helper modules
-│   │   ├── combat_log.py
-│   │   ├── constants.py
-│   │   ├── fighter.py
-│   │   ├── logger.py
-│   │   └── prompts.py
-│   ├── agents.py             # Asynchronous Ollama client
-│   ├── anatomy.py            # Body part presets and tissue constants
-│   ├── config.py             # Configuration loader and migration
-│   ├── discord_bot.py        # Discord bot entry point
-│   ├── judge.py              # Judge orchestration logic
-│   ├── rng.py                # Centralized Pseudo-Random Number Generator
-│   ├── simulation.py         # Batch simulation harness
-│   ├── state.py              # FighterState dataclasses and update logic
-│   ├── validation.py         # JSON schema validation and guarded LLM calls
-│   └── cli.py                # Command Line Interface (Typer based)
-├── tests/                    # Unit and integration tests
-│   └── engine/               # Tests for the engine components
-├── .gitignore                # Specifies intentionally untracked files
-├── AGENTS.md                 # Codex contribution guidelines
-├── docs/
-│   ├── DEVELOPMENT_PLAN.md         # Ongoing development roadmap
-│   ├── Design_doc.md               # Detailed design document
-│   └── Design_doc_archived_2025.md # Archived design document
-├── llmfight.ini.example      # Example configuration file
-├── pyproject.toml            # Project metadata
-├── requirements.txt          # Runtime dependencies
-├── requirements-dev.txt      # Development dependencies
-├── LICENSE                   # License text
-├── README.md                 # This file
-└── run.py                    # Entry point script
+$env:API_URL = "http://localhost:11434/api/chat"
 ```
 
-## Data Model
-
-The core data structure for a fighter is `FighterState`:
-
-```python
-@dataclass
-class TissueLayer:
-    name: str        # 'skin', 'fat', ...
-    max_hp: int
-
-@dataclass
-class BodyPart:
-    name: str
-    layers: list[TissueLayer]
-    severed: bool = False
-    bleed_rate: int = 0
-    burn_rate:  int = 0
-
-@dataclass
-class Effect:
-    name: str           # 'burning', 'stunned', ...
-    magnitude: float
-    ttl: int            # turns remaining (-1 = infinite)
-    on_apply: str
-    on_tick: str | None
-
-@dataclass
-class FighterState:
-    id: str
-    parts: dict[str, BodyPart] # Keyed by part name
-    pain: int = 0
-    exhaustion: int = 0
-    heat: int = 0
-    buffs: list[Effect] = field(default_factory=list)
-    debuffs: list[Effect] = field(default_factory=list)
-    status: Literal['fighting','unconscious','dead'] = 'fighting'
-    class_: str = 'Generic Fighter'
-    loadout: str = 'their bare fists and wits'
-    environment: str = 'an open arena'
-```
-Body part presets like `humanoid` and `quadruped` are defined in `src/anatomy.py`.
-
-## Combat Log
-
-Each fight records its history using a `CombatLog` object.  Every turn is
-stored as a `CombatTurn` with fields like the fighter attempts, judge outputs
-and the resulting narration.  Logs can be queried for the most recent turns or
-converted into a plain-text summary.
-
-```python
-from src.engine.combat_log import CombatLog, CombatTurn
-
-log = CombatLog()
-log.append(CombatTurn(turn=1, judge_p2={"narration": "A strikes B"}))
-print(log.to_summary())
-```
-
-The example above would output:
-
-```
-Turn 1: A strikes B
-```
-
-## Future Work
-
-1. **Visualizer:** Develop a Godot-based tool to replay combat logs with sprite limb masking.
-2. **Advanced Modifiers:** Introduce infection and weather modifiers once the MVP is stable.
-3. **LLM Robustness & Scalability:** Continue refining prompts, error handling and batch execution for large numbers of simulations.
-
-## Contributing
-
-Set up a Python 3.11 environment before submitting changes:
+## Testing And Quality
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
+uv run black --check .
+uv run flake8
+uv run pytest -q
 ```
 
-Formatting and tests:
+Live Ollama tests are skipped by default. Opt in explicitly:
 
 ```bash
-black .
-flake8
-pytest -q
+uv run pytest -q --run-live
 ```
 
-Set `API_URL` if you want to run the live API tests. Make sure all
-checks pass before committing.
+CI uses Python 3.14 and runs:
+
+```bash
+uv sync --locked --all-extras --dev
+uv run black --check .
+uv run flake8
+uv run pytest -q --cov=llm_fight
+```
+
+## Architecture
+
+The installable package lives under `src/llm_fight/`.
+
+```text
+src/llm_fight/
+|-- agents.py          # async Ollama client
+|-- anatomy.py         # body part presets and tissue layers
+|-- cli.py             # Typer commands
+|-- config.py          # INI loader and migrations
+|-- discord_bot.py     # optional Discord integration
+|-- judge.py           # phase-1 and phase-2 orchestration
+|-- rng.py             # central PRNG
+|-- simulation.py      # single-fight and batch simulation loops
+|-- state.py           # FighterState and delta/effect application
+|-- transcripts.py     # prompt/response transcript logging
+|-- validation.py      # JSON schemas and guarded_call
+|-- engine/
+|   |-- combat_log.py
+|   |-- constants.py
+|   |-- fighter.py
+|   |-- logger.py
+|   |-- prompts.py
+|   `-- render.py
+`-- utils/
+    |-- json_parser.py
+    `-- token_counter.py
+```
+
+`run.py` is kept as a compatibility shim; prefer `llmfight`.
+
+## Turn Flow
+
+1. Fighter A and Fighter B propose actions concurrently.
+2. Judge Phase 1 validates plausibility and returns success probabilities.
+3. Python rolls against those probabilities.
+4. Judge Phase 2 receives the attempts, full P1 result, successful rolls, combat log, valid body parts, and current fighter state.
+5. Python validates and applies deltas, ticks effects, and resolves winner consistency from the resulting state.
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
----
-© 2025 LLM Fighters Project

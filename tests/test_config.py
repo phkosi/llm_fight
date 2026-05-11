@@ -1,7 +1,7 @@
 import pytest
 import configparser
-from src.config import Config
-from src.engine import constants as C  # For constant keys
+from llm_fight.config import Config
+from llm_fight.engine import constants as C  # For constant keys
 
 # Sample INI content for testing
 SAMPLE_INI_CONTENT = """
@@ -159,7 +159,7 @@ def test_global_config_instance_loads():
     # This test assumes that either config.ini or config.ini.default exists and is loadable,
     # or that the DEFAULTS in Config are sufficient.
     # A simple check to see if a known default key can be accessed.
-    from src.config import CONFIG
+    from llm_fight.config import CONFIG
 
     try:
         # Try accessing a key that IS in DEFAULTS
@@ -171,7 +171,7 @@ def test_global_config_instance_loads():
 
 
 def test_default_max_turns_loaded(temp_config_instance):
-    assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 100
+    assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 2
 
 
 def test_fighter_section_names(temp_config_instance):
@@ -187,3 +187,12 @@ def test_config_save_roundtrip(tmp_path):
 
     new_cfg = Config(file_path)
     assert new_cfg.get("Custom", "answer", int) == 42
+
+
+def test_config_reads_utf8_bom(tmp_path):
+    file_path = tmp_path / "bom.ini"
+    file_path.write_text("[General]\nmax_retries = 7\n", encoding="utf-8-sig")
+
+    cfg = Config(file_path)
+
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int) == 7

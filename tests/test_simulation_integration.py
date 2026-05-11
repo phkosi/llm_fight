@@ -2,9 +2,9 @@ import csv
 from unittest.mock import AsyncMock, patch, MagicMock
 import pytest
 
-import src.simulation as sim_module
-from src.engine import constants as C
-from src.config import CONFIG
+import llm_fight.simulation as sim_module
+from llm_fight.engine import constants as C
+from llm_fight.config import CONFIG
 
 
 @pytest.mark.asyncio
@@ -87,7 +87,7 @@ async def test_run_batch_short_simulation(tmp_path):
         patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
         patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
     ):
-        orig_get = sim_module.CONFIG.get
+        orig_get = sim_module.config_mod.CONFIG.get
 
         def fake_get(section, key, cast=str, fallback=None):
             if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
@@ -96,7 +96,7 @@ async def test_run_batch_short_simulation(tmp_path):
                 return 1
             return orig_get(section, key, cast, fallback)
 
-        with patch.object(sim_module.CONFIG, "get", side_effect=fake_get):
+        with patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get):
             out_file = tmp_path / "results.csv"
             path = await sim_module.run_batch(out_file)
 
@@ -208,3 +208,44 @@ async def test_draw_after_max_turns():
 
     assert result[C.WINNER] == C.DRAW
     assert result[C.LOG_TURN] == "2"
+
+
+@pytest.mark.asyncio
+async def test_post_delta_state_outcome_overrides_inconsistent_judge_winner():
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A hits B",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            "narration": "B is knocked out, but the judge reports B as winner.",
+            "delta": {C.FIGHTER_A: {}, C.FIGHTER_B: {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "fight_end": True,
+            "winner": C.FIGHTER_B,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "3")
+
+    with (
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        patch.object(sim_module.logger, "warning") as mock_warning,
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.FIGHTER_A
+    assert any("contradicted post-delta state outcome" in call.args[0] for call in mock_warning.call_args_list)

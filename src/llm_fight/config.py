@@ -7,14 +7,14 @@ from .engine import constants as C
 
 DEFAULTS = {
     C.CONFIG_GENERAL: {
-        C.CONFIG_LLAMA_DEFAULT_MODEL: "llama3.2",
-        C.CONFIG_LLAMA_API_URL: "http://localhost:11434/v1/chat/completions",
-        C.CONFIG_MAX_TOKENS_FIGHTER: "24000",
-        C.CONFIG_MAX_TOKENS_JUDGE: "48000",
-        C.CONFIG_LLAMA_TEMPERATURE: "0.8",
-        C.CONFIG_BEST_OF_FIGHTER: "3",
-        C.CONFIG_BEST_OF_JUDGE: "2",
-        C.CONFIG_MAX_RETRIES: "2",
+        C.CONFIG_LLAMA_DEFAULT_MODEL: "llama3.2:3b",
+        C.CONFIG_LLAMA_API_URL: "http://localhost:11434/api/chat",
+        C.CONFIG_MAX_TOKENS_FIGHTER: "512",
+        C.CONFIG_MAX_TOKENS_JUDGE: "4096",
+        C.CONFIG_LLAMA_TEMPERATURE: "0.4",
+        C.CONFIG_BEST_OF_FIGHTER: "1",
+        C.CONFIG_BEST_OF_JUDGE: "1",
+        C.CONFIG_MAX_RETRIES: "1",
         C.CONFIG_LOG_LEVEL: "INFO",
         C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
@@ -29,10 +29,10 @@ DEFAULTS = {
         C.CONFIG_JUDGE_LOG_WINDOW: "9999",
     },
     C.CONFIG_SIMULATION: {
-        C.CONFIG_RUNS: "10",
+        C.CONFIG_RUNS: "1",
         C.CONFIG_SEED: "42",
         C.CONFIG_CONCURRENT_RUNS: "1",
-        C.CONFIG_MAX_TURNS: "100",
+        C.CONFIG_MAX_TURNS: "2",
     },
     C.CONFIG_DEFAULTS: {
         C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
@@ -73,7 +73,7 @@ class Config:
         # Then, load the user's file if it exists.
         # According to docs, values from files read later should take precedence.
         if self.path.exists():
-            self.cp.read(self.path)
+            self.cp.read(self.path, encoding="utf-8-sig")
             self._migrate_old_keys()
 
     def _migrate_old_keys(self):
@@ -127,7 +127,7 @@ class Config:
                 raise ValueError(
                     f"Value for '{key}' in section '{section}' ('{original_value}') is not a valid boolean and no fallback provided."
                 )
-            except (configparser.NoSectionError, configparser.NoOptionError):
+            except configparser.NoSectionError, configparser.NoOptionError:
                 if fallback is not None:
                     return _parse_bool(fallback)
                 raise

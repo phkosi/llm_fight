@@ -1,7 +1,7 @@
 import importlib
 import logging
 
-import src.engine.logger as logger_module
+import llm_fight.engine.logger as logger_module
 
 
 def test_logger_single_handler(monkeypatch):

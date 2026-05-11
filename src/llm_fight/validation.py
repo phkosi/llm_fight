@@ -5,11 +5,9 @@ import asyncio
 from typing import Any, Callable, Dict
 from jsonschema import validate, ValidationError
 
-from .config import CONFIG
+from . import config as config_mod
 from .engine import constants as C
 from .engine.logger import logger
-
-MAX_RETRIES = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int)
 
 ActionSchema = {
     C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
@@ -45,10 +43,13 @@ JudgeP1Schema: Dict[str, Any] = {
         },
         "explanation": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
     },
-    # "attempt_X_valid" fields may be omitted if the LLM fails to include them.
-    # We still require the overall judgement text so downstream logic has
-    # something to work with even on partial responses.
-    C.SCHEMA_REQUIRED: ["judgement_text"],
+    C.SCHEMA_REQUIRED: [
+        "judgement_text",
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_valid",
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob",
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_valid",
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob",
+    ],
     C.SCHEMA_ADDITIONAL_PROPERTIES: True,
 }
 
@@ -64,10 +65,10 @@ DeltaSchema = {
                 C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
                 C.SCHEMA_PROPERTIES: {
                     C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-                    C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER},
+                    C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
                     C.TYPE: {
                         C.SCHEMA_TYPE: C.SCHEMA_STRING,
-                        C.SCHEMA_ENUM: [dt.value for dt in C.DamageType],
+                        C.SCHEMA_ENUM: [dt.value for dt in C.DamageType] + ["burning"],
                     },
                 },
                 C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE],
@@ -75,7 +76,10 @@ DeltaSchema = {
         },
         C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_OBJECT}},
         C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
-        C.STATUS_CHANGE: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        C.STATUS_CHANGE: {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_ENUM: [status.value for status in C.FighterStatus],
+        },
     },
     C.SCHEMA_ADDITIONAL_PROPERTIES: True,
 }
@@ -94,36 +98,44 @@ JudgeP2Schema = {
         C.FIGHT_END: {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
         C.WINNER: {C.SCHEMA_TYPE: [C.SCHEMA_STRING, C.SCHEMA_NULL], C.SCHEMA_ENUM: [C.FIGHTER_A, C.FIGHTER_B, None]},
     },
-    C.SCHEMA_REQUIRED: [C.NARRATION, C.DELTA, C.FIGHT_END],
+    C.SCHEMA_REQUIRED: [C.NARRATION, C.DELTA, C.FIGHT_END, C.WINNER],
+    "allOf": [
+        {
+            "if": {C.SCHEMA_PROPERTIES: {C.FIGHT_END: {"const": False}}},
+            "then": {C.SCHEMA_PROPERTIES: {C.WINNER: {"const": None}}},
+        }
+    ],
 }
 
 # generic validate wrapper ------------------------------------------------
 
 
-async def guarded_call(func: Callable[[], Any], schema: dict) -> Any:
+async def guarded_call(func: Callable[[], Any], schema: dict, max_retries: int | None = None) -> Any:
     """Call ``func`` until ``schema`` validates or retries are exhausted."""
 
     BACKOFF_BASE = 1  # seconds
     last_error = None
+    if max_retries is None:
+        max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int)
 
-    for attempt in range(MAX_RETRIES + 1):
+    for attempt in range(max_retries + 1):
         try:
             data = await func()
             validate(data, schema)
             return data
         except (ValidationError, json.JSONDecodeError) as e:
             last_error = e
-            if attempt >= MAX_RETRIES:
+            if attempt >= max_retries:
                 raise RuntimeError(
-                    f"Validation/JSON parsing failed after {MAX_RETRIES + 1} attempts: {last_error}"
+                    f"Validation/JSON parsing failed after {max_retries + 1} attempts: {last_error}"
                 ) from last_error
 
-            logger.warning("guarded_call attempt %s/%s failed: %s", attempt + 1, MAX_RETRIES + 1, e)
+            logger.warning("guarded_call attempt %s/%s failed: %s", attempt + 1, max_retries + 1, e)
             delay = BACKOFF_BASE * 2**attempt
             logger.debug("Sleeping %.1fs before retry", delay)
             await asyncio.sleep(delay)
-    # This part should not be reached if MAX_RETRIES >= 0, due to the raise in the loop.
-    # However, to satisfy linters/type checkers if MAX_RETRIES could be -1 (though it shouldn't):
+    # This part should not be reached if max_retries >= 0, due to the raise in the loop.
+    # However, to satisfy linters/type checkers if max_retries could be -1 (though it shouldn't):
     if last_error:
         raise RuntimeError(f"Validation/JSON parsing failed: {last_error}")
     # Fallback if loop somehow finishes without success or error (should not happen with current logic)

@@ -1,9 +1,8 @@
 import json
-import importlib
-from src.config import Config
-from src.engine import constants as C
-import src.transcripts as transcripts
-import src.config as config_mod
+from llm_fight.config import Config
+from llm_fight.engine import constants as C
+import llm_fight.transcripts as transcripts
+import llm_fight.config as config_mod
 
 
 def test_log_exchange_creates_file(tmp_path, monkeypatch):
@@ -15,8 +14,6 @@ def test_log_exchange_creates_file(tmp_path, monkeypatch):
     custom_cfg = Config(cfg_path)
 
     monkeypatch.setattr(config_mod, "CONFIG", custom_cfg)
-    monkeypatch.setattr(transcripts, "CONFIG", custom_cfg)
-    importlib.reload(transcripts)
 
     messages = [{"role": "user", "content": "hi"}]
     responses = ["hello"]
@@ -41,8 +38,6 @@ def test_log_exchange_unique_timestamps(tmp_path, monkeypatch):
     custom_cfg = Config(cfg_path)
 
     monkeypatch.setattr(config_mod, "CONFIG", custom_cfg)
-    monkeypatch.setattr(transcripts, "CONFIG", custom_cfg)
-    importlib.reload(transcripts)
 
     from datetime import datetime as real_datetime
 

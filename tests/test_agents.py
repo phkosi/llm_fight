@@ -4,13 +4,13 @@ import aiohttp
 import os
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
-from src.agents import chat, get_ollama_url
-from src.engine import constants as C
-from src.config import CONFIG  # To access config values for assertions
+from llm_fight.agents import chat, get_ollama_url
+from llm_fight.engine import constants as C
+from llm_fight.config import CONFIG  # To access config values for assertions
+from llm_fight.config import Config
+from llm_fight import config as config_mod
 
-BASE_OLLAMA_URL = CONFIG.get(
-    C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str, fallback="http://localhost:11434/v1/chat/completions"
-)
+BASE_OLLAMA_URL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str, fallback="http://localhost:11434/api/chat")
 DEFAULT_MODEL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
 DEFAULT_TEMP = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
 
@@ -24,9 +24,7 @@ async def test_chat_single_call_success():
 
     # 1. The actual response mock from (await session.post(...)).__aenter__()
     mock_actual_response = AsyncMock()
-    mock_actual_response.json = AsyncMock(
-        return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: mock_response_content}}]}
-    )
+    mock_actual_response.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: mock_response_content}})
     mock_actual_response.status = 200
     mock_actual_response.raise_for_status = MagicMock()
 
@@ -67,9 +65,12 @@ async def test_chat_single_call_success():
         BASE_OLLAMA_URL,
         json={
             C.AGENT_MODEL: DEFAULT_MODEL,
-            C.TEMPERATURE: DEFAULT_TEMP,
-            C.AGENT_MAX_TOKENS: max_tokens,
             C.AGENT_MESSAGES: messages,
+            C.AGENT_STREAM: False,
+            C.AGENT_OPTIONS: {
+                C.TEMPERATURE: DEFAULT_TEMP,
+                C.AGENT_NUM_PREDICT: max_tokens,
+            },
             C.AGENT_FORMAT: schema,
         },
         headers={C.CONTENT_TYPE: C.APPLICATION_JSON},
@@ -93,9 +94,7 @@ async def test_chat_best_of_n_calls_success():
     for i in range(best_of_n):
         # 1. Actual response mock
         actual_resp = AsyncMock()
-        actual_resp.json = AsyncMock(
-            return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: mock_responses_content[i]}}]}
-        )
+        actual_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: mock_responses_content[i]}})
         actual_resp.status = 200
         actual_resp.raise_for_status = MagicMock()
         mock_actual_responses.append(actual_resp)
@@ -130,9 +129,12 @@ async def test_chat_best_of_n_calls_success():
 
     expected_payload = {
         C.AGENT_MODEL: DEFAULT_MODEL,
-        C.TEMPERATURE: DEFAULT_TEMP,
-        C.AGENT_MAX_TOKENS: max_tokens,
         C.AGENT_MESSAGES: messages,
+        C.AGENT_STREAM: False,
+        C.AGENT_OPTIONS: {
+            C.TEMPERATURE: DEFAULT_TEMP,
+            C.AGENT_NUM_PREDICT: max_tokens,
+        },
         C.AGENT_FORMAT: schema,
     }
     expected_calls = [
@@ -141,6 +143,140 @@ async def test_chat_best_of_n_calls_success():
     mock_session_instance.post.assert_has_calls(expected_calls, any_order=False)
     for ctx_mgr in mock_post_context_managers:
         ctx_mgr.__aenter__.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_chat_openai_compat_payload_and_response_format():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+    schema = {"type": "object"}
+    openai_url = "http://localhost:11434/v1/chat/completions"
+
+    mock_actual_response = AsyncMock()
+    mock_actual_response.json = AsyncMock(
+        return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "compat ok"}}]}
+    )
+    mock_actual_response.status = 200
+    mock_actual_response.raise_for_status = MagicMock()
+
+    mock_post_context_manager = AsyncMock()
+    mock_post_context_manager.__aenter__.return_value = mock_actual_response
+
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
+    mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
+
+    with (
+        patch("aiohttp.ClientSession", return_value=mock_session_instance),
+        patch.dict(os.environ, {"API_URL": openai_url}),
+    ):
+        responses = await chat(messages=messages, max_tokens=12, best_of=1, schema=schema)
+
+    assert responses == ["compat ok"]
+    mock_session_instance.post.assert_called_once_with(
+        openai_url,
+        json={
+            C.AGENT_MODEL: DEFAULT_MODEL,
+            C.TEMPERATURE: DEFAULT_TEMP,
+            C.AGENT_MAX_TOKENS: 12,
+            C.AGENT_MESSAGES: messages,
+            C.AGENT_RESPONSE_FORMAT: {
+                C.SCHEMA_TYPE: "json_schema",
+                "json_schema": {
+                    C.NAME: "llm_fight_response",
+                    "schema": schema,
+                },
+            },
+        },
+        headers={C.CONTENT_TYPE: C.APPLICATION_JSON},
+        timeout=300,
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_native_payload_sanitizes_schema_for_ollama():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+    schema = {
+        C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+        C.SCHEMA_PROPERTIES: {
+            "prob": {
+                C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                C.SCHEMA_PATTERN: r"^(0(\.\d+)?|1(\.0+)?)$",
+            }
+        },
+        C.SCHEMA_PATTERN_PROPERTIES: {
+            f"^[{C.FIGHTER_A}{C.FIGHTER_B}]$": {
+                C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+                C.SCHEMA_PROPERTIES: {"pain": {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0}},
+            }
+        },
+        "allOf": [{"if": {C.SCHEMA_PROPERTIES: {"done": {"const": False}}}}],
+    }
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    with patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
+        await chat(messages=messages, max_tokens=12, session=session, schema=schema)
+
+    sent_schema = session.post.call_args.kwargs["json"][C.AGENT_FORMAT]
+    assert "allOf" not in sent_schema
+    assert C.SCHEMA_PATTERN not in sent_schema[C.SCHEMA_PROPERTIES]["prob"]
+    assert C.SCHEMA_PATTERN_PROPERTIES not in sent_schema
+    assert C.FIGHTER_A in sent_schema[C.SCHEMA_PROPERTIES]
+    assert C.FIGHTER_B in sent_schema[C.SCHEMA_PROPERTIES]
+    assert C.SCHEMA_MINIMUM not in sent_schema[C.SCHEMA_PROPERTIES][C.FIGHTER_A][C.SCHEMA_PROPERTIES]["pain"]
+
+
+@pytest.mark.asyncio
+async def test_chat_reads_model_api_and_retry_config_at_call_time(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "llmfight.ini"
+    cfg_path.write_text(
+        "[General]\n"
+        "ollama_default_model = config-model\n"
+        "ollama_api_url = http://configured-host:11434/api/chat\n"
+        "ollama_temperature = 0.25\n"
+        "max_retries = 7\n"
+    )
+    old_config = config_mod.CONFIG
+    config_mod.CONFIG = Config(cfg_path)
+    monkeypatch.delenv("API_URL", raising=False)
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "configured"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    try:
+        responses = await chat(
+            messages=[{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hi"}], max_tokens=8, session=session
+        )
+    finally:
+        config_mod.CONFIG = old_config
+
+    assert responses == ["configured"]
+    assert session.post.call_args.args[0] == "http://configured-host:11434/api/chat"
+    payload = session.post.call_args.kwargs["json"]
+    assert payload[C.AGENT_MODEL] == "config-model"
+    assert payload[C.AGENT_OPTIONS][C.TEMPERATURE] == 0.25
 
 
 @pytest.mark.asyncio
@@ -228,25 +364,25 @@ async def test_chat_unexpected_error_raises_exception():
 def test_get_ollama_url_no_env(monkeypatch):
     """When API_URL is unset, default config fallback is used."""
     monkeypatch.delenv("API_URL", raising=False)
-    from src.agents import get_ollama_url
+    from llm_fight.agents import get_ollama_url
 
     assert get_ollama_url() == BASE_OLLAMA_URL
 
 
 def test_get_ollama_url_missing_suffix(monkeypatch):
-    """API_URL without the completions suffix should be amended."""
+    """API_URL without a chat suffix should default to native Ollama."""
     custom_base = "http://example.com"
     monkeypatch.setenv("API_URL", custom_base)
-    from src.agents import get_ollama_url
+    from llm_fight.agents import get_ollama_url
 
-    assert get_ollama_url() == custom_base + "/v1/chat/completions"
+    assert get_ollama_url() == custom_base + "/api/chat"
 
 
 def test_get_ollama_url_complete(monkeypatch):
     """If API_URL already ends with the suffix it should remain unchanged."""
     complete = "http://host:1234/v1/chat/completions"
     monkeypatch.setenv("API_URL", complete)
-    from src.agents import get_ollama_url
+    from llm_fight.agents import get_ollama_url
 
     assert get_ollama_url() == complete
 
@@ -254,13 +390,13 @@ def test_get_ollama_url_complete(monkeypatch):
 def test_get_ollama_url_from_env():
     custom_base = "https://example.com"
     with patch.dict(os.environ, {"API_URL": custom_base}):
-        assert get_ollama_url() == custom_base + "/v1/chat/completions"
+        assert get_ollama_url() == custom_base + "/api/chat"
 
 
 def test_get_ollama_url_from_config():
     old = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str)
     try:
-        new_url = "http://config-example.com/v1/chat/completions"
+        new_url = "http://config-example.com/api/chat"
         CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, new_url)
         with patch.dict(os.environ, {}, clear=True):
             assert get_ollama_url() == new_url
@@ -274,7 +410,7 @@ async def test_chat_uses_provided_session():
     max_tokens = 5
 
     mock_resp = AsyncMock()
-    mock_resp.json = AsyncMock(return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "Hi"}}]})
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "Hi"}})
     mock_resp.status = 200
     mock_resp.raise_for_status = MagicMock()
 
@@ -299,7 +435,7 @@ async def test_chat_retries_on_failure(monkeypatch):
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Retry"}]
     max_tokens = 5
     mock_resp = AsyncMock()
-    mock_resp.json = AsyncMock(return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}}]})
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}})
     mock_resp.status = 200
     mock_resp.raise_for_status = MagicMock()
 
@@ -313,7 +449,7 @@ async def test_chat_retries_on_failure(monkeypatch):
 
     with (
         patch("aiohttp.ClientSession", return_value=session),
-        patch("src.agents.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        patch("llm_fight.agents.asyncio.sleep", new=AsyncMock()) as mock_sleep,
     ):
         responses = await chat(messages=messages, max_tokens=max_tokens, retries=1)
 

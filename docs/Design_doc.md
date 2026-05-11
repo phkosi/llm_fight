@@ -1,261 +1,150 @@
-# LLM Fighters Combat Engine – Detailed Design Document (v0.6)
+# LLM Fighters Combat Engine - Design Document
 
-> **Status · 2025‑06‑05**  This document reflects the current architecture after milestone 2 of the local‑LLM 1‑vs‑1 fighting simulator.  It is formatted in GitHub‑flavoured Markdown and should render correctly in most viewers (Discord, GitHub, VS Code, etc.).
-Older design iterations are preserved in `Design_doc_archived_2025.md`.
+Status: 2026-05-11. Archived design notes remain in `Design_doc_archived_2025.md`.
 
----
+## 1. Overview
 
-## Table of Contents
+LLM Fighters is a turn-based duel between two local LLM-controlled fighters and one Judge/Narrator LLM. Fighters propose free-text actions. The Judge estimates success probability, Python rolls dice, and the Judge returns a narration plus structured state delta.
 
-1. [Overview](#1-overview)
-2. [High‑Level Architecture](#2-high-level-architecture)
-3. [Data Model](#3-data-model)
-4. [Prompt Engineering](#4-prompt-engineering)
-5. [Validation & Retries](#5-validation--retries)
-6. [Simulation Harness](#6-simulation-harness)
-7. [CLI Visualization](#7-cli-visualization)
-8. [Configuration (INI)](#8-configuration-ini)
-9. [Performance Notes](#9-performance-notes)
-10. [Future Work](#10-future-work)
+Python owns deterministic mechanics: configuration, RNG, schema validation, retry policy, anatomy state, effect ticks, winner consistency, logging, and CLI workflow. The default LLM transport is Ollama native `/api/chat` with structured outputs.
 
----
+## 2. Stack
 
-## 1  Overview
+- Python 3.14 or newer.
+- `uv` lockfile workflow with `uv.lock` committed.
+- Runtime package: `llm_fight`, located at `src/llm_fight/`.
+- CLI scripts:
+  - `llmfight = llm_fight.cli:app`
+  - `llmfight-discord = llm_fight.discord_bot:run_bot`
+- Core runtime deps: `aiohttp`, `jsonschema`, `rich`, `typer`, `click`.
+- Optional extras:
+  - `discord` for Discord bot support.
+  - `tokens` for `tiktoken` token counting.
+  - `live` for Ollama helper package experiments.
 
-A **turn‑based duel** between two LLM agents (the *Fighters*) adjudicated by a third LLM (*Judge/Narrator*).  Python controls randomness, persistence, and retries.  All models run locally through **Ollama `llama3.2:latest`** on a single‑GPU workstation.
-
-Key features:
-
-* *Free‑text* fighter actions – creativity encouraged.
-* *Dwarf Fortress*‑inspired damage: multi‑layer body parts, limb loss, pain, bleeding.
-* Judge decides success **probability** → Python rolls dice → Judge narrates outcome.
-* Generous context: **24 k tokens per Fighter**, **48 k tokens for Judge**.
-* Guardrails with `jsonschema`; automatic retries; `best_of` speculative completions.
-
----
-
-## 2  High‑Level Architecture
-
-```
-src/
-├── anatomy.py      # presets & tissue constants
-├── agents.py       # async Ollama client
-├── cli.py          # Typer runner (play / simulate / add‑char)
-├── config.py       # INI loader & migration
-├── engine/         # helper modules
-│   ├─ combat_log.py
-│   ├─ constants.py
-│   ├─ fighter.py
-│   ├─ logger.py
-│   └─ prompts.py
-├── judge.py        # phase‑1 & phase‑2 orchestration
-├── rng.py          # central PRNG
-├── simulation.py   # batch self‑play harness
-├── state.py        # FighterState dataclasses + delta apply
-└── validation.py   # JSON‑schema + guarded_call()
-```
-
-### 2.1  Turn Flow (simultaneous proposals)
-
-```
-┌── Fighter A ─┐  async   ┌── Judge P1 ─┐
-└──────────────┘          └─────────────┘
-       ▲                       │  JSON {prob}
-       │                       ▼  RNG rolls
-┌── Fighter B ─┐          ┌── Judge P2 ─┐
-└──────────────┘          └─────────────┘
-```
-
-*Two* fighter prompts run in parallel; their JSON is fed into a **single** Judge call per phase.
-
----
-
-## 3  Data Model
-
-```python
-@dataclass
-class TissueLayer:
-    name: str        # 'skin', 'fat', ...
-    max_hp: int
-
-@dataclass
-class BodyPart:
-    name: str
-    layers: list[TissueLayer]
-    severed: bool = False
-    bleed_rate: int = 0
-    burn_rate:  int = 0
-
-@dataclass
-class Effect:
-    name: str           # 'burning', 'stunned', ...
-    magnitude: float
-    ttl: int            # turns remaining (‑1 = infinite)
-    on_apply: str
-    on_tick: str | None
-
-@dataclass
-class FighterState:
-    id: str
-    parts: dict[str, BodyPart]
-    pain: int = 0
-    exhaustion: int = 0
-    heat: int = 0
-    buffs: list[Effect] = field(default_factory=list)
-    debuffs: list[Effect] = field(default_factory=list)
-    status: Literal['fighting','unconscious','dead'] = 'fighting'
-    class_: str = "Generic Fighter"
-    loadout: str = "their bare fists and wits"
-    environment: str = "an open arena"
-```
-
-*Presets*: `humanoid`, `quadruped`, … stored in **anatomy.py**.
-
----
-
-## 4  Prompt Engineering
-
-### 4.1  Fighter (A and B)
+## 3. Package Layout
 
 ```text
-SYSTEM:
-You are {name}, a {class_} currently fighting inside a {environment}.
-Pain: {pain_desc}   Exhaustion: {exhaustion_desc}   Heat: {heat_desc}
-Active effects: {effects_list}
-Last {turn_window} turns:
-{recent_log}
-Your equipment: {loadout}
----
-Respond with {sentence_limit} sentence describing what you attempt next. ≤ {word_limit} words.
-(No outcome narration.  Raw text only.)
+src/llm_fight/
+|-- agents.py          # async Ollama client
+|-- anatomy.py         # body presets and fresh tissue layers
+|-- cli.py             # Typer CLI
+|-- config.py          # INI loader
+|-- discord_bot.py     # optional Discord bot
+|-- judge.py           # judge phase orchestration
+|-- rng.py             # central PRNG
+|-- simulation.py      # fight loop and batch runs
+|-- state.py           # FighterState mutation and invariants
+|-- transcripts.py     # transcript logging
+|-- validation.py      # JSON schemas and guarded_call
+|-- engine/
+|   |-- combat_log.py
+|   |-- constants.py
+|   |-- fighter.py
+|   |-- logger.py
+|   |-- prompts.py
+|   `-- render.py
+`-- utils/
+    |-- json_parser.py
+    `-- token_counter.py
 ```
 
-*Sample output*: “*I thrust my staff downward, releasing an arc of flame toward Viper’s torso.*”
+`run.py` is a compatibility shim only. Prefer `llmfight`.
 
-### 4.2  Judge Phase 1 — Probability
+## 4. Turn Flow
 
-```text
-SYSTEM: You are an impartial combat arbiter. Return STRICT JSON.
-Schema:
-{
-  "judgement_text": "string",
-  "attempt_A_valid": "boolean",
-  "attempt_A_prob": "string (0.0-1.0)",
-  "attempt_B_valid": "boolean",
-  "attempt_B_prob": "string (0.0-1.0)",
-  "explanation": "string"
-}
+1. Fighter A and Fighter B generate actions concurrently.
+2. Judge Phase 1 receives compact fighter summaries, attempts, and recent combat log.
+3. Phase 1 returns strict JSON with validity and probability for each attempt.
+4. Python rolls success using the central PRNG.
+5. Judge Phase 2 receives attempts, full P1 result, `successful_rolls`, combat log context, valid body parts, and current fighter states.
+6. Phase 2 returns strict JSON containing narration, delta, `fight_end`, and `winner`.
+7. Python applies deltas, normalizes body-part and damage aliases, ticks effects, re-checks status invariants, and resolves winner consistency from final state.
+
+## 5. Anatomy And State
+
+`FighterState` owns mutable per-fighter state:
+
+- `parts`: body-part map with fresh `TissueLayer` instances per part and per fighter.
+- `pain`, `exhaustion`, `heat`.
+- `buffs` and `debuffs` as `Effect` objects.
+- `status`: `fighting`, `unconscious`, or `dead`.
+- `class_`, `loadout`, and `environment` from config.
+
+Critical invariants:
+
+- Unknown targeted parts are rejected before damage is applied.
+- Common natural-language aliases such as `chest` and `left arm` normalize to canonical body parts.
+- Burning and bleeding ticks can cause KO/death after effect application.
+- Destroyed vital parts and pain thresholds update status immediately.
+
+## 6. Ollama I/O
+
+Default endpoint:
+
+```ini
+ollama_api_url = http://localhost:11434/api/chat
 ```
 
-*Sample output (abridged)*:
+Native Ollama requests use:
 
-```json
-{
-  "judgement_text": "A feints high.",
-  "attempt_A_valid": true,
-  "attempt_A_prob": "0.65",
-  "attempt_B_valid": false,
-  "attempt_B_prob": "0.0",
-  "explanation": "B's move is implausible."
-}
-```
+- `format` for JSON schema structured outputs.
+- `options.num_predict` for generation limit.
+- `options.num_ctx` for context size.
+- `stream: false`.
 
-### 4.3  Dice Roll (Python)
+OpenAI-compatible `/v1/chat/completions` endpoints remain supported and use `response_format`.
 
-```python
-rolls = {k: random.random() < data[k]['prob'] for k in ('A','B')}
-```
+## 7. Configuration
 
-### 4.4  Judge Phase 2 — Narration + Delta
+Config is read at call time through `llm_fight.config.CONFIG` or explicit `Config` replacement from the CLI. Avoid import-time copies of config-derived values.
 
-```text
-SYSTEM: You are the combat narrator.  Output JSON ONLY as:
-{ narration:str, delta:{A:{...},B:{...}}, fight_end:bool, winner:'A'|'B'|null }
-```
-
-*Sample output omitted here for brevity — see design §4 in canvas.*
-
----
-
-## 5  Validation & Retries
-
-* `jsonschema` enforces **Judge P1** and **Judge P2** schemas.
-* `guarded_call()` loops ≤ `max_retries` (INI) per request.
-* `best_of_fighter` / `best_of_judge` spawn *N* speculative completions and pick the shortest passing schema.
-
----
-
-## 6  Simulation Harness
-
-*CLI*:
-
-```bash
-python -m src.cli simulate           # runs [SIMULATION] runs
-```
-
-Outputs `sim_results.csv` with winner, turn‑count, KO/bleed statistics (future: bar chart).
-
----
-
-## 7  CLI Visualization
-
-The command line interface requires the **rich** library to present turns and
-simulation results in a readable way. A dedicated rendering module formats each
-turn using tables with colour‑coded hit results and remaining health for both
-fighters. During `simulate`, a progress bar tracks runs, and a summary table
-lists win counts and average turns. The `--verbose` flag prints extra log
-details, but output remains concise otherwise.
-
----
-
-## 8  Configuration (INI excerpt)
+Important keys:
 
 ```ini
 [General]
-ollama_default_model = llama3.2
-ollama_api_url = http://localhost:11434/v1/chat/completions
-max_tokens_fighter = 24000
-max_tokens_judge = 48000
-ollama_temperature = 0.8
-best_of_fighter = 3
-best_of_judge = 2
-max_retries = 2
-log_level = INFO
-log_combat_turns = false
-; When set to true turn logs appear in real time during `play` without needing
-; the --verbose flag.
-save_transcripts = false
-transcript_dir = transcripts
-; Transcript filenames include microseconds to avoid collisions when logging
-; multiple exchanges in quick succession.
-fighter_sentence_limit = 1
-fighter_word_limit = 30
+ollama_default_model = llama3.2:3b
+ollama_api_url = http://localhost:11434/api/chat
+max_tokens_fighter = 512
+max_tokens_judge = 4096
+ollama_temperature = 0.4
+best_of_fighter = 1
+best_of_judge = 1
+max_retries = 1
+fighter_A = A
+fighter_B = B
 
 [CONTEXT]
 fighter_log_window = 10
 judge_log_window = 9999
 
 [SIMULATION]
-runs = 10
+runs = 1
 seed = 42
 concurrent_runs = 1
-
-[DISCORD]
-discord_token = <bot-token>
-discord_channel = <optional-channel>
+max_turns = 2
 ```
-## 9  Performance Notes
 
-* Async `gather()` overlaps fighter calls; Judge is sequential but single call per phase.
-* Log summarisation triggers when total tokens > 48 k.
+## 8. Developer Workflow
 
----
+```bash
+uv sync --locked --all-extras --dev
+uv run black --check .
+uv run flake8
+uv run pytest -q
+```
 
-## 10  Future Work
+Live tests are opt-in:
 
-1. **Visualizer** (Godot) that replays combat logs with sprite limb masking.
-2. **Advanced Modifiers:** Infection, weather and other environmental effects.
+```bash
+uv run pytest -q --run-live
+```
 
----
+CI runs on Python 3.14 with the same locked `uv` workflow.
 
-© 2025 LLM Fighters Project
+## 9. Future Work
+
+- Replayable trace format for deterministic debugging.
+- Stronger typed request/response objects around LLM calls.
+- Better cancellation and timeout reporting for batch runs.
+- Visual replay tooling once the combat log format stabilizes.

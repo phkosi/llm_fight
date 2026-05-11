@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .config import CONFIG
+from . import config as config_mod
 from .engine import constants as C
 from .engine.logger import logger
 
@@ -16,10 +16,10 @@ def log_exchange(messages: list[dict], responses: list[str]) -> None:
     microseconds to avoid collisions when multiple exchanges happen in quick
     succession.
     """
-    if not CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, bool, fallback=False):
+    if not config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, bool, fallback=False):
         return
 
-    directory = Path(CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_TRANSCRIPT_DIR, str, fallback="transcripts"))
+    directory = Path(config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_TRANSCRIPT_DIR, str, fallback="transcripts"))
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except OSError as exc:

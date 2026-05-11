@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
-from src.engine.combat_log import CombatTurn
-from src.engine import constants as C
-from src.engine import render
+from llm_fight.engine.combat_log import CombatTurn
+from llm_fight.engine import constants as C
+from llm_fight.engine import render
 
 
 def test_make_turn_table_rich():

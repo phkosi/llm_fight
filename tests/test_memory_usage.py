@@ -2,9 +2,11 @@ import os
 import pytest
 from ollama import AsyncClient
 
-from src.agents import chat
-from src.utils.token_counter import compute_max_tokens
-from src.engine import constants as C
+from llm_fight.agents import chat
+from llm_fight.utils.token_counter import compute_max_tokens
+from llm_fight.engine import constants as C
+
+pytestmark = [pytest.mark.live, pytest.mark.perf]
 
 
 async def _ollama_mem_usage(client: AsyncClient) -> int:
