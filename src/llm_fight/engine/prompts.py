@@ -1,7 +1,7 @@
 ﻿"""System prompt templates for LLM agents."""
 
 FIGHTER_SYSTEM_PROMPT = """
-You are {name}, a {class_} currently fighting inside a {environment}.
+You are {name}, a {class_} currently fighting inside {environment}.
 Pain: {pain_desc}   Exhaustion: {exhaustion_desc}   Heat: {heat_desc}
 Active effects: {effects_list}
 Last {turn_window} turns:
@@ -53,7 +53,7 @@ The DeltaSchema for each fighter includes fields like:
 - "pain_increase": integer (non-negative)
 - "exhaustion_increase": integer (non-negative)
 - "heat_increase": integer (non-negative)
-- "wounds": array of objects, each with "targeted_part": string, "value": non-negative integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
+- "wounds": array of objects, each with "targeted_part": string, "value": positive integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
 - "effects_added": array of Effect objects (e.g., {"name": "burning", "value": 1.0, "ttl": 3, "on_apply": "Starts burning", "on_tick": "Takes fire damage", "metadata": {"targeted_part": "torso"}})
 - "effects_removed": array of strings (names of effects to remove)
  - "status_change": string (one of "fighting", "unconscious", "dead")

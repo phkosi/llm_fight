@@ -43,3 +43,22 @@ Implemented checks on 2026-05-11:
 - `uv run flake8` -> passed.
 - `uv run pytest -q` -> 214 passed, 6 skipped, 1 warning.
 - Final verification after acceptance fixes: `uv run pytest -q` -> 215 passed, 6 skipped, 1 warning; `uv run black --check .` -> passed; `uv run flake8` -> passed.
+
+## Gemma 4 26B Playtest Follow-Ups
+
+Evidence: ran `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_initial.csv --verbose` with Ollama model `gemma4:26b` on 2026-05-11. Results were 3 draws, 0 error rows, 4 turns each.
+
+Initial acceptance status: the model completed 3 runs without runtime or JSON/schema crashes, but the transcript exposed two actionable quality/reliability issues.
+
+- [x] Fix the fighter prompt grammar for article-bearing environments. Gemma transcript files such as `transcripts\gemma4_26b_playtest\20260511_220734_906188.json` showed `currently fighting inside a an open arena`, which is confusing prompt UX and can leak awkward wording into model behavior.
+- [x] Reject zero-value wounds at schema validation time. The initial gemma run logged `Ignoring non-positive damage amount 0 to neck for fighter A`, meaning Judge Phase 2 emitted a wound object that passed schema validation but could not affect combat state.
+- [ ] Investigate suspected Ollama model unload/reload or VRAM residency churn during live playtests. Evidence: user-observed Windows Task Manager screenshot during local Ollama playtesting on 2026-05-11 showed RTX 5090 dedicated GPU memory repeatedly dropping and refilling. Reproduction command: run a live batch such as `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_vram_probe.csv --verbose` while sampling `ollama ps` and GPU memory; check whether request cadence, `keep_alive`, context size, model switches, or Ollama scheduling causes repeated reloads.
+
+Acceptance run after fixes:
+
+- Command: `uv run llmfight simulate --config playtest_gemma4_26b.ini --output-csv transcripts\gemma4_26b_playtest\sim_results_after_fixes.csv --verbose`
+- Output CSV: `transcripts\gemma4_26b_playtest\sim_results_after_fixes.csv`
+- Result rows: 3
+- Error rows: 0
+- Winner summary: `draw: 3`
+- Notes: post-fix transcript prompts say `inside an open arena`; `sim_after_fixes.out.log` has no non-positive wound warning, no validation failure, and no fallback/no-op warning.

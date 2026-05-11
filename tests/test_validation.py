@@ -315,6 +315,11 @@ def test_delta_schema_invalid_negative_wound_value():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
+def test_delta_schema_invalid_zero_wound_value():
+    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.VALUE: 0, C.TYPE: C.DamageType.PIERCING}]}
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
 def test_delta_schema_rejects_unknown_status_change():
     unknown_status = {C.STATUS_CHANGE: "confused"}
     _validate_against_schema(unknown_status, DeltaSchema, False)

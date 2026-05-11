@@ -65,7 +65,7 @@ DeltaSchema = {
                 C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
                 C.SCHEMA_PROPERTIES: {
                     C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-                    C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
+                    C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 1},
                     C.TYPE: {
                         C.SCHEMA_TYPE: C.SCHEMA_STRING,
                         C.SCHEMA_ENUM: [dt.value for dt in C.DamageType] + ["burning"],
