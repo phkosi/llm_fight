@@ -71,7 +71,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-005: Unvalidated effect payloads can crash, inject prompts, or become permanent junk state
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Effect Payload Safety Gate
 - Source: codebase review
 - Area: Security, validation, effects

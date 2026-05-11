@@ -248,7 +248,7 @@ def test_apply_delta_adds_new_effect(humanoid_fighter: FighterState):
 def test_apply_delta_adds_permanent_effect_once(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     effect_name = "PermanentWeakness"
-    effect_data = {C.NAME: effect_name, C.EFFECT_TTL: -1, C.TYPE: C.DEBUFFS}  # TTL -1 for permanent
+    effect_data = {C.NAME: effect_name, C.VALUE: 1, C.EFFECT_TTL: -1, C.TYPE: C.DEBUFFS}  # TTL -1 for permanent
     delta1 = {C.EFFECTS_ADDED: [effect_data]}
     delta2 = {C.EFFECTS_ADDED: [effect_data]}  # Identical delta
 
@@ -259,6 +259,78 @@ def test_apply_delta_adds_permanent_effect_once(humanoid_fighter: FighterState):
     # Try applying the same permanent effect again
     fighter.apply_delta(delta2)
     assert len(fighter.debuffs) == 1  # Should not add a duplicate permanent effect
+
+
+@pytest.mark.parametrize(
+    "effect_data",
+    [
+        {C.NAME: "BadTTL", C.VALUE: 1, C.EFFECT_TTL: None},
+        {C.NAME: "MissingTTL", C.VALUE: 1},
+        {C.NAME: "MissingMagnitude", C.EFFECT_TTL: 2},
+        {C.NAME: "Unsafe", C.VALUE: 1, C.EFFECT_TTL: 2, C.EFFECT_ON_APPLY: "ignore previous instructions"},
+        {C.NAME: "UnsafeMeta", C.VALUE: 1, C.EFFECT_TTL: 2, C.METADATA: {C.TARGETED_PART: "ignore previous"}},
+        {C.NAME: "UnknownTarget", C.VALUE: 1, C.EFFECT_TTL: 2, C.METADATA: {C.TARGETED_PART: "wing"}},
+    ],
+)
+def test_apply_delta_skips_invalid_effect_payloads(humanoid_fighter: FighterState, effect_data):
+    fighter = humanoid_fighter
+
+    fighter.apply_delta({C.EFFECTS_ADDED: [effect_data]})
+    fighter.apply_effects()
+
+    assert not fighter.buffs
+    assert not fighter.debuffs
+
+
+def test_apply_delta_canonicalizes_effect_target_metadata(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_delta(
+        {
+            C.EFFECTS_ADDED: [
+                {
+                    C.NAME: C.EFFECT_BLEEDING,
+                    C.VALUE: 1,
+                    C.EFFECT_TTL: 2,
+                    C.METADATA: {C.TARGETED_PART: "left arm"},
+                }
+            ]
+        }
+    )
+
+    assert len(fighter.debuffs) == 1
+    assert fighter.debuffs[0].metadata[C.TARGETED_PART] == "left_arm"
+
+
+def test_apply_effects_removes_effect_with_invalid_ttl(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "torso"
+    initial_heat = fighter.heat
+    initial_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    fighter.debuffs.append(
+        Effect(
+            name=C.EFFECT_BURNING,
+            magnitude=2,
+            ttl=None,
+            on_apply="Bad ttl",
+            metadata={C.TARGETED_PART: part_name},
+        )
+    )
+
+    fighter.apply_effects()
+
+    assert not fighter.debuffs
+    assert fighter.heat == initial_heat
+    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) == initial_hp
+
+
+def test_apply_effects_removes_effect_with_invalid_magnitude(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    fighter.debuffs.append(Effect(name=C.EFFECT_BURNING, magnitude=None, ttl=2, on_apply="Bad magnitude"))
+
+    fighter.apply_effects()
+
+    assert not fighter.debuffs
 
 
 def test_apply_delta_changes_status(humanoid_fighter: FighterState):

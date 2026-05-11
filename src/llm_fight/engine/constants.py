@@ -55,6 +55,24 @@ EFFECT_TTL = "ttl"  # Time To Live
 EFFECT_BLEEDING = "bleeding"
 EFFECT_BURNING = "burning"
 EFFECT_STUNNED = "stunned"
+EFFECT_MAX_TTL = 20
+EFFECT_MAX_MAGNITUDE = 200
+EFFECT_NAME_MAX_LENGTH = 48
+EFFECT_TEXT_MAX_LENGTH = 160
+EFFECT_METADATA_VALUE_MAX_LENGTH = 64
+EFFECT_SAFE_NAME_PATTERN = (
+    r"^(?!.*(?i:ignore|instruction|system prompt|developer|jailbreak|override|forget previous))[A-Za-z][A-Za-z0-9 _-]*$"
+)
+EFFECT_SAFE_TEXT_PATTERN = r"^(?!.*(?i:ignore previous|previous instructions|system prompt|developer message|jailbreak|override instructions|forget previous))[^\r\n{}<>`\\]+$"
+EFFECT_FORBIDDEN_TEXT_FRAGMENTS = (
+    "ignore previous",
+    "previous instructions",
+    "system prompt",
+    "developer message",
+    "jailbreak",
+    "override instructions",
+    "forget previous",
+)
 
 # Damage Types
 
@@ -109,6 +127,11 @@ SCHEMA_PATTERN = "pattern"
 SCHEMA_PATTERN_PROPERTIES = "patternProperties"
 SCHEMA_MIN_PROPERTIES = "minProperties"
 SCHEMA_MAX_PROPERTIES = "maxProperties"
+SCHEMA_MIN_LENGTH = "minLength"
+SCHEMA_MAX_LENGTH = "maxLength"
+SCHEMA_ONE_OF = "oneOf"
+SCHEMA_NOT = "not"
+SCHEMA_CONST = "const"
 
 # Ollama Agent
 AGENT_MODEL = "model"

@@ -131,7 +131,7 @@ Acceptance goals:
 
 Addresses: ISSUE-005
 
-- [ ] Harden judge-created effect payload validation so malformed `effects_added` entries are rejected before they can become active `Effect` objects or appear in later prompts. Add a narrow `EffectSchema` used by `DeltaSchema`, plus a defensive runtime sanitizer in `FighterState.apply_delta()` for callers that bypass schema validation. This task is only a safety/crash fix: preserve the current simple known-effect behavior for `burning` and `bleeding`, allow unknown-but-safe narrative effect names to remain inert, and do not implement the broader dynamic effects registry/mechanics system yet.
+- [x] Harden judge-created effect payload validation so malformed `effects_added` entries are rejected before they can become active `Effect` objects or appear in later prompts. Add a narrow `EffectSchema` used by `DeltaSchema`, plus a defensive runtime sanitizer in `FighterState.apply_delta()` for callers that bypass schema validation. This task is only a safety/crash fix: preserve the current simple known-effect behavior for `burning` and `bleeding`, allow unknown-but-safe narrative effect names to remain inert, and do not implement the broader dynamic effects registry/mechanics system yet.
 
 Acceptance goals:
 

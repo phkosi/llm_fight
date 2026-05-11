@@ -4,12 +4,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Any
 import copy
+import math
+import re
+from jsonschema import ValidationError, validate
+
 from .rng import choice
 
 from .anatomy import BodyPart, PRESETS
 from .engine import constants as C
 from .engine.logger import logger
 from . import config as config_mod
+from .validation import EffectSchema
 
 PART_ALIASES = {
     "body": "torso",
@@ -59,6 +64,9 @@ DAMAGE_TYPE_ALIASES = {
     C.EFFECT_FIRE_FROM_EFFECT: C.DamageType.FIRE.value,
 }
 
+_SAFE_EFFECT_NAME_RE = re.compile(C.EFFECT_SAFE_NAME_PATTERN)
+_SAFE_EFFECT_TEXT_RE = re.compile(C.EFFECT_SAFE_TEXT_PATTERN)
+
 
 @dataclass
 class Effect:
@@ -74,6 +82,14 @@ class Effect:
 
     def tick(self):
         """Ticks down the effect's time-to-live (TTL). Returns True if expired."""
+        if not isinstance(self.ttl, int) or isinstance(self.ttl, bool):
+            logger.warning("Expiring effect '%s' with invalid TTL: %r", self.name, self.ttl)
+            self.ttl = 0
+            return True
+        if self.ttl < -1 or self.ttl > C.EFFECT_MAX_TTL:
+            logger.warning("Expiring effect '%s' with out-of-bounds TTL: %r", self.name, self.ttl)
+            self.ttl = 0
+            return True
         if self.ttl > 0:
             self.ttl -= 1
         return self.ttl == 0
@@ -145,6 +161,125 @@ class FighterState:
             return damage_type.value
         normalized = str(damage_type).strip().lower()
         return DAMAGE_TYPE_ALIASES.get(normalized, normalized)
+
+    def _contains_forbidden_effect_text(self, value: str) -> bool:
+        text = value.lower()
+        return any(fragment in text for fragment in C.EFFECT_FORBIDDEN_TEXT_FRAGMENTS)
+
+    def _is_safe_effect_text(self, value: Any, *, field_name: str, max_length: int) -> bool:
+        if not isinstance(value, str):
+            logger.warning("Rejected effect for %s with non-string %s: %r", self.id, field_name, value)
+            return False
+        if not value or len(value) > max_length:
+            logger.warning("Rejected effect for %s with invalid %s length.", self.id, field_name)
+            return False
+        if self._contains_forbidden_effect_text(value):
+            logger.warning("Rejected effect for %s with instruction-like %s.", self.id, field_name)
+            return False
+        if any(ord(char) < 32 for char in value):
+            logger.warning("Rejected effect for %s with control characters in %s.", self.id, field_name)
+            return False
+        return True
+
+    def _build_effect_from_payload(self, eff_data: Any) -> tuple[str, Effect] | None:
+        if not isinstance(eff_data, dict):
+            logger.warning("Rejected non-object effect payload for fighter %s: %r", self.id, eff_data)
+            return None
+        try:
+            validate(eff_data, EffectSchema)
+        except ValidationError as exc:
+            logger.warning("Rejected invalid effect payload for fighter %s: %s", self.id, exc.message)
+            return None
+
+        effect_name = eff_data[C.NAME].strip()
+        if not _SAFE_EFFECT_NAME_RE.fullmatch(effect_name) or self._contains_forbidden_effect_text(effect_name):
+            logger.warning("Rejected unsafe effect name for fighter %s: %r", self.id, effect_name)
+            return None
+
+        raw_magnitude = eff_data.get(C.VALUE, eff_data.get("magnitude"))
+        if isinstance(raw_magnitude, bool) or not isinstance(raw_magnitude, (int, float)):
+            logger.warning("Rejected effect '%s' for fighter %s with invalid magnitude.", effect_name, self.id)
+            return None
+        magnitude = float(raw_magnitude)
+        if not math.isfinite(magnitude) or magnitude <= 0 or magnitude > C.EFFECT_MAX_MAGNITUDE:
+            logger.warning("Rejected effect '%s' for fighter %s with out-of-bounds magnitude.", effect_name, self.id)
+            return None
+
+        ttl = eff_data[C.EFFECT_TTL]
+        if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl == 0 or ttl < -1 or ttl > C.EFFECT_MAX_TTL:
+            logger.warning("Rejected effect '%s' for fighter %s with invalid TTL.", effect_name, self.id)
+            return None
+
+        on_apply = eff_data.get(C.EFFECT_ON_APPLY, f"{effect_name} applied.")
+        if not _SAFE_EFFECT_TEXT_RE.fullmatch(on_apply) or not self._is_safe_effect_text(
+            on_apply,
+            field_name=C.EFFECT_ON_APPLY,
+            max_length=C.EFFECT_TEXT_MAX_LENGTH,
+        ):
+            return None
+
+        on_tick = eff_data.get(C.EFFECT_ON_TICK)
+        if on_tick is not None and (
+            not _SAFE_EFFECT_TEXT_RE.fullmatch(on_tick)
+            or not self._is_safe_effect_text(
+                on_tick,
+                field_name=C.EFFECT_ON_TICK,
+                max_length=C.EFFECT_TEXT_MAX_LENGTH,
+            )
+        ):
+            return None
+
+        metadata = dict(eff_data.get(C.METADATA, {}))
+        targeted_part = metadata.get(C.TARGETED_PART)
+        if targeted_part is not None:
+            if not _SAFE_EFFECT_NAME_RE.fullmatch(targeted_part) or not self._is_safe_effect_text(
+                targeted_part,
+                field_name=f"{C.METADATA}.{C.TARGETED_PART}",
+                max_length=C.EFFECT_METADATA_VALUE_MAX_LENGTH,
+            ):
+                return None
+            resolved_part = self.normalize_part_name(targeted_part)
+            if resolved_part is None:
+                logger.warning(
+                    "Rejected effect '%s' for fighter %s with unknown targeted part: %r",
+                    effect_name,
+                    self.id,
+                    targeted_part,
+                )
+                return None
+            metadata[C.TARGETED_PART] = resolved_part
+
+        list_name = eff_data.get(C.TYPE, C.DEBUFFS)
+        return (
+            list_name,
+            Effect(
+                name=effect_name,
+                magnitude=magnitude,
+                ttl=ttl,
+                on_apply=on_apply,
+                on_tick=on_tick,
+                metadata=metadata,
+            ),
+        )
+
+    def _normalized_effect_magnitude(self, eff: Effect) -> float | None:
+        magnitude = eff.magnitude
+        if isinstance(magnitude, bool) or not isinstance(magnitude, (int, float)):
+            logger.warning("Removing effect '%s' on %s with invalid magnitude: %r", eff.name, self.id, magnitude)
+            return None
+        magnitude = float(magnitude)
+        if not math.isfinite(magnitude) or magnitude <= 0 or magnitude > C.EFFECT_MAX_MAGNITUDE:
+            logger.warning("Removing effect '%s' on %s with out-of-bounds magnitude: %r", eff.name, self.id, magnitude)
+            return None
+        return magnitude
+
+    def _has_valid_effect_ttl(self, eff: Effect) -> bool:
+        ttl = eff.ttl
+        if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl == 0 or ttl < -1 or ttl > C.EFFECT_MAX_TTL:
+            logger.warning("Removing effect '%s' on %s with invalid TTL before mechanics: %r", eff.name, self.id, ttl)
+            eff.ttl = 0
+            return False
+        return True
 
     def _update_status_from_invariants(self) -> None:
         """Apply status invariants after any state mutation."""
@@ -299,10 +434,11 @@ class FighterState:
 
         if C.EFFECTS_ADDED in delta:
             for eff_data in delta[C.EFFECTS_ADDED]:
-                effect_name = eff_data.get(C.NAME)
-                if not effect_name:
-                    logger.warning(f"Effect data missing '{C.NAME}' for fighter {self.id}: {eff_data}")
+                parsed_effect = self._build_effect_from_payload(eff_data)
+                if parsed_effect is None:
                     continue
+                list_name, new_effect = parsed_effect
+                effect_name = new_effect.name
 
                 is_duplicate = False
                 for existing_eff_list in (self.buffs, self.debuffs):
@@ -318,15 +454,7 @@ class FighterState:
                 if is_duplicate:
                     continue
 
-                new_effect = Effect(
-                    name=effect_name,
-                    magnitude=eff_data.get(C.VALUE, eff_data.get("magnitude", 1.0)),
-                    ttl=eff_data.get(C.EFFECT_TTL, -1),
-                    on_apply=eff_data.get(C.EFFECT_ON_APPLY, f"{effect_name} applied."),
-                    on_tick=eff_data.get(C.EFFECT_ON_TICK),
-                    metadata=eff_data.get(C.METADATA, {}),
-                )
-                if eff_data.get(C.TYPE, C.DEBUFFS) == C.BUFFS:
+                if list_name == C.BUFFS:
                     self.buffs.append(new_effect)
                 else:
                     self.debuffs.append(new_effect)
@@ -362,8 +490,15 @@ class FighterState:
         for eff_list_name in [C.BUFFS, C.DEBUFFS]:
             eff_list = getattr(self, eff_list_name)
             for eff in list(eff_list):
+                if not self._has_valid_effect_ttl(eff):
+                    eff_list.remove(eff)
+                    continue
+                effect_magnitude = self._normalized_effect_magnitude(eff)
+                if effect_magnitude is None:
+                    eff_list.remove(eff)
+                    continue
                 if eff.name == C.EFFECT_BURNING:
-                    self.heat += int(eff.magnitude * 5)
+                    self.heat += int(effect_magnitude * 5)
                     affected_part_name = eff.metadata.get(C.TARGETED_PART)
                     if affected_part_name and affected_part_name in self.parts:
                         target_part = self.parts[affected_part_name]
@@ -371,7 +506,7 @@ class FighterState:
                             active_layers = [layer for layer in target_part.layers if layer.max_hp > 0]
                             if active_layers:
                                 random_layer_to_burn = choice(active_layers)
-                                burn_damage = max(1, int(eff.magnitude))
+                                burn_damage = max(1, int(effect_magnitude))
                                 logger.debug(
                                     f"{self.id} takes {burn_damage} burn damage to {affected_part_name}.{random_layer_to_burn.name} from '{C.EFFECT_BURNING}' effect."
                                 )
@@ -382,11 +517,11 @@ class FighterState:
                         )
 
                 elif eff.name == C.EFFECT_BLEEDING:
-                    self.pain += int(eff.magnitude * 1)
-                    self.exhaustion += int(eff.magnitude * 0.5)
+                    self.pain += int(effect_magnitude * 1)
+                    self.exhaustion += int(effect_magnitude * 0.5)
                     affected_part_name = eff.metadata.get(C.TARGETED_PART)
                     logger.debug(
-                        f"{self.id}'s '{affected_part_name}' is bleeding (magnitude {eff.magnitude:.2f}) due to '{C.EFFECT_BLEEDING}' effect."
+                        f"{self.id}'s '{affected_part_name}' is bleeding (magnitude {effect_magnitude:.2f}) due to '{C.EFFECT_BLEEDING}' effect."
                     )
 
                 if eff.on_tick:
