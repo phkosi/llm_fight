@@ -345,6 +345,17 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 - Suggested fix: Pass a scoped `Config`/runtime context through simulation and LLM calls, or restore globals in `finally`. Initialize RNG explicitly at entry points.
 - Tests: Invoke multiple CLI commands with different configs in one process and assert isolation. Import RNG before swapping config and assert entry points still seed correctly.
 
+### ISSUE-038: GitHub CI fails on Rich/Typer-rendered negative `--runs` output
+
+- Status: open
+- Task: none
+- Source: implementation review
+- Area: CI, test reliability, CLI error handling
+- Evidence: GitHub Actions run `25747989892`, job `75616361118`, failed only in `uv run pytest -q --cov=llm_fight` on Ubuntu 24.04 / Python 3.14.4. Formatting and lint passed. The single failing test was `tests/test_cli.py::test_cli_simulate_negative_runs_override_fails_before_ping`, where `tests/test_cli.py:653` asserts the plain string `--runs must be 0 or greater` is present in `result.output`. CI captured a Rich/ANSI error panel without that contiguous plain message, while a Windows temp-copy reproduction of the same locked command passed with `446 passed, 6 skipped, 1 warning`.
+- Impact: `main` CI is red even though the CLI behavior appears correct: `src/llm_fight/cli.py` rejects negative `--runs` before `ping_ollama()`. Future CLI error tests can also become platform-dependent if they assert directly against styled Rich/Typer output.
+- Suggested fix: Make CLI output assertions platform-stable by normalizing captured output in tests, such as stripping ANSI control sequences and/or disabling color for `CliRunner` invocations that assert error text. Prefer a shared helper so future Rich/Typer assertions use the same path.
+- Tests: Re-run `uv run pytest -q --cov=llm_fight` locally and in GitHub Actions. Add or update focused coverage proving `simulate --runs -1` exits nonzero, reports the validation message after normalization, and does not await `ping_ollama()`.
+
 ## P3
 
 ### ISSUE-029: Burn tick logs a random layer but damages the normal outer layer
