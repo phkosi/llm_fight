@@ -429,14 +429,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-033: Docs do not clearly state current fixed-humanoid/retry/progress contracts
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Current Gameplay And Retry Contract Docs
 - Source: codebase review
 - Area: Documentation
-- Evidence: README known limitations do not state that anatomy is fixed humanoid despite `src/llm_fight/simulation.py:95`; troubleshooting suggests increasing `max_retries` in `README.md:205` but P2 parse retries are capped and can no-op in `src/llm_fight/judge.py:200`; play docs do not warn that output is printed after completion.
-- Impact: Users may expect non-humanoid designs, unlimited retry recovery, or live progress that the current app does not provide.
+- Evidence: Original review found README known limitations did not state the then-current anatomy/progress boundaries and troubleshooting suggested increasing `max_retries` without explaining capped Judge Phase 2 no-op fallback behavior. The anatomy and `play` progress contracts have since changed, so the resolved docs now state the current contract instead: custom anatomy is mechanical through configured/generated profiles only, prose-only concepts do not create targetable parts, `play` streams phase/completed-turn progress but not raw model tokens, and Judge Phase 2 retries are capped with fail-open no-op or fail-closed error behavior.
+- Impact: Users may expect prose-only non-humanoid designs to create mechanics, unlimited retry recovery, or raw token-level streaming that the current app does not provide.
 - Suggested fix: Add gameplay contract notes, retry/fallback contract notes, and current play-output behavior until the TODO items are implemented.
-- Tests: No runtime tests required; optional docs/example consistency checks.
+- Tests: Documentation-only change. Updated README Known Limitations, README Troubleshooting, and `docs/Design_doc.md` current gameplay contract notes.
 
 ### ISSUE-034: Logger setup is not library-friendly
 

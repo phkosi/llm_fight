@@ -194,6 +194,20 @@ profile text from transcripts. Invalid generated profiles fall back to the
 configured profile or humanoid preset with sanitized `profile_generation`
 metadata.
 
+Current gameplay contract:
+
+- Custom anatomy is mechanical only when it comes from a configured JSON profile
+  or a validated generated profile. Plain prose in `class`, `theme`, or
+  `loadout` can influence narration, but it does not create new canonical target
+  parts by itself.
+- `play` emits pre-fight fighter designs, phase status updates, completed turns,
+  and final token summaries when metadata exists. It does not expose unfinished
+  streaming model tokens.
+- `max_retries` is a bounded retry control, not unlimited recovery. Judge Phase
+  2 parse retries are capped to protect live runs from retry storms; exhausted
+  fail-open retries become marked no-op turns, while fail-closed retries become
+  fight errors.
+
 `save_transcripts = true` writes one fight-scoped JSONL trace per fight under
 `transcript_dir`. Each line has `schema_version`, ordered `event_index`,
 timestamp, fight id, optional run index, turn, phase, event name, fighter id,
