@@ -67,6 +67,82 @@ EffectTextSchema = {
     C.SCHEMA_PATTERN: C.EFFECT_SAFE_TEXT_PATTERN,
 }
 
+EffectTagSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+    C.SCHEMA_MIN_LENGTH: 1,
+    C.SCHEMA_MAX_LENGTH: C.EFFECT_TAG_MAX_LENGTH,
+    C.SCHEMA_PATTERN: C.EFFECT_SAFE_NAME_PATTERN,
+}
+
+EffectMechanicValueSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_INTEGER,
+    C.SCHEMA_MINIMUM: 1,
+    C.SCHEMA_MAXIMUM: C.EFFECT_MECHANIC_MAX_VALUE,
+}
+
+EffectMechanicSchema = {
+    C.SCHEMA_ONE_OF: [
+        {
+            C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+            C.SCHEMA_PROPERTIES: {
+                C.EFFECT_MECHANIC_KIND: {C.SCHEMA_CONST: C.EFFECT_MECHANIC_STAT_TICK},
+                C.EFFECT_MECHANIC_STAT: {
+                    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                    C.SCHEMA_ENUM: [C.PAIN, C.EXHAUSTION, C.HEAT],
+                },
+                C.VALUE: EffectMechanicValueSchema,
+            },
+            C.SCHEMA_REQUIRED: [C.EFFECT_MECHANIC_KIND, C.EFFECT_MECHANIC_STAT, C.VALUE],
+            C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+        },
+        {
+            C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+            C.SCHEMA_PROPERTIES: {
+                C.EFFECT_MECHANIC_KIND: {C.SCHEMA_CONST: C.EFFECT_MECHANIC_DAMAGE_TICK},
+                C.TARGETED_PART: {
+                    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                    C.SCHEMA_MIN_LENGTH: 1,
+                    C.SCHEMA_MAX_LENGTH: C.EFFECT_METADATA_VALUE_MAX_LENGTH,
+                    C.SCHEMA_PATTERN: C.EFFECT_SAFE_NAME_PATTERN,
+                },
+                C.VALUE: EffectMechanicValueSchema,
+                C.TYPE: {
+                    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                    C.SCHEMA_ENUM: [dt.value for dt in C.DamageType],
+                },
+            },
+            C.SCHEMA_REQUIRED: [C.EFFECT_MECHANIC_KIND, C.TARGETED_PART, C.VALUE],
+            C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+        },
+        {
+            C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+            C.SCHEMA_PROPERTIES: {
+                C.EFFECT_MECHANIC_KIND: {C.SCHEMA_CONST: C.EFFECT_MECHANIC_TARGETING_MODIFIER},
+                C.EFFECT_MECHANIC_MODIFIER: {
+                    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                    C.SCHEMA_ENUM: [C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY],
+                },
+                C.VALUE: EffectMechanicValueSchema,
+            },
+            C.SCHEMA_REQUIRED: [C.EFFECT_MECHANIC_KIND, C.EFFECT_MECHANIC_MODIFIER, C.VALUE],
+            C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+        },
+        {
+            C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+            C.SCHEMA_PROPERTIES: {
+                C.EFFECT_MECHANIC_KIND: {C.SCHEMA_CONST: C.EFFECT_MECHANIC_ACTION_MODIFIER},
+                C.EFFECT_MECHANIC_MODIFIER: {
+                    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                    C.SCHEMA_ENUM: [C.EFFECT_MECHANIC_ACTION_BLOCK],
+                },
+                C.VALUE: EffectMechanicValueSchema,
+            },
+            C.SCHEMA_REQUIRED: [C.EFFECT_MECHANIC_KIND, C.EFFECT_MECHANIC_MODIFIER],
+            C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+        },
+    ]
+}
+
 ProfileIdentifierSchema = {
     C.SCHEMA_TYPE: C.SCHEMA_STRING,
     C.SCHEMA_MIN_LENGTH: 1,
@@ -167,6 +243,16 @@ EffectSchema = {
         C.TYPE: {C.SCHEMA_TYPE: C.SCHEMA_STRING, C.SCHEMA_ENUM: [C.BUFFS, C.DEBUFFS]},
         C.EFFECT_ON_APPLY: EffectTextSchema,
         C.EFFECT_ON_TICK: EffectTextSchema,
+        C.EFFECT_MECHANICS: {
+            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
+            C.SCHEMA_ITEMS: EffectMechanicSchema,
+            C.SCHEMA_MAX_ITEMS: 8,
+        },
+        C.EFFECT_TAGS: {
+            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
+            C.SCHEMA_ITEMS: EffectTagSchema,
+            C.SCHEMA_MAX_ITEMS: 8,
+        },
         C.METADATA: {
             C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
             C.SCHEMA_PROPERTIES: {

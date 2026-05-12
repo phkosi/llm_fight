@@ -580,6 +580,122 @@ def test_apply_effects_burning_damages_part_and_increases_stats(humanoid_fighter
     assert not any(eff.name == C.EFFECT_BURNING for eff in fighter.debuffs)
 
 
+def test_dynamic_stat_tick_effect_observes_fresh_turn_and_expires(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    fighter.apply_delta(
+        {
+            C.EFFECTS_ADDED: [
+                {
+                    C.NAME: "poisoned",
+                    C.VALUE: 2,
+                    C.EFFECT_TTL: 1,
+                    C.EFFECT_ON_APPLY: "Poison takes hold",
+                    C.EFFECT_ON_TICK: "Poison weakens the body",
+                    C.EFFECT_MECHANICS: [
+                        {
+                            C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_STAT_TICK,
+                            C.EFFECT_MECHANIC_STAT: C.PAIN,
+                            C.VALUE: 4,
+                        },
+                        {
+                            C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_STAT_TICK,
+                            C.EFFECT_MECHANIC_STAT: C.EXHAUSTION,
+                            C.VALUE: 2,
+                        },
+                    ],
+                    C.EFFECT_TAGS: ["poison"],
+                }
+            ]
+        }
+    )
+
+    fighter.apply_effects()
+    assert fighter.pain == 0
+    assert fighter.exhaustion == 0
+    assert fighter.debuffs[0].fresh_turns == 0
+
+    fighter.apply_effects()
+    assert fighter.pain == 4
+    assert fighter.exhaustion == 2
+    assert fighter.debuffs == []
+
+
+def test_dynamic_damage_tick_effect_targets_valid_custom_part(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    initial_hp = sum(layer.max_hp for layer in fighter.parts["torso"].layers)
+    fighter.debuffs.append(
+        Effect(
+            name="corroded",
+            magnitude=1,
+            ttl=1,
+            on_apply="Acid clings to the torso",
+            mechanics=[
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_DAMAGE_TICK,
+                    C.TARGETED_PART: "torso",
+                    C.VALUE: 3,
+                    C.TYPE: C.DamageType.GENERIC.value,
+                }
+            ],
+        )
+    )
+
+    fighter.apply_effects()
+
+    assert sum(layer.max_hp for layer in fighter.parts["torso"].layers) == initial_hp - 3
+    assert fighter.debuffs == []
+
+
+def test_invalid_dynamic_mechanic_rejected_before_state(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    fighter.apply_delta(
+        {
+            C.EFFECTS_ADDED: [
+                {
+                    C.NAME: "corroded",
+                    C.VALUE: 1,
+                    C.EFFECT_TTL: 2,
+                    C.EFFECT_ON_APPLY: "Acid starts working",
+                    C.EFFECT_MECHANICS: [
+                        {
+                            C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_DAMAGE_TICK,
+                            C.TARGETED_PART: "not_a_part",
+                            C.VALUE: 2,
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert fighter.debuffs == []
+
+
+def test_dynamic_effect_serializes_mechanics_and_tags(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    fighter.debuffs.append(
+        Effect(
+            name="blinded",
+            magnitude=1,
+            ttl=2,
+            on_apply="Eyes are obscured",
+            mechanics=[
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                    C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY,
+                    C.VALUE: 40,
+                }
+            ],
+            tags=["vision_impaired"],
+        )
+    )
+
+    serialized = fighter.to_json()[C.DEBUFFS][0]
+
+    assert serialized[C.EFFECT_MECHANICS][0][C.VALUE] == 40
+    assert serialized[C.EFFECT_TAGS] == ["vision_impaired"]
+
+
 def test_apply_effects_uses_provided_rng_for_burn_layer_selection(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "torso"

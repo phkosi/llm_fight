@@ -86,6 +86,8 @@ class Effect:
     on_tick: str | None = None  # Description of what happens each tick (for LLM context / logging)
     # Actual logic for on_apply and on_tick will be handled in FighterState methods
     metadata: Dict[str, Any] = field(default_factory=dict)
+    mechanics: List[Dict[str, Any]] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
     fresh_turns: int = field(default=0, repr=False, compare=False)
 
     def tick(self):
@@ -229,6 +231,58 @@ class FighterState:
 
         return None
 
+    def _safe_effect_tags(self, raw_tags: Any) -> list[str] | None:
+        if raw_tags is None:
+            return []
+        if not isinstance(raw_tags, list):
+            logger.warning("Rejected effect for %s with non-list tags.", self.id)
+            return None
+        tags: list[str] = []
+        for tag in raw_tags:
+            if not isinstance(tag, str):
+                logger.warning("Rejected effect for %s with non-string tag: %r", self.id, tag)
+                return None
+            normalized = tag.strip().lower().replace("-", "_").replace(" ", "_")
+            if (
+                not normalized
+                or len(normalized) > C.EFFECT_TAG_MAX_LENGTH
+                or not _SAFE_EFFECT_NAME_RE.fullmatch(normalized)
+                or self._contains_forbidden_effect_text(normalized)
+            ):
+                logger.warning("Rejected effect for %s with unsafe tag: %r", self.id, tag)
+                return None
+            if normalized not in tags:
+                tags.append(normalized)
+        return tags
+
+    def _safe_effect_mechanics(self, raw_mechanics: Any) -> list[Dict[str, Any]] | None:
+        if raw_mechanics is None:
+            return []
+        if not isinstance(raw_mechanics, list):
+            logger.warning("Rejected effect for %s with non-list mechanics.", self.id)
+            return None
+        mechanics: list[Dict[str, Any]] = []
+        for mechanic in raw_mechanics:
+            if not isinstance(mechanic, dict):
+                logger.warning("Rejected effect for %s with non-object mechanic: %r", self.id, mechanic)
+                return None
+            kind = mechanic.get(C.EFFECT_MECHANIC_KIND)
+            normalized = dict(mechanic)
+            if kind == C.EFFECT_MECHANIC_DAMAGE_TICK:
+                target_part = normalized.get(C.TARGETED_PART)
+                resolved_part = self.normalize_part_name(target_part)
+                if resolved_part is None:
+                    logger.warning(
+                        "Rejected effect mechanic for %s with unknown targeted part: %r",
+                        self.id,
+                        target_part,
+                    )
+                    return None
+                normalized[C.TARGETED_PART] = resolved_part
+                normalized[C.TYPE] = self.normalize_damage_type(normalized.get(C.TYPE, C.DamageType.GENERIC.value))
+            mechanics.append(normalized)
+        return mechanics
+
     def normalize_damage_type(self, damage_type: C.DamageType | str) -> str:
         """Return a known damage type, mapping common LLM aliases."""
         if isinstance(damage_type, C.DamageType):
@@ -323,6 +377,13 @@ class FighterState:
                 return None
             metadata[C.TARGETED_PART] = resolved_part
 
+        mechanics = self._safe_effect_mechanics(eff_data.get(C.EFFECT_MECHANICS))
+        if mechanics is None:
+            return None
+        tags = self._safe_effect_tags(eff_data.get(C.EFFECT_TAGS))
+        if tags is None:
+            return None
+
         list_name = eff_data.get(C.TYPE, C.DEBUFFS)
         return (
             list_name,
@@ -333,6 +394,8 @@ class FighterState:
                 on_apply=on_apply,
                 on_tick=on_tick,
                 metadata=metadata,
+                mechanics=mechanics,
+                tags=tags,
             ),
         )
 
@@ -358,6 +421,25 @@ class FighterState:
     def _mark_effect_fresh(self, eff: Effect) -> Effect:
         eff.fresh_turns = 1
         return eff
+
+    def _apply_effect_mechanics(self, eff: Effect) -> None:
+        for mechanic in eff.mechanics:
+            kind = mechanic.get(C.EFFECT_MECHANIC_KIND)
+            value = mechanic.get(C.VALUE, 1)
+            if kind == C.EFFECT_MECHANIC_STAT_TICK:
+                stat = mechanic.get(C.EFFECT_MECHANIC_STAT)
+                if stat == C.PAIN:
+                    self.pain += int(value)
+                elif stat == C.EXHAUSTION:
+                    self.exhaustion += int(value)
+                elif stat == C.HEAT:
+                    self.heat += int(value)
+            elif kind == C.EFFECT_MECHANIC_DAMAGE_TICK:
+                self.apply_damage_to_part(
+                    mechanic[C.TARGETED_PART],
+                    int(value),
+                    mechanic.get(C.TYPE, C.DamageType.GENERIC.value),
+                )
 
     def _update_status_from_invariants(self) -> None:
         """Apply status invariants after any state mutation."""
@@ -599,7 +681,9 @@ class FighterState:
                 if eff.fresh_turns > 0:
                     eff.fresh_turns -= 1
                     continue
-                if eff.name == C.EFFECT_BURNING:
+                if eff.mechanics:
+                    self._apply_effect_mechanics(eff)
+                elif eff.name == C.EFFECT_BURNING:
                     self.heat += int(effect_magnitude * 5)
                     affected_part_name = eff.metadata.get(C.TARGETED_PART)
                     if affected_part_name and affected_part_name in self.parts:

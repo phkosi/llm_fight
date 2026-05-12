@@ -6,7 +6,7 @@ import json
 import os
 
 import llm_fight.simulation as sim_module
-from llm_fight.state import FighterState  # Keep for spec
+from llm_fight.state import Effect, FighterState  # Keep for spec
 
 # from llm_fight.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
 from llm_fight.engine import constants as C
@@ -248,6 +248,129 @@ async def test_single_fight_uses_configured_custom_anatomy_profiles(tmp_path):
     assert "tentacle_1" in p2_inputs[0]["valid_target_parts"][C.FIGHTER_B]
     assert "left_wing" in combat_log.turns[0].state_A_before["parts"]
     assert "tentacle_1" in combat_log.turns[0].state_B_after["parts"]
+
+
+@pytest.mark.asyncio
+async def test_targeting_modifier_reduces_success_probability_before_roll():
+    fighter_a = FighterState.from_preset(C.FIGHTER_A, "humanoid")
+    fighter_b = FighterState.from_preset(C.FIGHTER_B, "humanoid")
+    fighter_a.debuffs.append(
+        Effect(
+            name="blinded",
+            magnitude=1,
+            ttl=2,
+            on_apply="Eyes are obscured",
+            mechanics=[
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                    C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY,
+                    C.VALUE: 100,
+                }
+            ],
+        )
+    )
+
+    p2_inputs = []
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A would hit if not blinded.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(p2_input, *args, **kwargs):
+        p2_inputs.append(p2_input)
+        return {
+            C.NARRATION: "A should not land this hit.",
+            C.DELTA: {C.FIGHTER_B: {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 50)}},
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    with (
+        patch.object(sim_module.FighterState, "from_config", side_effect=[fighter_a, fighter_b]),
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert fighter_b.pain == 0
+    assert p2_inputs[0]["p1_result"][f"{C.ATTEMPT}_{C.FIGHTER_A}_prob"] == "0.0"
+    assert C.EFFECT_MODIFIERS_APPLIED in p2_inputs[0]["p1_result"]
+
+
+@pytest.mark.asyncio
+async def test_action_modifier_invalidates_blocked_action_before_roll():
+    fighter_a = FighterState.from_preset(C.FIGHTER_A, "humanoid")
+    fighter_b = FighterState.from_preset(C.FIGHTER_B, "humanoid")
+    fighter_a.debuffs.append(
+        Effect(
+            name="entangled",
+            magnitude=1,
+            ttl=2,
+            on_apply="Vines bind the fighter",
+            mechanics=[
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_ACTION_MODIFIER,
+                    C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_ACTION_BLOCK,
+                    C.VALUE: 1,
+                }
+            ],
+        )
+    )
+
+    p2_inputs = []
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A is entangled.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(p2_input, *args, **kwargs):
+        p2_inputs.append(p2_input)
+        return {
+            C.NARRATION: "A should not act through the entanglement.",
+            C.DELTA: {C.FIGHTER_B: {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 50)}},
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    with (
+        patch.object(sim_module.FighterState, "from_config", side_effect=[fighter_a, fighter_b]),
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert fighter_b.pain == 0
+    assert p2_inputs[0]["p1_result"][f"{C.ATTEMPT}_{C.FIGHTER_A}_valid"] is False
+    assert p2_inputs[0]["p1_result"][f"{C.ATTEMPT}_{C.FIGHTER_A}_prob"] == "0.0"
+    assert C.EFFECT_MODIFIERS_APPLIED in p2_inputs[0]["p1_result"]
 
 
 @pytest.mark.asyncio

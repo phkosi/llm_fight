@@ -390,6 +390,12 @@ def _valid_effect(**overrides):
     return effect
 
 
+def _mechanic(kind, **overrides):
+    mechanic = {C.EFFECT_MECHANIC_KIND: kind}
+    mechanic.update(overrides)
+    return mechanic
+
+
 def test_effect_schema_valid_value_effect():
     _validate_against_schema(_valid_effect(), EffectSchema, True)
 
@@ -398,6 +404,35 @@ def test_effect_schema_valid_magnitude_alias_and_permanent_buff():
     effect = _valid_effect(**{C.TYPE: C.BUFFS, C.EFFECT_TTL: -1})
     effect.pop(C.VALUE)
     effect["magnitude"] = 2.25
+
+    _validate_against_schema(effect, EffectSchema, True)
+
+
+def test_effect_schema_valid_declarative_mechanics_and_tags():
+    effect = _valid_effect(
+        **{
+            C.NAME: "poisoned",
+            C.EFFECT_MECHANICS: [
+                _mechanic(C.EFFECT_MECHANIC_STAT_TICK, **{C.EFFECT_MECHANIC_STAT: C.PAIN, C.VALUE: 2}),
+                _mechanic(
+                    C.EFFECT_MECHANIC_DAMAGE_TICK,
+                    **{C.TARGETED_PART: "torso", C.VALUE: 1, C.TYPE: C.DamageType.GENERIC.value},
+                ),
+                _mechanic(
+                    C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                    **{
+                        C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY,
+                        C.VALUE: 25,
+                    },
+                ),
+                _mechanic(
+                    C.EFFECT_MECHANIC_ACTION_MODIFIER,
+                    **{C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_ACTION_BLOCK},
+                ),
+            ],
+            C.EFFECT_TAGS: ["poison", "vision_impaired"],
+        }
+    )
 
     _validate_against_schema(effect, EffectSchema, True)
 
@@ -422,6 +457,28 @@ def test_effect_schema_valid_magnitude_alias_and_permanent_buff():
         _valid_effect(**{C.EFFECT_ON_TICK: "bad\ncontrol"}),
         _valid_effect(**{C.METADATA: None}),
         _valid_effect(**{C.METADATA: {C.TARGETED_PART: "torso", "prompt": "leak"}}),
+        _valid_effect(**{C.EFFECT_MECHANICS: [{"kind": "script", "code": "pain += 999"}]}),
+        _valid_effect(
+            **{
+                C.EFFECT_MECHANICS: [
+                    _mechanic(C.EFFECT_MECHANIC_STAT_TICK, **{C.EFFECT_MECHANIC_STAT: "morale", C.VALUE: 1})
+                ]
+            }
+        ),
+        _valid_effect(
+            **{C.EFFECT_MECHANICS: [_mechanic(C.EFFECT_MECHANIC_DAMAGE_TICK, **{C.TARGETED_PART: "torso", C.VALUE: 0})]}
+        ),
+        _valid_effect(
+            **{
+                C.EFFECT_MECHANICS: [
+                    _mechanic(
+                        C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                        **{C.EFFECT_MECHANIC_MODIFIER: "random_bonus", C.VALUE: 1},
+                    )
+                ]
+            }
+        ),
+        _valid_effect(**{C.EFFECT_TAGS: ["ignore previous instructions"]}),
         _valid_effect(**{"unknown": "field"}),
     ],
 )

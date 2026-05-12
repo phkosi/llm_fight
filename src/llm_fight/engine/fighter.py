@@ -1,6 +1,7 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
 
 import re
+import json
 from typing import Union, Optional
 
 from ..state import FighterState  # Relative import from parent package
@@ -39,6 +40,29 @@ def _temporary_effect_instruction(effects_list: str) -> str:
 
 def _valid_target_parts_text(fighter: FighterState) -> str:
     return ", ".join(sorted(fighter.parts.keys())) or "none"
+
+
+def _effect_summary(effect) -> dict:
+    target = effect.metadata.get(C.TARGETED_PART) if hasattr(effect, "metadata") else None
+    summary = {
+        C.NAME: effect.name,
+        "ttl": effect.ttl,
+        "magnitude": effect.magnitude,
+    }
+    if target:
+        summary[C.TARGETED_PART] = target
+    if getattr(effect, "mechanics", None):
+        summary[C.EFFECT_MECHANICS] = effect.mechanics
+    if getattr(effect, "tags", None):
+        summary[C.EFFECT_TAGS] = effect.tags
+    return summary
+
+
+def _effects_list_text(fighter: FighterState) -> str:
+    effects = [_effect_summary(effect) for effect in fighter.buffs + fighter.debuffs]
+    if not effects:
+        return "none"
+    return json.dumps(effects, sort_keys=True, separators=(",", ":"))
 
 
 def describe_pain(pain_level: int) -> str:
@@ -108,7 +132,7 @@ async def get_fighter_attempt(
     pain_desc = describe_pain(fighter.pain)
     exhaustion_desc = describe_exhaustion(fighter.exhaustion)
     heat_desc = describe_heat(fighter.heat)
-    effects_list = ", ".join([e.name for e in fighter.buffs + fighter.debuffs]) or "none"
+    effects_list = _effects_list_text(fighter)
 
     loadout = fighter.loadout
 

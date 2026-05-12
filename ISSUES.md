@@ -36,14 +36,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-002: Creative/custom effects have no general mechanics
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Declarative Dynamic Effect Mechanics; Creativity Gate For Dynamic Anatomy And Effects
 - Source: codebase review
 - Area: Gameplay systems, dynamic effects
 - Evidence: `apply_effects()` only handles `burning` and `bleeding` in `src/llm_fight/state.py:360`; `EFFECT_STUNNED` exists but has no handler in `src/llm_fight/engine/constants.py:57`; poison is normalized to generic damage in `src/llm_fight/state.py:58`.
 - Impact: Poison, blindness, stun, entanglement, fear, corrosion, freezing, and similar effects may persist by name but do not affect stats, targeting, action validity, probabilities, or available actions.
 - Suggested fix: Introduce a safe effect-mechanics contract or registry: tick damage, stat modifiers, action blockers, targeting/visibility penalties, body-part damage, and narrative-only fallback.
-- Tests: Add poison DOT, blinded targeting penalty, stunned action restriction, custom safe-mechanic effects, and unknown narrative-only effect behavior.
+- Tests: Add poison DOT, blinded targeting penalty, stunned action restriction, custom safe-mechanic effects, and unknown narrative-only effect behavior. Verified with `uv run pytest -q tests/test_validation.py tests/test_state.py tests/test_simulation.py tests/test_simulation_probabilities.py tests/engine/test_fighter.py tests/engine/test_judge.py tests/engine/test_prompts.py` and `uv run pytest -q`.
 
 ## P1
 

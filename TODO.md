@@ -134,12 +134,12 @@ Verification: `uv run pytest -q tests/test_profiles.py tests/test_config.py test
 
 Addresses: ISSUE-002
 
-- [ ] Add a safe declarative mechanics contract for judge-created effects so effects such as poison, blindness, corrosion, freezing, entanglement, or mobility impairment can persist and affect state even when their names are not hard-coded constants.
+- [x] Add a safe declarative mechanics contract for judge-created effects so effects such as poison, blindness, corrosion, freezing, entanglement, or mobility impairment can persist and affect state even when their names are not hard-coded constants.
 
 Acceptance goals:
 
 - Extend effect validation with bounded, non-executable `mechanics`, while preserving current `burning` and `bleeding` behavior.
-- Support deterministic mechanic kinds such as `stat_tick` for pain/exhaustion/heat, `damage_tick` for a validated target part and damage type, `targeting_modifier` for blindness/vision impairment, and `action_modifier` for stunned, entangled, or mobility-limited states. Prompt-facing tags may describe those mechanics, but must not be the only behavior for effects that claim to alter targeting or actions.
+- Support deterministic mechanic kinds such as `stat_tick` for pain/exhaustion/heat, `damage_tick` for a validated target part and damage type, `targeting_modifier` for blindness/vision impairment, and `action_modifier` with a conservative full `action_block` for stunned, entangled, or otherwise action-limited states. Prompt-facing tags may describe those mechanics, but must not be the only behavior for effects that claim to alter targeting or actions.
 - Reject arbitrary formulas, Python code, probabilities, unbounded values, unknown target selectors, unsafe names/text, and mechanics targeting nonexistent body parts.
 - Effects with `mechanics: []` may remain narrative-only; effects with invalid mechanics must not enter state or future prompts.
 - Fresh effect timing remains authoritative: newly created effects are visible in the next fighter/judge context before their first eligible tick.
@@ -150,10 +150,12 @@ Required tests:
 - A judge-created poison-style effect with stat ticks increases pain/exhaustion deterministically, observes fresh-turn timing, and expires.
 - A dynamic damage tick affects a validated targeted body part and rejects unknown targets.
 - A blinded or vision-impaired mechanic deterministically affects targeting/visibility and is visible in fighter/judge context.
-- A stunned, action-limited, entangled, or mobility-limited mechanic deterministically restricts or invalidates incompatible actions and expires.
+- A stunned, action-limited, or entangled `action_block` mechanic deterministically invalidates the affected fighter's action and expires.
 - Invalid mechanic payloads are rejected before they appear in buffs/debuffs or later prompts.
 - Prompt/judge summaries include active dynamic effect name, TTL, magnitude, target, and mechanics/tags.
 - Existing `burning`, `bleeding`, narrative-only unknown effects, and effect payload safety tests continue to pass.
+
+Verification: `uv run pytest -q tests/test_validation.py tests/test_state.py tests/test_simulation.py tests/test_simulation_probabilities.py tests/engine/test_fighter.py tests/engine/test_judge.py tests/engine/test_prompts.py` -> 219 passed; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 326 passed, 6 skipped; `git diff --check`; 2 implementation reviewers passed after narrowing `action_modifier` to `action_block`.
 
 ## Match-Start LLM Fighter Profile Creation
 

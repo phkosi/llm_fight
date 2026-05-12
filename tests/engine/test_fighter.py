@@ -1,7 +1,7 @@
 import pytest
 from llm_fight.engine.fighter import describe_pain, describe_exhaustion, describe_heat
 from unittest.mock import patch, AsyncMock, MagicMock
-from llm_fight.engine.fighter import _temporary_effect_instruction, get_fighter_attempt
+from llm_fight.engine.fighter import _effects_list_text, _temporary_effect_instruction, get_fighter_attempt
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
 from llm_fight.engine import constants as C
@@ -176,7 +176,7 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         expected_pain_desc = describe_pain(mock_fighter_state.pain)
         expected_exhaustion_desc = describe_exhaustion(mock_fighter_state.exhaustion)
         expected_heat_desc = describe_heat(mock_fighter_state.heat)
-        expected_effects_list = "Strength Buff, Weakness Debuff"
+        expected_effects_list = _effects_list_text(mock_fighter_state)
         expected_loadout = mock_fighter_state.loadout
 
         expected_system_content = FIGHTER_SYSTEM_PROMPT.format(
@@ -536,3 +536,48 @@ async def test_fighter_prompt_includes_custom_target_parts():
     prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
     assert "Your valid target parts: left_wing, second_head" in prompt_text
     assert "Opponent valid target parts: core, tentacle_1" in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_fighter_prompt_includes_dynamic_effect_details(mock_opponent_state):
+    fighter = FighterState.from_preset("A", "humanoid")
+    fighter.debuffs.append(
+        Effect(
+            name="blinded",
+            magnitude=1,
+            ttl=2,
+            on_apply="Eyes are obscured",
+            metadata={C.TARGETED_PART: "head"},
+            mechanics=[
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                    C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY,
+                    C.VALUE: 30,
+                }
+            ],
+            tags=["vision_impaired"],
+        )
+    )
+
+    mock_config_get = MagicMock()
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=["I guard."]) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
+    ):
+        await get_fighter_attempt(fighter, mock_opponent_state, combat_log="", turn_window=0)
+
+    prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
+    assert "blinded" in prompt_text
+    assert C.EFFECT_MECHANICS in prompt_text
+    assert "vision_impaired" in prompt_text
+    assert "outgoing_accuracy_penalty" in prompt_text

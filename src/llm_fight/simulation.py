@@ -209,6 +209,68 @@ def _authorize_phase2_result(p2: Dict[str, Any], p1: Dict[str, Any], rolls: Dict
     return sanitized
 
 
+def _active_effects(fighter: FighterState):
+    buffs = getattr(fighter, C.BUFFS, [])
+    debuffs = getattr(fighter, C.DEBUFFS, [])
+    if not isinstance(buffs, list):
+        buffs = []
+    if not isinstance(debuffs, list):
+        debuffs = []
+    return buffs + debuffs
+
+
+def _active_roll_modifier_mechanics(fighter: FighterState):
+    mechanics = []
+    for effect in _active_effects(fighter):
+        if effect.fresh_turns > 0:
+            continue
+        for mechanic in effect.mechanics:
+            if mechanic.get(C.EFFECT_MECHANIC_KIND) in {
+                C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                C.EFFECT_MECHANIC_ACTION_MODIFIER,
+            }:
+                mechanics.append((effect, mechanic))
+    return mechanics
+
+
+def _apply_effect_roll_modifiers(p1: Dict[str, Any], fighters: dict[str, FighterState]) -> Dict[str, Any]:
+    """Apply deterministic active-effect modifiers to P1 validity/probabilities."""
+    modified = dict(p1)
+    notes: list[str] = []
+
+    for fighter_id, fighter in fighters.items():
+        valid_key = f"{C.ATTEMPT}_{fighter_id}_valid"
+        prob_key = f"{C.ATTEMPT}_{fighter_id}_prob"
+        if not modified.get(valid_key, False):
+            continue
+        active_modifiers = _active_roll_modifier_mechanics(fighter)
+        if not active_modifiers:
+            continue
+
+        try:
+            prob = float(modified.get(prob_key, "0.0") or "0.0")
+        except ValueError:
+            continue
+
+        for effect, mechanic in active_modifiers:
+            kind = mechanic.get(C.EFFECT_MECHANIC_KIND)
+            modifier = mechanic.get(C.EFFECT_MECHANIC_MODIFIER)
+            if kind == C.EFFECT_MECHANIC_TARGETING_MODIFIER:
+                penalty = int(mechanic.get(C.VALUE, 0)) / 100
+                prob = max(0.0, prob - penalty)
+                notes.append(f"{fighter_id}:{effect.name}:{modifier} -{penalty:.2f}")
+            elif kind == C.EFFECT_MECHANIC_ACTION_MODIFIER:
+                modified[valid_key] = False
+                prob = 0.0
+                notes.append(f"{fighter_id}:{effect.name}:{modifier} blocked")
+
+        modified[prob_key] = f"{prob:.3f}".rstrip("0").rstrip(".") if prob not in (0.0, 1.0) else f"{prob:.1f}"
+
+    if notes:
+        modified[C.EFFECT_MODIFIERS_APPLIED] = notes
+    return modified
+
+
 async def _single_fight(
     fighter_a_section: str | None = None,
     fighter_b_section: str | None = None,
@@ -255,6 +317,7 @@ async def _single_fight(
         # Provide recent combat log context to judge_phase1
         p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
         p1 = await judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, recent_log=p1_recent_log)
+        p1 = _apply_effect_roll_modifiers(p1, {C.FIGHTER_A: A, C.FIGHTER_B: B})
 
         # Determine success of attempts based on probabilities from Judge P1
         rolls = {"A": False, "B": False}

@@ -274,3 +274,60 @@ async def test_rejected_effect_text_absent_from_judge_phase1_payload(mock_chat, 
     user_payload_text = mock_chat.call_args[0][0][1][C.AGENT_CONTENT]
     assert "PromptTrap" not in user_payload_text
     assert rejected_text not in user_payload_text
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase1_payload_includes_dynamic_effect_details(mock_chat, mock_guarded_call):
+    fighter_a = FighterState.from_preset(C.FIGHTER_A, "humanoid")
+    fighter_b = FighterState.from_preset(C.FIGHTER_B, "humanoid")
+    fighter_a.apply_delta(
+        {
+            C.EFFECTS_ADDED: [
+                {
+                    C.NAME: "poisoned",
+                    C.VALUE: 2,
+                    C.EFFECT_TTL: 3,
+                    C.EFFECT_ON_APPLY: "Poison takes hold",
+                    C.EFFECT_MECHANICS: [
+                        {
+                            C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_STAT_TICK,
+                            C.EFFECT_MECHANIC_STAT: C.PAIN,
+                            C.VALUE: 2,
+                        }
+                    ],
+                    C.EFFECT_TAGS: ["poison"],
+                }
+            ]
+        }
+    )
+
+    mock_chat.return_value = [
+        json.dumps(
+            {
+                "judgement_text": "ok",
+                "attempt_A_valid": True,
+                "attempt_A_prob": "0.5",
+                "attempt_B_valid": True,
+                "attempt_B_prob": "0.5",
+            }
+        )
+    ]
+
+    async def mock_gc_logic(call_func, schema, max_retries=None):
+        return await call_func()
+
+    mock_guarded_call.side_effect = mock_gc_logic
+
+    await judge_phase1(
+        {C.FIGHTER_A: fighter_a.to_json(), C.FIGHTER_B: fighter_b.to_json()},
+        "A waits.",
+        "B waits.",
+    )
+
+    user_payload = json.loads(mock_chat.call_args[0][0][1][C.AGENT_CONTENT])
+    debuff = user_payload[f"fighter_{C.FIGHTER_A}_state_summary"][C.DEBUFFS][0]
+    assert debuff[C.NAME] == "poisoned"
+    assert debuff[C.EFFECT_MECHANICS][0][C.EFFECT_MECHANIC_KIND] == C.EFFECT_MECHANIC_STAT_TICK
+    assert debuff[C.EFFECT_TAGS] == ["poison"]

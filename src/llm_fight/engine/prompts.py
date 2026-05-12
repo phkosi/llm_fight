@@ -66,7 +66,7 @@ The DeltaSchema for each fighter includes fields like:
 - "exhaustion_increase": object with {"source": "A"|"B", "value": integer non-negative}
 - "heat_increase": object with {"source": "A"|"B", "value": integer non-negative}
 - "wounds": array of objects, each with "source": "A"|"B", "targeted_part": string, "value": positive integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
-- "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "burning", "value": 1.0, "ttl": 3, "on_apply": "Starts burning", "on_tick": "Takes fire damage", "metadata": {"targeted_part": "torso"}})
+- "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "poisoned", "value": 2.0, "ttl": 3, "on_apply": "Poison takes hold", "on_tick": "Poison weakens the body", "metadata": {"targeted_part": "torso"}, "mechanics": [{"kind": "stat_tick", "stat": "pain", "value": 2}], "tags": ["poison"]})
 - "effects_removed": array of objects, each with {"source": "A"|"B", "name": string}
  - "status_change": object with {"source": "A"|"B", "value": one of "fighting", "unconscious", "dead"}
    - omit if the fighter's status does not change
