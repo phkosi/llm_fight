@@ -980,7 +980,7 @@ Verification:
 
 Addresses: ISSUE-039
 
-- [ ] Split oversized simulation and Phase 2 authorization test modules without production behavior changes.
+- [x] Split oversized simulation and Phase 2 authorization test modules without production behavior changes.
 
 Implementation intent:
 
@@ -999,6 +999,14 @@ Required tests:
 - `uv run ruff format --check .`
 - `uv run ruff check .`
 - `uv run pytest -q`
+
+Verification:
+
+- Split simulation tests into `tests\test_simulation.py`, `tests\test_simulation_trace.py`, and `tests\test_simulation_turns.py`.
+- Split Phase 2 authorization prompt-safety tests into `tests\test_phase2_authorization_prompt_safety.py`, leaving target-validation coverage in `tests\test_phase2_authorization.py`.
+- Size impact: `tests\test_simulation.py` -> 545 LOC; `tests\test_simulation_trace.py` -> 415 LOC; `tests\test_simulation_turns.py` -> 621 LOC; `tests\test_phase2_authorization.py` -> 498 LOC; `tests\test_phase2_authorization_prompt_safety.py` -> 338 LOC.
+- Focused tests: `uv run pytest -q tests\test_simulation.py tests\test_simulation_trace.py tests\test_simulation_turns.py tests\test_phase2_authorization.py tests\test_phase2_authorization_prompt_safety.py` -> 36 passed.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## Single Fight Loop Orchestration Extraction
 
