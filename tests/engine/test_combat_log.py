@@ -26,6 +26,21 @@ def test_to_summary_zero_last_n():
     assert log.to_summary(last_n=0) == ""
 
 
+def test_to_summary_marks_phase2_fallback_instead_of_confident_narration():
+    log = CombatLog()
+    log.append(
+        CombatTurn(
+            turn=1,
+            judge_p2={
+                C.NARRATION: "The model claimed a clean hit.",
+                C.METADATA: {C.P2_FALLBACK_USED: True},
+            },
+        )
+    )
+
+    assert log.to_summary() == f"Turn 1: {C.P2_FALLBACK_MARKER_TEXT}"
+
+
 def test_combat_turn_to_text():
     turn = CombatTurn(
         turn=3,
@@ -51,6 +66,20 @@ def test_combat_turn_to_text():
     assert "Fighter B: invalid, success p=0.1" in text
     assert "Reasoning: The parry starts too late." in text
     assert "Outcome: A wounds B" in text
+
+
+def test_combat_turn_to_text_marks_phase2_fallback():
+    turn = CombatTurn(
+        turn=3,
+        judge_p2={
+            C.NARRATION: "The exchange is inconclusive.",
+            C.METADATA: {C.P2_FALLBACK_USED: True},
+        },
+    )
+
+    text = turn.to_text()
+
+    assert C.P2_FALLBACK_MARKER_TEXT in text
 
 
 def test_combat_turn_to_simple_text():

@@ -487,7 +487,19 @@ Verification:
 
 Addresses: ISSUE-024
 
-- [ ] Make Judge Phase 2 no-op fallback explicit in state, output, transcripts, and batch accounting, with a configurable fail-open/fail-closed policy.
+- [x] Make Judge Phase 2 no-op fallback explicit in state, output, transcripts, and batch accounting, with a configurable fail-open/fail-closed policy.
+
+Implementation contract:
+
+- Add `[General] judge_phase2_failure_policy = fail_open | fail_closed`, defaulting to `fail_open` to preserve qwen-style long-run behavior while making fallbacks visible.
+- A "fallback" means one Judge Phase 2 call exhausted its structured and repair JSON retries and would currently return `_phase2_noop_result()`. It is counted per turn, not as a cross-fight retry counter.
+- Only engine-created fallback metadata is trusted. Strip or ignore any LLM-supplied fallback keys from parsed P2 results, and only `_phase2_noop_result()` may create `metadata: {"fallback_used": true, "fallback_reason": "judge_phase2_parse_failed", "policy": "fail_open", "llm_error": "<sanitized short error class/message>"}`.
+- Preserve this metadata through Phase 2 authorization and `CombatTurn.judge_p2`. Marked fallback turns must still have `delta={}`, `fight_end=false`, and `winner=null`.
+- In `fail_closed`, the exhausted Phase 2 call raises a clear engine exception instead of returning fallback metadata. `play` should surface it as an actionable CLI error; `simulate` should treat it like a hard fight failure row.
+- Add batch result fields `p2_fallback_turns` and `p2_fallback_used`. Extend `BatchSummary` with `fallback_rows` and `fallback_turns`. Fallback rows are not hard errors and should not force a nonzero exit unless a hard `winner=error` row also exists.
+- Renderer marker text for both rich and simple turn output: `Warning: Judge Phase 2 fallback; no judge delta applied.`
+- Verbose `simulate` summary should show fallback rows/turns separately from error rows.
+- Transcript scope for this task is the combat log/runtime output, not raw LLM exchange JSONL. Do not annotate raw prompt/response transcripts here; the later JSONL trace task can add sanitized runtime events.
 
 Acceptance goals:
 
@@ -495,7 +507,7 @@ Acceptance goals:
 - Marked fallback no-op turns remain mechanically safe: no delta, no winner, no fight end.
 - Batch results can count fallback turns separately from hard `winner=error` rows.
 - A fail-closed policy turns repeated Phase 2 failure into a fight error instead of a no-op.
-- Existing qwen-style fail-open behavior remains available when explicitly configured.
+- Existing qwen-style fail-open behavior remains the default and can be explicitly configured.
 
 Required tests:
 
@@ -504,6 +516,12 @@ Required tests:
 - Default policy test proves the run continues but is visibly marked.
 - Fail-closed policy test proves the fight/batch returns an error row or raises through CLI as designed.
 - Batch summary tests include fallback count and hard error count separately.
+- LLM-supplied fallback metadata on a valid parsed P2 response is stripped or ignored.
+
+Verification:
+
+- `uv run pytest -q tests/engine/test_judge.py tests/engine/test_combat_log.py tests/test_render.py tests/test_simulation.py tests/test_config.py tests/test_cli.py` -> 126 passed, 1 warning.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 387 passed, 6 skipped, 1 warning; `git diff --check` -> passed.
 
 ## Layer Health And Anatomy Consequence Policies
 

@@ -46,6 +46,9 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
         table.add_row("Judge ruling", Text(judge, style="yellow"))
     if turn.narration:
         table.add_row("Outcome", Text(turn.narration, style="green"))
+    fallback = turn.p2_fallback_text()
+    if fallback:
+        table.add_row("Warning", Text(fallback, style="bold red"))
     changes = turn.status_changes_text()
     if changes:
         table.add_row("Status changes", changes)
@@ -168,6 +171,8 @@ def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None
         total_runs = len(data)
     error_rows = sum(1 for r in data if r.get(C.WINNER) == C.BATCH_ERROR_WINNER)
     completed_rows = len(data) - error_rows
+    fallback_rows = sum(1 for r in data if str(r.get(C.LOG_P2_FALLBACK_USED, "")).lower() == "true")
+    fallback_turns = sum(int(r.get(C.LOG_P2_FALLBACK_TURNS) or 0) for r in data)
     winners = Counter(r.get(C.WINNER, C.DRAW) for r in data)
     avg_turns = mean(int(r.get(C.LOG_TURN, "0")) for r in data) if data else 0.0
 
@@ -176,6 +181,8 @@ def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None
             f"Total Runs: {total_runs}",
             f"Completed Rows: {completed_rows}",
             f"Error Rows: {error_rows}",
+            f"P2 Fallback Rows: {fallback_rows}",
+            f"P2 Fallback Turns: {fallback_turns}",
         ]
         lines.extend(f"{w}: {c}" for w, c in winners.items())
         lines.append(f"Average Turns: {avg_turns:.1f}")
@@ -187,6 +194,8 @@ def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None
     table.add_row("Total Runs", str(total_runs))
     table.add_row("Completed Rows", str(completed_rows))
     table.add_row("Error Rows", str(error_rows))
+    table.add_row("P2 Fallback Rows", str(fallback_rows))
+    table.add_row("P2 Fallback Turns", str(fallback_turns))
     for w, c in winners.items():
         table.add_row(w, str(c))
     table.add_row("Average Turns", f"{avg_turns:.1f}")

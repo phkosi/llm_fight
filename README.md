@@ -125,6 +125,7 @@ max_tokens_judge = 4096
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
+judge_phase2_failure_policy = fail_open
 fighter_creation_mode = configured
 
 [SIMULATION]
@@ -213,6 +214,14 @@ reminders. If required non-log combat prompt content still cannot fit, the CLI
 fails before transport with an actionable context/log-window error instead of
 sending a one-token completion request. Generated fighter profile budget
 failures are sanitized through the existing profile-generation fallback path.
+
+Judge Phase 2 parse failures are visible. With the default
+`judge_phase2_failure_policy = fail_open`, an exhausted Phase 2 call becomes a
+marked no-op turn with `fallback_used` metadata and no delta, winner, or
+`fight_end`. Set `judge_phase2_failure_policy = fail_closed` to turn the same
+failure into a hard fight error. Batch CSVs include `p2_fallback_turns` and
+`p2_fallback_used`; verbose summaries count fallback rows separately from hard
+`winner=error` rows.
 
 ```ini
 ollama_api_url = http://localhost:11434/v1/chat/completions

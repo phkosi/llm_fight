@@ -18,6 +18,10 @@ from .engine.logger import logger
 # -------------------------------------------------------------------
 
 
+class JudgePhase2FailureError(RuntimeError):
+    """Raised when Judge Phase 2 exhausts retries under fail-closed policy."""
+
+
 def _status_value(value: Any) -> Any:
     return value.value if hasattr(value, "value") else value
 
@@ -132,12 +136,40 @@ def _parse_first_json_response(response_texts: list[str]) -> dict[str, Any]:
     raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)
 
 
-def _phase2_noop_result() -> dict[str, Any]:
+def _sanitize_error_text(exc: Exception, max_length: int = 180) -> str:
+    text = f"{type(exc).__name__}: {exc}"
+    text = " ".join(str(text).split())
+    if len(text) > max_length:
+        text = text[: max_length - 3].rstrip() + "..."
+    return text
+
+
+def _strip_untrusted_phase2_metadata(result: dict[str, Any]) -> dict[str, Any]:
+    sanitized = dict(result)
+    sanitized.pop(C.METADATA, None)
+    sanitized.pop(C.P2_ENGINE_FALLBACK_MARKER, None)
+    return sanitized
+
+
+def _phase2_failure_policy() -> str:
+    return config_mod.CONFIG.get_judge_phase2_failure_policy()
+
+
+def _phase2_noop_result(exc: Exception | None = None, *, policy: str = C.P2_FAILURE_POLICY_FAIL_OPEN) -> dict[str, Any]:
+    metadata = {
+        C.P2_FALLBACK_USED: True,
+        C.P2_FALLBACK_REASON: C.P2_FALLBACK_REASON_PARSE_FAILED,
+        C.P2_FALLBACK_POLICY: policy,
+    }
+    if exc is not None:
+        metadata[C.P2_LLM_ERROR] = _sanitize_error_text(exc)
     return {
         C.NARRATION: "The exchange is inconclusive; both fighters keep their guard and reset distance.",
         C.DELTA: {},
         C.FIGHT_END: False,
         C.WINNER: None,
+        C.METADATA: metadata,
+        C.P2_ENGINE_FALLBACK_MARKER: True,
     }
 
 
@@ -338,6 +370,11 @@ async def judge_phase2(
     try:
         result = await guarded_call(_call, JudgeP2Schema, max_retries=parse_retries)
     except RuntimeError as exc:
+        policy = _phase2_failure_policy()
+        if policy == C.P2_FAILURE_POLICY_FAIL_CLOSED:
+            raise JudgePhase2FailureError(
+                f"Judge Phase 2 failed after retries under fail_closed policy: {_sanitize_error_text(exc)}"
+            ) from exc
         logger.warning("Judge Phase 2 failed after retries; using no-op turn result: %s", exc)
-        result = _phase2_noop_result()
-    return result
+        return _phase2_noop_result(exc, policy=policy)
+    return _strip_untrusted_phase2_metadata(result)

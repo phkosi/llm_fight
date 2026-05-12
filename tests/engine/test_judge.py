@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 import json
 
 from llm_fight import config as config_mod
-from llm_fight.judge import judge_phase1, judge_phase2
+from llm_fight.judge import JudgePhase2FailureError, judge_phase1, judge_phase2
 from llm_fight.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
 from llm_fight.engine import constants as C
 from llm_fight.state import FighterState
@@ -164,7 +164,11 @@ async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
 @patch("llm_fight.judge.guarded_call")
 @patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
-    fenced = f"```json\n{json.dumps({'narration': 'done', 'delta': {}, 'fight_end': False, 'winner': None})}\n```"
+    fenced = (
+        "```json\n"
+        f"{json.dumps({'narration': 'done', 'delta': {}, 'fight_end': False, 'winner': None, C.METADATA: {C.P2_FALLBACK_USED: True}})}"
+        "\n```"
+    )
     mock_chat.return_value = [fenced]
 
     async def mock_gc_logic(call_func, schema, max_retries=None):
@@ -174,6 +178,7 @@ async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
 
     result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
     assert result["narration"] == "done"
+    assert C.METADATA not in result
 
 
 @pytest.mark.asyncio
@@ -329,12 +334,31 @@ async def test_judge_phase2_returns_noop_when_all_json_attempts_fail(mock_chat):
     with patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 0)):
         result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
 
-    assert result == {
-        C.NARRATION: "The exchange is inconclusive; both fighters keep their guard and reset distance.",
-        C.DELTA: {},
-        C.FIGHT_END: False,
-        C.WINNER: None,
-    }
+    assert result[C.NARRATION] == "The exchange is inconclusive; both fighters keep their guard and reset distance."
+    assert result[C.DELTA] == {}
+    assert result[C.FIGHT_END] is False
+    assert result[C.WINNER] is None
+    assert result[C.METADATA][C.P2_FALLBACK_USED] is True
+    assert result[C.METADATA][C.P2_FALLBACK_REASON] == C.P2_FALLBACK_REASON_PARSE_FAILED
+    assert result[C.METADATA][C.P2_FALLBACK_POLICY] == C.P2_FAILURE_POLICY_FAIL_OPEN
+    assert C.P2_LLM_ERROR in result[C.METADATA]
+    assert result[C.P2_ENGINE_FALLBACK_MARKER] is True
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_fail_closed_raises_after_json_attempts_fail(mock_chat):
+    mock_chat.side_effect = [[""], [""]]
+    original_policy = config_mod.CONFIG.get_judge_phase2_failure_policy()
+    config_mod.CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY, C.P2_FAILURE_POLICY_FAIL_CLOSED)
+    try:
+        with (
+            patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 0)),
+            pytest.raises(JudgePhase2FailureError, match="fail_closed"),
+        ):
+            await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+    finally:
+        config_mod.CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY, original_policy)
 
 
 @pytest.mark.asyncio

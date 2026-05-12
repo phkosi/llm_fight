@@ -190,12 +190,24 @@ def test_default_fighter_creation_mode_loaded(temp_config_instance):
     assert temp_config_instance.get_fighter_creation_mode() == C.FIGHTER_CREATION_MODE_CONFIGURED
 
 
+def test_default_judge_phase2_failure_policy_loaded(temp_config_instance):
+    assert temp_config_instance.get_judge_phase2_failure_policy() == C.P2_FAILURE_POLICY_FAIL_OPEN
+
+
 def test_invalid_fighter_creation_mode_raises(tmp_path):
     file_path = tmp_path / "bad_mode.ini"
     file_path.write_text("[General]\nfighter_creation_mode = surprise\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="fighter_creation_mode"):
         Config(file_path).get_fighter_creation_mode()
+
+
+def test_invalid_judge_phase2_failure_policy_raises(tmp_path):
+    file_path = tmp_path / "bad_p2_policy.ini"
+    file_path.write_text("[General]\njudge_phase2_failure_policy = maybe\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="judge_phase2_failure_policy"):
+        Config(file_path).get_judge_phase2_failure_policy()
 
 
 def test_fighter_section_names(temp_config_instance):

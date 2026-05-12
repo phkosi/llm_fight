@@ -8,6 +8,7 @@ import random
 
 import llm_fight.simulation as sim_module
 from llm_fight.agents import ChatResult
+from llm_fight.judge import JudgePhase2FailureError
 from llm_fight.state import Effect, FighterState  # Keep for spec
 
 # from llm_fight.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
@@ -777,7 +778,10 @@ async def test_single_fight_uses_one_fixed_ollama_context_for_all_native_calls()
         for (section, key), value in old_values.items():
             CONFIG.set(section, key, value)
 
-    assert result == {C.WINNER: C.DRAW, C.LOG_TURN: "1"}
+    assert result[C.WINNER] == C.DRAW
+    assert result[C.LOG_TURN] == "1"
+    assert result[C.LOG_P2_FALLBACK_TURNS] == "0"
+    assert result[C.LOG_P2_FALLBACK_USED] == "false"
     assert len(payloads) == 4
     assert {payload[C.AGENT_OPTIONS][C.NUM_CTX] for payload in payloads} == {32768}
     assert {payload[C.AGENT_KEEP_ALIVE] for payload in payloads} == {"10m"}
@@ -913,13 +917,30 @@ async def test_run_batch_flushes_each_completed_result(tmp_path):
             path = await sim_module.run_batch(out_file, progress=progress)
 
     assert path == out_file
-    assert first_progress_rows == [{C.WINNER: "A", C.LOG_TURN: "1"}]
+    assert first_progress_rows == [
+        {
+            C.WINNER: "A",
+            C.LOG_TURN: "1",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        }
+    ]
 
     with open(out_file, newline="") as fp:
         final_rows = list(csv.DictReader(fp))
     assert final_rows == [
-        {C.WINNER: "A", C.LOG_TURN: "1"},
-        {C.WINNER: "B", C.LOG_TURN: "2"},
+        {
+            C.WINNER: "A",
+            C.LOG_TURN: "1",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        },
+        {
+            C.WINNER: "B",
+            C.LOG_TURN: "2",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        },
     ]
 
 
@@ -956,9 +977,24 @@ async def test_run_batch_writes_rows_in_run_index_order_with_out_of_order_comple
     with open(out_file, newline="") as fp:
         rows = list(csv.DictReader(fp))
     assert rows == [
-        {C.WINNER: "0", C.LOG_TURN: "1"},
-        {C.WINNER: "1", C.LOG_TURN: "2"},
-        {C.WINNER: "2", C.LOG_TURN: "3"},
+        {
+            C.WINNER: "0",
+            C.LOG_TURN: "1",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        },
+        {
+            C.WINNER: "1",
+            C.LOG_TURN: "2",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        },
+        {
+            C.WINNER: "2",
+            C.LOG_TURN: "3",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        },
     ]
 
 
@@ -1063,7 +1099,12 @@ async def test_run_batch_zero_runs(tmp_path):
         reader = csv.DictReader(fp)
         rows = list(reader)
 
-    assert reader.fieldnames == [C.WINNER, C.LOG_TURN]
+    assert reader.fieldnames == [
+        C.WINNER,
+        C.LOG_TURN,
+        C.LOG_P2_FALLBACK_TURNS,
+        C.LOG_P2_FALLBACK_USED,
+    ]
     assert rows == []
     mock_fight.assert_not_called()
 
@@ -1120,12 +1161,30 @@ async def test_run_batch_negative_runs_raises_without_starting_fight(tmp_path):
 def test_summarize_batch_csv_counts_error_rows(tmp_path):
     out_file = tmp_path / "summary.csv"
     with out_file.open("w", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
+        writer = csv.DictWriter(
+            fp,
+            fieldnames=[
+                C.WINNER,
+                C.LOG_TURN,
+                C.LOG_P2_FALLBACK_TURNS,
+                C.LOG_P2_FALLBACK_USED,
+            ],
+        )
         writer.writeheader()
         writer.writerows(
             [
-                {C.WINNER: "A", C.LOG_TURN: "1"},
-                {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"},
+                {
+                    C.WINNER: "A",
+                    C.LOG_TURN: "1",
+                    C.LOG_P2_FALLBACK_TURNS: "2",
+                    C.LOG_P2_FALLBACK_USED: "true",
+                },
+                {
+                    C.WINNER: C.BATCH_ERROR_WINNER,
+                    C.LOG_TURN: "0",
+                    C.LOG_P2_FALLBACK_TURNS: "0",
+                    C.LOG_P2_FALLBACK_USED: "false",
+                },
             ]
         )
 
@@ -1136,7 +1195,69 @@ def test_summarize_batch_csv_counts_error_rows(tmp_path):
     assert summary.total_rows == 2
     assert summary.completed_rows == 1
     assert summary.error_rows == 1
+    assert summary.fallback_rows == 1
+    assert summary.fallback_turns == 2
     assert summary.has_errors
+
+
+@pytest.mark.asyncio
+async def test_run_batch_writes_fallback_columns_and_summary_counts(tmp_path):
+    async def fake_fight(*args, **kwargs):
+        return {
+            C.WINNER: C.DRAW,
+            C.LOG_TURN: "3",
+            C.LOG_P2_FALLBACK_TURNS: "1",
+            C.LOG_P2_FALLBACK_USED: "true",
+        }
+
+    out_file = tmp_path / "fallback.csv"
+    with (
+        patch.object(sim_module, "_single_fight", side_effect=fake_fight),
+        _patch_batch_config(runs=1, concurrency=1),
+    ):
+        path = await sim_module.run_batch(out_file)
+
+    with open(path, newline="") as fp:
+        rows = list(csv.DictReader(fp))
+
+    assert rows == [
+        {
+            C.WINNER: C.DRAW,
+            C.LOG_TURN: "3",
+            C.LOG_P2_FALLBACK_TURNS: "1",
+            C.LOG_P2_FALLBACK_USED: "true",
+        }
+    ]
+    summary = sim_module.summarize_batch_csv(path)
+    assert summary.error_rows == 0
+    assert summary.fallback_rows == 1
+    assert summary.fallback_turns == 1
+
+
+@pytest.mark.asyncio
+async def test_run_batch_fail_closed_p2_exception_writes_error_row(tmp_path):
+    async def failing_fight(*args, **kwargs):
+        raise JudgePhase2FailureError("Judge Phase 2 failed after retries under fail_closed policy")
+
+    out_file = tmp_path / "fail_closed.csv"
+    with (
+        patch.object(sim_module, "_single_fight", side_effect=failing_fight),
+        _patch_batch_config(runs=1, concurrency=1),
+        patch.object(sim_module.logger, "exception"),
+    ):
+        path = await sim_module.run_batch(out_file)
+
+    with open(path, newline="") as fp:
+        rows = list(csv.DictReader(fp))
+
+    assert rows == [
+        {
+            C.WINNER: C.BATCH_ERROR_WINNER,
+            C.LOG_TURN: "0",
+            C.LOG_P2_FALLBACK_TURNS: "0",
+            C.LOG_P2_FALLBACK_USED: "false",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -1177,6 +1298,60 @@ async def test_turn_logging_respects_setting():
     CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, str(original_setting).lower())
 
     assert any("Turn 1" in call.args[0] for call in mock_info.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_phase2_fallback_metadata_is_preserved_on_turn_and_result():
+    async def fake_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "Both attacks miss.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "The exchange is inconclusive; both fighters keep their guard and reset distance.",
+            C.DELTA: {},
+            C.FIGHT_END: False,
+            C.WINNER: None,
+            C.METADATA: {
+                C.P2_FALLBACK_USED: True,
+                C.P2_FALLBACK_REASON: C.P2_FALLBACK_REASON_PARSE_FAILED,
+                C.P2_FALLBACK_POLICY: C.P2_FAILURE_POLICY_FAIL_OPEN,
+                C.P2_LLM_ERROR: "RuntimeError: bad json",
+            },
+            C.P2_ENGINE_FALLBACK_MARKER: True,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=1.0), create=True),
+        ):
+            result, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    turn_p2 = combat_log.turns[0].judge_p2
+    assert turn_p2[C.DELTA] == {}
+    assert turn_p2[C.FIGHT_END] is False
+    assert turn_p2[C.WINNER] is None
+    assert turn_p2[C.METADATA][C.P2_FALLBACK_USED] is True
+    assert C.P2_ENGINE_FALLBACK_MARKER not in turn_p2
+    assert result[C.LOG_P2_FALLBACK_TURNS] == "1"
+    assert result[C.LOG_P2_FALLBACK_USED] == "true"
 
 
 @pytest.mark.asyncio

@@ -34,6 +34,8 @@ class BatchSummary:
     total_rows: int
     completed_rows: int
     error_rows: int
+    fallback_rows: int = 0
+    fallback_turns: int = 0
 
     @property
     def has_errors(self) -> bool:
@@ -100,6 +102,8 @@ def summarize_batch_csv(output_csv: str | Path, total_runs: int | None = None) -
     total_rows = len(rows)
     error_rows = sum(1 for row in rows if row.get(C.WINNER) == C.BATCH_ERROR_WINNER)
     completed_rows = total_rows - error_rows
+    fallback_turns = sum(int(row.get(C.LOG_P2_FALLBACK_TURNS) or 0) for row in rows)
+    fallback_rows = sum(1 for row in rows if (row.get(C.LOG_P2_FALLBACK_USED) or "").strip().lower() == "true")
     if total_runs is None:
         total_runs = total_rows
 
@@ -109,6 +113,8 @@ def summarize_batch_csv(output_csv: str | Path, total_runs: int | None = None) -
         total_rows=total_rows,
         completed_rows=completed_rows,
         error_rows=error_rows,
+        fallback_rows=fallback_rows,
+        fallback_turns=fallback_turns,
     )
 
 
@@ -218,12 +224,27 @@ def _sanitize_phase2_narration(sanitized: Dict[str, Any], warnings: list[Dict[st
 
 
 def _phase2_known_fields(p2: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+    sanitized = {
         C.NARRATION: p2.get(C.NARRATION, ""),
         C.DELTA: p2.get(C.DELTA, {}),
         C.FIGHT_END: p2.get(C.FIGHT_END, False),
         C.WINNER: p2.get(C.WINNER),
     }
+    metadata = p2.get(C.METADATA)
+    if p2.get(C.P2_ENGINE_FALLBACK_MARKER) is True and isinstance(metadata, dict):
+        fallback_metadata = {
+            key: metadata[key]
+            for key in (
+                C.P2_FALLBACK_USED,
+                C.P2_FALLBACK_REASON,
+                C.P2_FALLBACK_POLICY,
+                C.P2_LLM_ERROR,
+            )
+            if key in metadata
+        }
+        if fallback_metadata.get(C.P2_FALLBACK_USED) is True:
+            sanitized[C.METADATA] = fallback_metadata
+    return sanitized
 
 
 def _resolve_phase2_wound_target(
@@ -614,6 +635,7 @@ async def _single_fight(
 
     turn = 0
     outcome = None
+    p2_fallback_turns = 0
     combat_log = CombatLog()
     A, B = await _build_match_fighters(fighter_a_section, fighter_b_section, combat_log, fight_rng, on_event=on_event)
     fighter_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
@@ -722,6 +744,9 @@ async def _single_fight(
             )
         p2 = await judge_phase2(p2_input_state, rolls, **p2_kwargs)
         p2 = _authorize_phase2_result(p2, p1, rolls, {C.FIGHTER_A: A, C.FIGHTER_B: B})
+        p2_metadata = p2.get(C.METADATA, {})
+        if isinstance(p2_metadata, dict) and p2_metadata.get(C.P2_FALLBACK_USED) is True:
+            p2_fallback_turns += 1
         _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_END, turn=turn, data={"p2": p2}))
 
         turn_entry = CombatTurn(
@@ -777,7 +802,12 @@ async def _single_fight(
 
     logger.info(f"Fight ended. Outcome: {outcome}, Turns: {turn}")
     logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
-    result = {C.WINNER: outcome, C.LOG_TURN: str(turn)}
+    result = {
+        C.WINNER: outcome,
+        C.LOG_TURN: str(turn),
+        C.LOG_P2_FALLBACK_TURNS: str(p2_fallback_turns),
+        C.LOG_P2_FALLBACK_USED: str(p2_fallback_turns > 0).lower(),
+    }
     _emit_event(on_event, FightEvent(C.FIGHT_EVENT_FIGHT_COMPLETE, turn=turn, data={"result": result}))
     if return_log:
         return result, combat_log
@@ -834,11 +864,24 @@ async def run_batch(
                 raise
             except Exception:
                 logger.exception("_single_fight failed")
-                return run_index, {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"}
+                return run_index, {
+                    C.WINNER: C.BATCH_ERROR_WINNER,
+                    C.LOG_TURN: "0",
+                    C.LOG_P2_FALLBACK_TURNS: "0",
+                    C.LOG_P2_FALLBACK_USED: "false",
+                }
 
     csv_path = Path(output_csv)
     with csv_path.open("w", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
+        writer = csv.DictWriter(
+            fp,
+            fieldnames=[
+                C.WINNER,
+                C.LOG_TURN,
+                C.LOG_P2_FALLBACK_TURNS,
+                C.LOG_P2_FALLBACK_USED,
+            ],
+        )
         writer.writeheader()
         fp.flush()
 
@@ -850,7 +893,10 @@ async def run_batch(
                 run_index, result = await coro
                 buffered_results[run_index] = result
                 while next_to_write in buffered_results:
-                    writer.writerow(buffered_results.pop(next_to_write))
+                    row = buffered_results.pop(next_to_write)
+                    row.setdefault(C.LOG_P2_FALLBACK_TURNS, "0")
+                    row.setdefault(C.LOG_P2_FALLBACK_USED, "false")
+                    writer.writerow(row)
                     fp.flush()
                     next_to_write += 1
                 if progress:

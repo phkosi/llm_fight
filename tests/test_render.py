@@ -62,6 +62,20 @@ def test_make_turn_table_simple():
     assert "Status changes:" in result
 
 
+def test_make_turn_table_simple_marks_phase2_fallback():
+    turn = CombatTurn(
+        turn=1,
+        judge_p2={
+            C.NARRATION: "The exchange is inconclusive.",
+            C.METADATA: {C.P2_FALLBACK_USED: True},
+        },
+    )
+
+    result = render.make_turn_table(turn, simple=True)
+
+    assert C.P2_FALLBACK_MARKER_TEXT in result
+
+
 def test_make_turn_table_rich_uses_explicit_turn_phases():
     if not render.RICH_AVAILABLE:
         return
@@ -96,6 +110,27 @@ def test_make_turn_table_rich_uses_explicit_turn_phases():
     assert "The shield comes up" in outcome_line
 
 
+def test_make_turn_table_rich_marks_phase2_fallback():
+    if not render.RICH_AVAILABLE:
+        return
+
+    turn = CombatTurn(
+        turn=1,
+        judge_p2={
+            C.NARRATION: "The exchange is inconclusive.",
+            C.METADATA: {C.P2_FALLBACK_USED: True},
+        },
+    )
+    table = render.make_turn_table(turn)
+
+    console = render.Console(record=True, width=120, color_system=None)
+    console.print(table)
+    output = console.export_text()
+
+    assert "Warning" in output
+    assert C.P2_FALLBACK_MARKER_TEXT in output
+
+
 def test_make_turn_table_fallback_uses_explicit_turn_phases():
     turn = _turn_with_all_sections()
     with patch.object(render, "RICH_AVAILABLE", False):
@@ -108,7 +143,11 @@ def test_make_turn_table_fallback_uses_explicit_turn_phases():
 
 
 def test_make_summary_table():
-    rows = [{C.WINNER: "A", C.LOG_TURN: "2"}, {C.WINNER: "B", C.LOG_TURN: "3"}, {C.WINNER: "A", C.LOG_TURN: "1"}]
+    rows = [
+        {C.WINNER: "A", C.LOG_TURN: "2", C.LOG_P2_FALLBACK_TURNS: "1", C.LOG_P2_FALLBACK_USED: "true"},
+        {C.WINNER: "B", C.LOG_TURN: "3", C.LOG_P2_FALLBACK_TURNS: "0", C.LOG_P2_FALLBACK_USED: "false"},
+        {C.WINNER: "A", C.LOG_TURN: "1", C.LOG_P2_FALLBACK_TURNS: "0", C.LOG_P2_FALLBACK_USED: "false"},
+    ]
     table = render.make_summary_table(rows)
     if render.RICH_AVAILABLE:
         from rich.table import Table
@@ -119,10 +158,12 @@ def test_make_summary_table():
 
 
 def test_make_summary_table_fallback():
-    rows = [{C.WINNER: "A", C.LOG_TURN: "1"}]
+    rows = [{C.WINNER: "A", C.LOG_TURN: "1", C.LOG_P2_FALLBACK_TURNS: "2", C.LOG_P2_FALLBACK_USED: "true"}]
     with patch.object(render, "RICH_AVAILABLE", False):
         result = render.make_summary_table(rows)
     assert "Average Turns" in result
+    assert "P2 Fallback Rows: 1" in result
+    assert "P2 Fallback Turns: 2" in result
 
 
 def test_make_fighter_design_view_simple_includes_dynamic_design_details():

@@ -282,14 +282,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-024: P2 failures are hidden as normal no-op turns
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - P2 Fallback Visibility And Fail-Open Policy
 - Source: codebase review
 - Area: Reliability, observability
-- Evidence: Judge Phase 2 catches repeated parse failures and returns `_phase2_noop_result()` in `src/llm_fight/judge.py:247`.
+- Evidence: Judge Phase 2 caught repeated parse failures and returned `_phase2_noop_result()` as an indistinguishable normal no-op. Resolved by engine-owned fallback metadata, visible turn markers, batch fallback CSV/summary accounting, and configurable `judge_phase2_failure_policy = fail_open | fail_closed`.
 - Impact: Runs can appear successful while the judge is repeatedly failing.
 - Suggested fix: Return explicit `fallback_used`/`llm_error` metadata, surface it in play/batch output, and make fail-open configurable.
-- Tests: Repeated P2 failures should produce a visible warning/error marker by default; optional fail-open mode should be covered separately.
+- Tests: Added Judge Phase 2 fail-open/fail-closed tests, metadata stripping for LLM-supplied fallback fields, combat-log/render marker tests, single-fight fallback result counting, batch CSV/summary fallback accounting, fail-closed batch error-row coverage, and CLI actionable fail-closed error coverage.
 
 ### ISSUE-025: Batch simulations can hide total failure behind exit 0
 

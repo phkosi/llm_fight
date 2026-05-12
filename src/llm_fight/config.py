@@ -12,6 +12,7 @@ DEFAULTS = {
         C.CONFIG_OLLAMA_KEEP_ALIVE: "10m",
         C.CONFIG_OLLAMA_NUM_CTX: "32768",
         C.CONFIG_OLLAMA_PROXY_MODE: C.OLLAMA_PROXY_AUTO,
+        C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY: C.P2_FAILURE_POLICY_FAIL_OPEN,
         C.CONFIG_MAX_TOKENS_FIGHTER: "512",
         C.CONFIG_MAX_TOKENS_JUDGE: "4096",
         C.CONFIG_LLAMA_TEMPERATURE: "0.4",
@@ -202,6 +203,22 @@ class Config:
                 f"'{C.FIGHTER_CREATION_MODE_CONFIGURED}' or '{C.FIGHTER_CREATION_MODE_GENERATED}'."
             )
         return mode
+
+    def get_judge_phase2_failure_policy(self) -> str:
+        """Return the configured Judge Phase 2 parse-failure policy."""
+        policy = self.get(
+            C.CONFIG_GENERAL,
+            C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY,
+            str,
+            fallback=C.P2_FAILURE_POLICY_FAIL_OPEN,
+        )
+        policy = str(policy).strip().lower()
+        if policy not in {C.P2_FAILURE_POLICY_FAIL_OPEN, C.P2_FAILURE_POLICY_FAIL_CLOSED}:
+            raise ValueError(
+                f"[{C.CONFIG_GENERAL}] {C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY} must be "
+                f"'{C.P2_FAILURE_POLICY_FAIL_OPEN}' or '{C.P2_FAILURE_POLICY_FAIL_CLOSED}'."
+            )
+        return policy
 
     def _fighter_setting(self, fighter_id: str, key: str, *, profile_default: str | None, fallback: str) -> str:
         explicit_value = self._explicit_section_value(fighter_id, key)

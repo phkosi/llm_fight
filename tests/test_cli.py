@@ -8,13 +8,22 @@ from click import ClickException
 from logging import CRITICAL
 from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
+from llm_fight.judge import JudgePhase2FailureError
 from llm_fight.simulation import FightEvent
 from llm_fight.utils.token_counter import PromptBudgetError
 
 
 def _write_batch_csv(path, rows):
     with path.open("w", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
+        writer = csv.DictWriter(
+            fp,
+            fieldnames=[
+                C.WINNER,
+                C.LOG_TURN,
+                C.LOG_P2_FALLBACK_TURNS,
+                C.LOG_P2_FALLBACK_USED,
+            ],
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -265,7 +274,17 @@ def test_cli_simulate(tmp_path):
 def test_cli_simulate_verbose(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
-    dummy.write_text("winner,turn\nA,1\n")
+    _write_batch_csv(
+        dummy,
+        [
+            {
+                C.WINNER: "A",
+                C.LOG_TURN: "1",
+                C.LOG_P2_FALLBACK_TURNS: "1",
+                C.LOG_P2_FALLBACK_USED: "true",
+            }
+        ],
+    )
     with (
         patch(
             "llm_fight.simulation.run_batch",
@@ -280,6 +299,8 @@ def test_cli_simulate_verbose(tmp_path):
     assert result.exit_code == 0
     assert mock_run_batch.call_args.kwargs["progress"] is not None
     mock_render.make_summary_table.assert_called_once()
+    rows_arg = mock_render.make_summary_table.call_args.args[0]
+    assert rows_arg[0][C.LOG_P2_FALLBACK_USED] == "true"
 
 
 def test_cli_unknown_option():
@@ -515,6 +536,23 @@ def test_cli_simulate_continue_on_error_exits_zero_with_warning(tmp_path):
 
     assert result.exit_code == 0
     assert "1 error row(s)" in result.output
+
+
+def test_cli_play_phase2_fail_closed_error_is_actionable():
+    runner = CliRunner()
+    with (
+        patch(
+            "llm_fight.simulation._single_fight",
+            new=AsyncMock(
+                side_effect=JudgePhase2FailureError("Judge Phase 2 failed after retries under fail_closed policy")
+            ),
+        ),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["play"])
+
+    assert result.exit_code != 0
+    assert "Judge Phase 2 failed after retries under fail_closed policy" in result.output
 
 
 def test_cli_simulate_prompt_budget_error_is_actionable():

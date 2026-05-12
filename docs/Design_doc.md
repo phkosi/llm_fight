@@ -120,6 +120,7 @@ ollama_temperature = 0.4
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
+judge_phase2_failure_policy = fail_open
 fighter_A = A
 fighter_B = B
 fighter_creation_mode = configured
@@ -146,6 +147,14 @@ trimmed automatically: older lines are dropped first, while current state,
 attempts, rolls, valid target parts, and active-effect reminders remain
 authoritative. If required non-log content cannot fit in `ollama_num_ctx`, the
 run surfaces a prompt-budget error rather than sending a one-token request.
+
+`judge_phase2_failure_policy = fail_open` preserves long-run playtests by
+recording an exhausted Judge Phase 2 parse/validation retry cycle as a marked
+no-op turn with `metadata.fallback_used = true`, empty `delta`, `fight_end =
+false`, and `winner = null`. `fail_closed` turns the same condition into a hard
+fight failure. Batch CSVs include `p2_fallback_turns` and
+`p2_fallback_used`, and summaries count fallback rows separately from error
+rows.
 
 Batch runs derive an isolated per-fight RNG stream from `[SIMULATION].seed`
 and the run index, so concurrent scheduling or model latency does not change a

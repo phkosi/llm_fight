@@ -11,6 +11,7 @@ import typer
 from .engine import render
 from .engine import constants as C
 from .agents import ping_ollama
+from .judge import JudgePhase2FailureError
 from .utils.token_counter import PromptBudgetError
 from click import ClickException
 
@@ -50,6 +51,8 @@ def _apply_simulation_overrides(runs: Optional[int] = None, max_turns: Optional[
 def _run_async(coro):
     try:
         return asyncio.run(coro)
+    except JudgePhase2FailureError as exc:
+        raise ClickException(str(exc)) from exc
     except PromptBudgetError as exc:
         raise ClickException(str(exc)) from exc
     except ValueError as exc:

@@ -23,6 +23,18 @@ class CombatTurn:
     def narration(self) -> str:
         return self.judge_p2.get(C.NARRATION, "")
 
+    @property
+    def p2_metadata(self) -> Dict[str, Any]:
+        metadata = self.judge_p2.get(C.METADATA, {})
+        return metadata if isinstance(metadata, dict) else {}
+
+    @property
+    def p2_fallback_used(self) -> bool:
+        return self.p2_metadata.get(C.P2_FALLBACK_USED) is True
+
+    def p2_fallback_text(self) -> str:
+        return C.P2_FALLBACK_MARKER_TEXT if self.p2_fallback_used else ""
+
     def judge_ruling_lines(self) -> list[str]:
         """Return Judge Phase 1 output as clear, display-ready lines."""
         lines = []
@@ -77,6 +89,9 @@ class CombatTurn:
         narr = self.narration
         if narr:
             parts.append(f"Outcome: {narr}")
+        fallback = self.p2_fallback_text()
+        if fallback:
+            parts.append(fallback)
         changes = self.status_changes_text()
         if changes:
             parts.append(f"Status changes: {changes}")
@@ -96,6 +111,9 @@ class CombatTurn:
         narr = self.narration
         if narr:
             lines.append(f"Outcome: {narr}")
+        fallback = self.p2_fallback_text()
+        if fallback:
+            lines.append(fallback)
 
         changes = self.status_changes_text()
         if changes:
@@ -147,5 +165,10 @@ class CombatLog:
         else:
             turns = self.turns
 
-        lines = [f"Turn {t.turn}: {t.narration}" for t in turns if t.narration]
+        lines = []
+        for t in turns:
+            if t.p2_fallback_used:
+                lines.append(f"Turn {t.turn}: {C.P2_FALLBACK_MARKER_TEXT}")
+            elif t.narration:
+                lines.append(f"Turn {t.turn}: {t.narration}")
         return "\n".join(lines)

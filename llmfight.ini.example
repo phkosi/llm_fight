@@ -12,6 +12,9 @@ ollama_temperature = 0.4
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
+# fail_open keeps long runs moving with a visible marked no-op turn when Judge
+# Phase 2 cannot produce valid JSON; fail_closed turns that failure into an error.
+judge_phase2_failure_policy = fail_open
 log_level = INFO
 log_combat_turns = false
 save_transcripts = false
