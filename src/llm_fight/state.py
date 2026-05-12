@@ -1,7 +1,7 @@
 """Dataclasses representing runtime mutable fighter state."""
 
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields, is_dataclass
 from typing import Dict, List, Any
 import copy
 import math
@@ -84,6 +84,7 @@ class Effect:
     on_tick: str | None = None  # Description of what happens each tick (for LLM context / logging)
     # Actual logic for on_apply and on_tick will be handled in FighterState methods
     metadata: Dict[str, Any] = field(default_factory=dict)
+    fresh_turns: int = field(default=0, repr=False, compare=False)
 
     def tick(self):
         """Ticks down the effect's time-to-live (TTL). Returns True if expired."""
@@ -98,6 +99,24 @@ class Effect:
         if self.ttl > 0:
             self.ttl -= 1
         return self.ttl == 0
+
+
+def _effect_asdict(effect: Effect) -> Dict[str, Any]:
+    data = asdict(effect)
+    data.pop("fresh_turns", None)
+    return data
+
+
+def _to_public_json(value: Any) -> Any:
+    if isinstance(value, Effect):
+        return _effect_asdict(value)
+    if isinstance(value, list):
+        return [_to_public_json(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _to_public_json(item) for key, item in value.items()}
+    if is_dataclass(value):
+        return {field.name: _to_public_json(getattr(value, field.name)) for field in fields(value)}
+    return value
 
 
 @dataclass
@@ -141,7 +160,7 @@ class FighterState:
     # ------------------ utilities --------------------------------------
     def to_json(self) -> Dict[str, Any]:
         """Serializes the fighter's state to a JSON-compatible dictionary."""
-        return asdict(self)
+        return _to_public_json(self)
 
     def normalize_part_name(self, part_name: str) -> str | None:
         """Return a known body-part key for common natural-language names."""
@@ -286,6 +305,10 @@ class FighterState:
             return False
         return True
 
+    def _mark_effect_fresh(self, eff: Effect) -> Effect:
+        eff.fresh_turns = 1
+        return eff
+
     def _update_status_from_invariants(self) -> None:
         """Apply status invariants after any state mutation."""
         if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.FighterStatus.FIGHTING:
@@ -381,13 +404,15 @@ class FighterState:
                 logger.info(f"{self.id}:{part_name} has been severed!")
                 # Add a generic "SeveredPart" effect or similar if desired
                 self.debuffs.append(
-                    Effect(
-                        name=f"{part_name} {C.STATUS_SEVERED}",
-                        magnitude=1,
-                        ttl=-1,
-                        on_apply=f"{part_name} was severed from the body.",
-                        on_tick=None,
-                        metadata={C.TARGETED_PART: part_name},
+                    self._mark_effect_fresh(
+                        Effect(
+                            name=f"{part_name} {C.STATUS_SEVERED}",
+                            magnitude=1,
+                            ttl=-1,
+                            on_apply=f"{part_name} was severed from the body.",
+                            on_tick=None,
+                            metadata={C.TARGETED_PART: part_name},
+                        )
                     )
                 )
                 self.pain += 20  # Extra pain for severing
@@ -409,13 +434,15 @@ class FighterState:
             )
             if not existing_burning:
                 self.debuffs.append(
-                    Effect(
-                        name=C.EFFECT_BURNING,
-                        magnitude=damage_amount / 10,
-                        ttl=3,
-                        on_apply=f"{part_name} is on fire!",
-                        on_tick=f"{part_name} takes burn damage.",
-                        metadata={C.TARGETED_PART: part_name},
+                    self._mark_effect_fresh(
+                        Effect(
+                            name=C.EFFECT_BURNING,
+                            magnitude=damage_amount / 10,
+                            ttl=3,
+                            on_apply=f"{part_name} is on fire!",
+                            on_tick=f"{part_name} takes burn damage.",
+                            metadata={C.TARGETED_PART: part_name},
+                        )
                     )
                 )
                 logger.debug(f"{self.id}:{part_name} is now burning.")
@@ -430,13 +457,15 @@ class FighterState:
             )
             if not existing_bleeding and part.bleed_rate > 0:
                 self.debuffs.append(
-                    Effect(
-                        name=C.EFFECT_BLEEDING,
-                        magnitude=part.bleed_rate * (damage_amount / 10),
-                        ttl=5,
-                        on_apply=f"{part_name} is bleeding profusely!",
-                        on_tick=f"{part_name} loses blood.",
-                        metadata={C.TARGETED_PART: part_name},
+                    self._mark_effect_fresh(
+                        Effect(
+                            name=C.EFFECT_BLEEDING,
+                            magnitude=part.bleed_rate * (damage_amount / 10),
+                            ttl=5,
+                            on_apply=f"{part_name} is bleeding profusely!",
+                            on_tick=f"{part_name} loses blood.",
+                            metadata={C.TARGETED_PART: part_name},
+                        )
                     )
                 )
                 logger.debug(f"{self.id}:{part_name} is now bleeding.")
@@ -482,6 +511,7 @@ class FighterState:
                 if is_duplicate:
                     continue
 
+                self._mark_effect_fresh(new_effect)
                 if list_name == C.BUFFS:
                     self.buffs.append(new_effect)
                 else:
@@ -515,6 +545,9 @@ class FighterState:
                 effect_magnitude = self._normalized_effect_magnitude(eff)
                 if effect_magnitude is None:
                     eff_list.remove(eff)
+                    continue
+                if eff.fresh_turns > 0:
+                    eff.fresh_turns -= 1
                     continue
                 if eff.name == C.EFFECT_BURNING:
                     self.heat += int(effect_magnitude * 5)

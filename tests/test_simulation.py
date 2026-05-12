@@ -681,3 +681,78 @@ async def test_judge_only_fight_end_continues_when_state_is_not_terminal(winner)
     assert result[C.WINNER] == C.DRAW
     assert judge_p2.await_count == 2
     assert any("Ignoring judge-only outcome" in call.args[0] for call in mock_warning.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_new_ttl_one_effect_reaches_next_turn_prompts_before_expiring():
+    captured_fighter_prompts = []
+    captured_p1_states = []
+    captured_p2_states = []
+
+    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0):
+        captured_fighter_prompts.append(fighter.to_json())
+        return "attack"
+
+    async def fake_judge_p1(state, *args, **kwargs):
+        captured_p1_states.append(state)
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds.",
+            "explanation": "",
+        }
+
+    p2_turn = 0
+
+    async def fake_judge_p2(p2_input_state, rolls):
+        nonlocal p2_turn
+        p2_turn += 1
+        captured_p2_states.append(p2_input_state)
+        if p2_turn == 1:
+            return {
+                C.NARRATION: "A briefly stuns B.",
+                C.DELTA: {
+                    C.FIGHTER_B: {
+                        C.EFFECTS_ADDED: [
+                            {
+                                C.SOURCE: C.FIGHTER_A,
+                                C.NAME: "stunned",
+                                C.VALUE: 1,
+                                C.EFFECT_TTL: 1,
+                            }
+                        ]
+                    }
+                },
+                C.FIGHT_END: False,
+                C.WINNER: None,
+            }
+        return {C.NARRATION: "The stun fades.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            result, log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    turn1_effects = log.turns[0].state_B_after[C.DEBUFFS]
+    assert turn1_effects[0][C.NAME] == "stunned"
+    assert turn1_effects[0][C.EFFECT_TTL] == 1
+    assert "fresh_turns" not in turn1_effects[0]
+
+    turn2_b_fighter_prompt = captured_fighter_prompts[3]
+    assert turn2_b_fighter_prompt[C.DEBUFFS][0][C.NAME] == "stunned"
+    assert captured_p1_states[1][C.FIGHTER_B][C.DEBUFFS][0][C.NAME] == "stunned"
+    assert captured_p2_states[1][f"fighter_{C.FIGHTER_B}"][C.DEBUFFS][0][C.NAME] == "stunned"
+
+    assert log.turns[1].state_B_after[C.DEBUFFS] == []

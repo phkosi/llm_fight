@@ -113,6 +113,7 @@ def test_apply_fire_damage_adds_burning_effect(humanoid_fighter: FighterState):
     assert len(burning_effects) == 1
     assert burning_effects[0].magnitude == 1.5  # 15 / 10
     assert burning_effects[0].ttl == 3
+    assert burning_effects[0].fresh_turns == 1
 
 
 def test_apply_piercing_damage_adds_bleeding_effect(humanoid_fighter: FighterState):
@@ -133,6 +134,7 @@ def test_apply_piercing_damage_adds_bleeding_effect(humanoid_fighter: FighterSta
     assert len(bleeding_effects) == 1
     assert bleeding_effects[0].magnitude == 1.0  # bleed_rate * (10/10) = 1 * 1
     assert bleeding_effects[0].ttl == 5
+    assert bleeding_effects[0].fresh_turns == 1
 
 
 def test_apply_slashing_damage_adds_bleeding_effect(humanoid_fighter: FighterState):
@@ -153,6 +155,7 @@ def test_apply_slashing_damage_adds_bleeding_effect(humanoid_fighter: FighterSta
     assert len(bleeding_effects) == 1
     assert bleeding_effects[0].magnitude == fighter.parts[part_name].bleed_rate * (12 / 10)  # 2 * 1.2 = 2.4
     assert bleeding_effects[0].ttl == 5
+    assert bleeding_effects[0].fresh_turns == 1
 
 
 def test_apply_damage_to_non_existent_part(humanoid_fighter: FighterState):
@@ -338,6 +341,133 @@ def test_apply_delta_canonicalizes_effect_target_metadata(humanoid_fighter: Figh
 
     assert len(fighter.debuffs) == 1
     assert fighter.debuffs[0].metadata[C.TARGETED_PART] == "left_arm"
+
+
+def test_apply_delta_created_effect_skips_current_tick_and_serializes_without_fresh_marker(
+    humanoid_fighter: FighterState,
+):
+    fighter = humanoid_fighter
+
+    fighter.apply_delta({C.EFFECTS_ADDED: [{C.NAME: "stunned", C.VALUE: 1, C.EFFECT_TTL: 1}]})
+
+    assert len(fighter.debuffs) == 1
+    assert fighter.debuffs[0].ttl == 1
+    assert fighter.debuffs[0].fresh_turns == 1
+    state_json = fighter.to_json()
+    assert "fresh_turns" not in state_json[C.DEBUFFS][0]
+
+    fighter.apply_effects()
+
+    assert len(fighter.debuffs) == 1
+    assert fighter.debuffs[0].ttl == 1
+    assert fighter.debuffs[0].fresh_turns == 0
+
+    fighter.apply_effects()
+
+    assert fighter.debuffs == []
+
+
+def test_wound_created_burning_skips_current_tick(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "torso"
+    initial_heat = fighter.heat
+    fighter.apply_damage_to_part(part_name, 10, C.DamageType.FIRE)
+    burning = next(eff for eff in fighter.debuffs if eff.name == C.EFFECT_BURNING)
+    assert burning.fresh_turns == 1
+    hp_after_wound = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+
+    fighter.apply_effects()
+
+    assert fighter.heat == initial_heat
+    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) == hp_after_wound
+    assert burning.ttl == 3
+    assert burning.fresh_turns == 0
+
+    fighter.apply_effects()
+
+    assert fighter.heat == initial_heat + int(burning.magnitude * 5)
+    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) < hp_after_wound
+    assert burning.ttl == 2
+
+
+def test_existing_targeted_burning_remains_eligible_when_part_takes_fire_damage(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "torso"
+    existing = Effect(
+        name=C.EFFECT_BURNING,
+        magnitude=2.0,
+        ttl=2,
+        on_apply="Torso is already burning.",
+        metadata={C.TARGETED_PART: part_name},
+    )
+    fighter.debuffs.append(existing)
+    initial_heat = fighter.heat
+    hp_before = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+
+    fighter.apply_damage_to_part(part_name, 5, C.DamageType.FIRE)
+    assert len([eff for eff in fighter.debuffs if eff.name == C.EFFECT_BURNING]) == 1
+    hp_after_wound = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    assert hp_after_wound == hp_before - 5
+
+    fighter.apply_effects()
+
+    assert existing.ttl == 1
+    assert fighter.heat == initial_heat + int(existing.magnitude * 5)
+    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) == hp_after_wound - int(existing.magnitude)
+
+
+def test_wound_created_bleeding_skips_current_tick(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "left_leg"
+    fighter.parts[part_name].bleed_rate = 2
+    initial_pain = fighter.pain
+    initial_exhaustion = fighter.exhaustion
+
+    fighter.apply_damage_to_part(part_name, 10, C.DamageType.PIERCING)
+    bleeding = next(eff for eff in fighter.debuffs if eff.name == C.EFFECT_BLEEDING)
+    assert bleeding.fresh_turns == 1
+    pain_after_wound = fighter.pain
+
+    fighter.apply_effects()
+
+    assert fighter.pain == pain_after_wound
+    assert fighter.exhaustion == initial_exhaustion
+    assert bleeding.ttl == 5
+    assert bleeding.fresh_turns == 0
+
+    fighter.apply_effects()
+
+    assert fighter.pain == pain_after_wound + int(bleeding.magnitude)
+    assert fighter.exhaustion == initial_exhaustion + int(bleeding.magnitude * 0.5)
+    assert fighter.pain > initial_pain
+    assert bleeding.ttl == 4
+
+
+def test_existing_targeted_bleeding_remains_eligible_when_part_takes_piercing_damage(
+    humanoid_fighter: FighterState,
+):
+    fighter = humanoid_fighter
+    part_name = "left_leg"
+    fighter.parts[part_name].bleed_rate = 2
+    existing = Effect(
+        name=C.EFFECT_BLEEDING,
+        magnitude=3.0,
+        ttl=2,
+        on_apply="Leg is already bleeding.",
+        metadata={C.TARGETED_PART: part_name},
+    )
+    fighter.debuffs.append(existing)
+    initial_exhaustion = fighter.exhaustion
+
+    fighter.apply_damage_to_part(part_name, 5, C.DamageType.PIERCING)
+    assert len([eff for eff in fighter.debuffs if eff.name == C.EFFECT_BLEEDING]) == 1
+    pain_after_wound = fighter.pain
+
+    fighter.apply_effects()
+
+    assert existing.ttl == 1
+    assert fighter.pain == pain_after_wound + int(existing.magnitude)
+    assert fighter.exhaustion == initial_exhaustion + int(existing.magnitude * 0.5)
 
 
 def test_apply_effects_removes_effect_with_invalid_ttl(humanoid_fighter: FighterState):

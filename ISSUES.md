@@ -82,14 +82,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-006: Newly created effects tick and expire before the next turn can observe them
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Effect Creation Turn Boundary
 - Source: codebase review
 - Area: Gameplay logic, effect timing
 - Evidence: `_single_fight()` applies deltas, then immediately calls `apply_effects()` in `src/llm_fight/simulation.py:171`; `Effect.tick()` removes `ttl=1` effects in `src/llm_fight/state.py:395`.
 - Impact: A `ttl=1` stun/blind/burn/bleed created this turn disappears before the next fighter or judge prompt sees it. Burning and bleeding can also add same-turn consequences not described by P2.
 - Suggested fix: Define TTL semantics explicitly. Tick pre-existing effects at turn start, or mark created-turn effects and skip their first tick.
-- Tests: P2 adds `stunned` with `ttl=1` on turn 1; assert turn 2 fighter/judge context still includes it. Add burning coverage for next-tick versus same-turn damage.
+- Tests: P2 adds `stunned` with `ttl=1` on turn 1; turn 2 fighter/judge context still includes it before the first eligible tick, then it expires after that tick. Burning coverage verifies wound-created burn skips same-turn mechanics while pre-existing targeted burn still ticks. Verified with `uv run pytest -q tests/test_state.py tests/test_simulation.py tests/engine/test_fighter.py tests/engine/test_judge.py` and `uv run pytest -q`.
 
 ### ISSUE-007: Damaging severed/destroyed parts bypasses status invariants
 

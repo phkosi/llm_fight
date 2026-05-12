@@ -191,8 +191,10 @@ The installable package lives under `src/llm_fight/`. The core flow is:
 3. Python rolls against those probabilities.
 4. Judge Phase 2 receives attempts, the full P1 result, successful rolls, combat log, valid body parts, and fighter state.
 5. Judge Phase 2 deltas must mark each mechanical consequence with the source fighter whose valid action succeeded.
-6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, then ticks effects and resolves the winner from resulting state.
+6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, then ticks eligible effects and resolves the winner from resulting state.
 7. Judge-only `fight_end` or `winner` values are ignored unless Python state becomes terminal.
+
+Effects created by a turn delta or wound side effect are fresh for that turn: they are shown in the resulting state and in the next turn's fighter/judge context before their first eligible tick. Pre-existing effects still tick once per turn.
 
 For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
 

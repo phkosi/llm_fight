@@ -57,7 +57,7 @@ src/llm_fight/
 5. Judge Phase 2 receives attempts, full P1 result, `successful_rolls`, combat log context, valid body parts, and current fighter states.
 6. Phase 2 returns strict JSON containing narration, delta, `fight_end`, and `winner`. Every state-changing delta entry must include `source: "A" | "B"` for the fighter whose valid current action succeeded.
 7. Python drops delta consequences with missing, unknown, invalid, or failed sources before state mutation. Authorized consequences may target either fighter, including self-costs.
-8. Python applies authorized deltas, normalizes body-part and damage aliases, ticks effects, re-checks status invariants, and resolves winner consistency from final state. Judge-only `fight_end` or `winner` values are ignored unless the resulting Python state is terminal.
+8. Python applies authorized deltas, normalizes body-part and damage aliases, ticks eligible effects, re-checks status invariants, and resolves winner consistency from final state. Judge-only `fight_end` or `winner` values are ignored unless the resulting Python state is terminal.
 
 ## 5. Anatomy And State
 
@@ -74,6 +74,8 @@ Critical invariants:
 - Unknown targeted parts are rejected before damage is applied.
 - Common natural-language aliases such as `chest` and `left arm` normalize to canonical body parts.
 - Burning and bleeding ticks can cause KO/death after effect application.
+- Effects created by a delta or wound side effect are visible in state and in the next turn's fighter/judge context before their first eligible tick.
+- Effects that existed before the current delta remain eligible and tick once per turn.
 - Destroyed vital parts and pain thresholds update status immediately.
 
 ## 6. Ollama I/O

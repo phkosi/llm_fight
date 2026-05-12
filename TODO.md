@@ -180,19 +180,27 @@ Required tests:
 
 Addresses: ISSUE-006
 
-- [ ] Define effect timing so effects created during turn N survive into the next fighter and judge prompt before their first tick. Newly created burn, bleed, stun, or similar effects should not apply mechanics or expire in the same post-delta tick that created them.
+- [x] Define effect timing so effects created during turn N survive into the next fighter and judge prompt before their first tick. Newly created burn, bleed, stun, or similar effects should not apply mechanics or expire in the same post-delta tick that created them.
 
 Acceptance goals:
 
+- Add an internal freshness/eligibility mechanism so effects created by `apply_delta()` or wound side effects are skipped by the current turn's effect tick exactly once.
+- Pre-existing effects must remain eligible and tick once during the turn. Directly constructed/appended effects in tests default to pre-existing/eligible unless explicitly marked fresh.
+- Any internal freshness marker must not leak into fighter/judge prompt payloads unless intentionally documented.
+- Do not satisfy this task by moving all effect ticks before prompt construction. The first eligible tick for a newly created effect must occur only after it has appeared in the next fighter prompt and next judge input.
 - Effects created by Phase 2 deltas or wound side effects are present in `state_after` and in turn N+1 prompt payloads.
 - A `ttl=1` effect created on turn N is observable on turn N+1, then expires after its first eligible tick.
 - Burning or bleeding created by same-turn damage does not add extra same-turn damage or stat loss beyond the authorized Phase 2 delta.
 - Pre-existing effects continue ticking once per turn.
+- If a wound finds an existing targeted burning/bleeding effect and does not create a new one, that existing effect remains pre-existing and eligible to tick this turn. Only effects actually created during the current delta/wound application are skipped.
+- Update README and `docs/Design_doc.md` to describe the timing contract: deltas create effects, fresh effects are visible in the next prompt, and only eligible/pre-existing effects tick.
 
 Required tests:
 
-- Phase 2 adds `stunned` with `ttl=1`; next-turn fighter and judge inputs include it.
+- Phase 2 adds `stunned` with `ttl=1`; turn N `state_after` contains it with TTL unchanged, and next-turn fighter plus judge Phase 1/Phase 2 inputs include it before it ticks.
+- The effect expires only after its first eligible tick.
 - Fire wound creates burning; immediate same-turn effect tick does not add burn damage, but the next eligible tick does.
+- Pre-existing burn/bleed still ticks once in the same turn, including when same-turn damage hits a part that already has the matching targeted effect.
 - Existing direct `apply_effects()` tests distinguish pre-existing effects from newly created effects.
 
 ## Status Invariants And Monotonic Status Changes
