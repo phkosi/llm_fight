@@ -7,6 +7,7 @@ from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt f
 from llm_fight.engine import constants as C
 from llm_fight.state import FighterState, Effect  # For creating mock states
 from llm_fight.anatomy import BodyPart, TissueLayer
+from llm_fight.utils.token_counter import PromptBudgetError
 
 
 # Tests for describe_pain
@@ -128,6 +129,7 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
     config_values = {
         (C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, 5): turn_window_input,  # fallback is 5 if not passed
         (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, 256): 150,
+        (C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int, 150): 32768,
         (C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, 1): 1,
     }
 
@@ -160,9 +162,9 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
 
         from llm_fight.utils.token_counter import compute_completion_tokens
 
-        expected_max = compute_completion_tokens(call_args, 150, 150)
+        expected_max = compute_completion_tokens(call_args, 150, 32768)
         assert call_kwargs["max_tokens"] == expected_max
-        assert call_kwargs["num_ctx"] == 150
+        assert call_kwargs["num_ctx"] == 32768
         assert call_kwargs["best_of"] == 1
 
         assert len(call_args) == 2
@@ -211,6 +213,8 @@ async def test_get_fighter_attempt_retries_empty_responses(mock_fighter_state, m
             return 8
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 100
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -267,6 +271,67 @@ async def test_get_fighter_attempt_uses_fixed_ollama_context(mock_fighter_state,
 
 
 @pytest.mark.asyncio
+async def test_get_fighter_attempt_budget_error_does_not_call_chat(mock_fighter_state, mock_opponent_state):
+    mock_config_get = MagicMock()
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 80
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
+        pytest.raises(PromptBudgetError) as exc_info,
+    ):
+        await get_fighter_attempt(
+            fighter=mock_fighter_state,
+            opponent=mock_opponent_state,
+            combat_log="Turn 1: a very long history that should be removed but cannot save the required prompt.",
+            turn_window=1,
+        )
+
+    assert exc_info.value.phase == C.PROMPT_PHASE_FIGHTER_ACTION
+    mock_chat_func.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_fighter_attempt_trims_long_log_newest_first(mock_fighter_state, mock_opponent_state):
+    log = CombatLog()
+    for turn in range(1, 41):
+        log.append(CombatTurn(turn=turn, judge_p2={C.NARRATION: f"event {turn} with extra detail " * 8}))
+
+    mock_config_get = MagicMock()
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 520
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=["I advance."]) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
+    ):
+        await get_fighter_attempt(mock_fighter_state, mock_opponent_state, combat_log=log, turn_window=40)
+
+    prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
+    assert "Turn 40:" in prompt_text
+    assert "Turn 1:" not in prompt_text
+
+
+@pytest.mark.asyncio
 async def test_get_fighter_attempt_uses_fallback_after_empty_retries(mock_fighter_state, mock_opponent_state):
     mock_config_get = MagicMock()
 
@@ -275,6 +340,8 @@ async def test_get_fighter_attempt_uses_fallback_after_empty_retries(mock_fighte
             return 1
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 100
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -309,6 +376,8 @@ async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_
             return default_config_turn_window
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 100
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -390,6 +459,7 @@ async def test_get_fighter_attempt_with_combatlog_summary(mock_fighter_state, mo
     config_values = {
         (C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, 5): 2,
         (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, 256): 64,
+        (C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int, 64): 32768,
         (C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, 1): 1,
     }
 
@@ -430,6 +500,8 @@ async def test_get_fighter_attempt_turn_window_zero(mock_fighter_state, mock_opp
     def config_get_side_effect(section, key, cast_type, fallback=None):
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -482,6 +554,8 @@ async def test_rejected_effect_text_absent_from_fighter_prompt(mock_opponent_sta
     def config_get_side_effect(section, key, cast_type, fallback=None):
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -521,6 +595,8 @@ async def test_fighter_prompt_includes_custom_target_parts():
     def config_get_side_effect(section, key, cast_type, fallback=None):
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -564,6 +640,8 @@ async def test_fighter_prompt_includes_dynamic_effect_details(mock_opponent_stat
     def config_get_side_effect(section, key, cast_type, fallback=None):
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback

@@ -6,7 +6,7 @@ from typing import Union, Optional, Callable, Any
 
 from ..state import FighterState  # Relative import from parent package
 from ..agents import chat, chat_with_metadata
-from ..utils.token_counter import compute_completion_tokens
+from ..utils.token_counter import budget_messages_with_trimmed_log
 from .. import config as config_mod
 from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from . import constants as C  # Added import
@@ -154,32 +154,6 @@ async def get_fighter_attempt(
     sentence_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_SENTENCE_LIMIT, int, fallback=1)
     word_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_WORD_LIMIT, int, fallback=30)
 
-    system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
-        name=fighter.id,
-        class_=fighter.class_,
-        environment=fighter.environment,
-        pain_desc=pain_desc,
-        exhaustion_desc=exhaustion_desc,
-        heat_desc=heat_desc,
-        effects_list=effects_list,
-        own_target_parts=_valid_target_parts_text(fighter),
-        opponent_target_parts=_valid_target_parts_text(opponent),
-        temporary_effect_instruction=_temporary_effect_instruction(effects_list),
-        turn_window=turn_window,
-        recent_log=current_recent_log,
-        loadout=loadout,
-        sentence_limit=sentence_limit,
-        word_limit=word_limit,
-    )
-
-    system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
-    # The user message might be simplified or removed if all context is in the system prompt
-    # For now, let's keep a minimal user prompt that could signal the start of their turn to formulate an action.
-    user_prompt_content = f"It's your turn to act, {fighter.id}. Opponent {opponent.id} is visible. What do you do?"
-
-    user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
-
-    messages = [system, user]
     generation_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
     context_limit = config_mod.CONFIG.get(
         C.CONFIG_GENERAL,
@@ -191,9 +165,30 @@ async def get_fighter_attempt(
     max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
     empty_action_retries = min(max_retries, 1)
 
-    for attempt in range(empty_action_retries + 1):
-        active_messages = messages
-        if attempt:
+    def build_messages(recent_log: str, retry: bool = False) -> list[dict[str, str]]:
+        system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
+            name=fighter.id,
+            class_=fighter.class_,
+            environment=fighter.environment,
+            pain_desc=pain_desc,
+            exhaustion_desc=exhaustion_desc,
+            heat_desc=heat_desc,
+            effects_list=effects_list,
+            own_target_parts=_valid_target_parts_text(fighter),
+            opponent_target_parts=_valid_target_parts_text(opponent),
+            temporary_effect_instruction=_temporary_effect_instruction(effects_list),
+            turn_window=turn_window,
+            recent_log=recent_log,
+            loadout=loadout,
+            sentence_limit=sentence_limit,
+            word_limit=word_limit,
+        )
+
+        system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
+        user_prompt_content = f"It's your turn to act, {fighter.id}. Opponent {opponent.id} is visible. What do you do?"
+        user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
+        messages = [system, user]
+        if retry:
             retry_user = {
                 C.AGENT_ROLE: C.AGENT_USER,
                 C.AGENT_CONTENT: (
@@ -201,8 +196,19 @@ async def get_fighter_attempt(
                     "Raw action text only."
                 ),
             }
-            active_messages = [system, user, retry_user]
-        active_max_tokens = compute_completion_tokens(active_messages, generation_limit, context_limit)
+            messages.append(retry_user)
+        return messages
+
+    for attempt in range(empty_action_retries + 1):
+        active_messages, active_max_tokens, _ = budget_messages_with_trimmed_log(
+            lambda recent_log, retry=bool(attempt): build_messages(recent_log, retry=retry),
+            current_recent_log,
+            requested_max_tokens=generation_limit,
+            context_limit=context_limit,
+            min_completion_tokens=C.PROMPT_MIN_COMPLETION_FIGHTER,
+            phase=C.PROMPT_PHASE_FIGHTER_ACTION,
+            log_window_setting=C.CONFIG_FIGHTER_LOG_WINDOW,
+        )
 
         if on_metadata is None:
             texts = await chat(

@@ -104,14 +104,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-008: Oversized prompts degrade into 1-token generations
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Prompt Budget Guardrails And Context Trimming
 - Source: codebase review
 - Area: LLM transport, reliability
-- Evidence: `compute_completion_tokens()` clamps over-budget prompts to at least `1` in `src/llm_fight/utils/token_counter.py:57`; default `judge_log_window` is `9999`.
+- Evidence: `compute_completion_tokens()` clamped over-budget prompts to at least `1`; default `judge_log_window` is `9999`. Resolved with strict `PromptBudgetError`, phase-specific completion reserves, deterministic newest-first combat-log trimming, P2 repair budget recomputation, and generated-profile budget fallback safety.
 - Impact: Long fights can silently exceed context, then ask the model for a 1-token JSON completion. This causes empty/truncated JSON, retry storms, and no-op P2 turns instead of a clear budget error.
 - Suggested fix: Reserve minimum completion budgets per call type, trim/summarize logs before calling the model, and raise a typed prompt-budget error when prompt tokens exceed `num_ctx - reserved_completion`.
-- Tests: Over-budget fighter/judge prompts should not call `chat()`. Long combat logs should be trimmed while preserving a valid completion budget.
+- Tests: Added token helper tests, fighter over-budget/no-chat and newest-first trim tests, Judge P1/P2 trim tests, P2 repair budget propagation/no-second-chat coverage, CLI actionable error coverage, generated-profile budget fallback coverage, and full-suite verification.
 
 ### ISSUE-009: Global RNG makes concurrent batch runs non-reproducible
 

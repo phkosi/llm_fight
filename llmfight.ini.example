@@ -22,6 +22,9 @@ fighter_B = B
 fighter_creation_mode = configured
 
 [CONTEXT]
+# Recent combat logs are trimmed oldest-first when needed so each prompt keeps
+# a phase-specific completion reserve. If required current state cannot fit,
+# the CLI fails before contacting the model instead of sending max_tokens=1.
 fighter_log_window = 10
 judge_log_window = 9999
 

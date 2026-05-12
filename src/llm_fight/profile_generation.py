@@ -15,7 +15,7 @@ from .engine.logger import logger
 from .profiles import FighterProfile, FighterProfileError, build_fighter_profile
 from .rng import choice as global_choice
 from .utils.json_parser import parse_json_from_text
-from .utils.token_counter import compute_completion_tokens
+from .utils.token_counter import PromptBudgetError, compute_completion_tokens
 from .validation import FighterProfileSchema, guarded_call
 
 PROFILE_GENERATOR_SYSTEM_PROMPT = """
@@ -130,7 +130,17 @@ async def generate_fighter_profile(
     ]
     max_tokens_limit = cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int, fallback=2048)
     context_limit = cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int, fallback=max_tokens_limit)
-    max_tokens = compute_completion_tokens(messages, max_tokens_limit, context_limit)
+    try:
+        max_tokens = compute_completion_tokens(
+            messages,
+            max_tokens_limit,
+            context_limit,
+            min_completion_tokens=C.PROMPT_MIN_COMPLETION_PROFILE_GENERATION,
+            phase=C.PROMPT_PHASE_PROFILE_GENERATION,
+        )
+    except PromptBudgetError as exc:
+        logger.warning("Profile generation for fighter %s exceeded prompt budget: %s", fighter_id, exc)
+        raise ProfileGenerationError(C.PROFILE_GENERATION_ERROR_FAILED) from exc
     transport_retries = cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
     profile_retries = 1
 

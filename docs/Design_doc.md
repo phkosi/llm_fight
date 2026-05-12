@@ -129,6 +129,14 @@ concurrent_runs = 1
 max_turns = 2
 ```
 
+Prompt budgeting is enforced before transport. Fighter actions, Judge Phase 1,
+Judge Phase 2, Judge Phase 2 repair, and generated profile calls reserve
+phase-specific completion tokens. Combat-log context is the only prompt content
+trimmed automatically: older lines are dropped first, while current state,
+attempts, rolls, valid target parts, and active-effect reminders remain
+authoritative. If required non-log content cannot fit in `ollama_num_ctx`, the
+run surfaces a prompt-budget error rather than sending a one-token request.
+
 Batch runs derive an isolated per-fight RNG stream from `[SIMULATION].seed`
 and the run index, so concurrent scheduling or model latency does not change a
 run's dice rolls or random effect-layer choices. Batch CSV output stays ordered

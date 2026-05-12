@@ -367,7 +367,7 @@ Required tests:
 
 Addresses: ISSUE-008
 
-- [ ] Prevent oversized fighter and judge prompts from degrading into 1-token generations by adding phase-aware prompt budgets, deterministic combat-log trimming, and clear pre-transport failures when the required prompt cannot fit.
+- [x] Prevent oversized fighter and judge prompts from degrading into 1-token generations by adding phase-aware prompt budgets, deterministic combat-log trimming, and clear pre-transport failures when the required prompt cannot fit.
 
 Acceptance goals:
 
@@ -376,6 +376,11 @@ Acceptance goals:
 - Long `recent_combat_log` payloads are reduced deterministically while preserving current fighter state, attempts, rolls, valid target parts, and current effect reminders.
 - Prompt-budget failures surface as clear CLI errors, not retry storms or silent no-op turns.
 - Existing normal-size prompts keep their current token caps.
+- Judge Phase 2 repair recomputes its own prompt budget after adding repair-only fields instead of reusing the original Phase 2 budget.
+- Fighter profile generation uses the same strict budget policy, even though it has no combat log to trim.
+- All production prompt paths stop using the old clamp-to-one behavior or document why a non-production compatibility helper remains.
+- Prompt-budget errors never include raw prompt/message content.
+- Judge Phase 1 intentionally uses `fighter_log_window` because it evaluates current attempts with the same short context available to fighters; Judge Phase 2 continues to use `judge_log_window` and trims deterministically when needed.
 
 Required tests:
 
@@ -383,6 +388,9 @@ Required tests:
 - Fighter, Judge Phase 1, Judge Phase 2, and repair paths do not call `chat()` when required non-log content alone exceeds budget.
 - Long combat logs are trimmed and still leave at least the phase minimum completion budget.
 - CLI converts the typed budget error into an actionable message mentioning context, prompt size, and log-window settings.
+- Profile generation budget errors are sanitized/fallback-safe and do not use a one-token completion.
+
+Verification: `uv run pytest -q tests/engine/test_judge.py tests/test_simulation_failures.py tests/test_cli.py` -> 47 passed, 1 warning; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 357 passed, 6 skipped, 1 warning; `git diff --check`.
 
 ## Batch Config Validation And Failure Exit Semantics
 

@@ -22,6 +22,7 @@ from .profile_generation import (
     generate_fighter_profile,
     profile_generation_metadata,
 )
+from .utils.token_counter import PromptBudgetError
 
 
 @dataclass(frozen=True)
@@ -672,6 +673,8 @@ async def run_batch(
                     fight_rng=random.Random(_derive_fight_seed(batch_seed, run_index)),
                 )
                 return run_index, result
+            except PromptBudgetError:
+                raise
             except Exception:
                 logger.exception("_single_fight failed")
                 return run_index, {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"}
@@ -685,14 +688,20 @@ async def run_batch(
         tasks = [asyncio.create_task(sem_fight(run_index)) for run_index in range(runs)]
         buffered_results: dict[int, dict[str, str]] = {}
         next_to_write = 0
-        for idx, coro in enumerate(asyncio.as_completed(tasks), start=1):
-            run_index, result = await coro
-            buffered_results[run_index] = result
-            while next_to_write in buffered_results:
-                writer.writerow(buffered_results.pop(next_to_write))
-                fp.flush()
-                next_to_write += 1
-            if progress:
-                progress(idx, runs)
+        try:
+            for idx, coro in enumerate(asyncio.as_completed(tasks), start=1):
+                run_index, result = await coro
+                buffered_results[run_index] = result
+                while next_to_write in buffered_results:
+                    writer.writerow(buffered_results.pop(next_to_write))
+                    fp.flush()
+                    next_to_write += 1
+                if progress:
+                    progress(idx, runs)
+        except PromptBudgetError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     return csv_path

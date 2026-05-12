@@ -8,7 +8,7 @@ from jsonschema import ValidationError, validate
 from .utils.json_parser import parse_json_from_text
 
 from .agents import chat, chat_with_metadata
-from .utils.token_counter import compute_completion_tokens
+from .utils.token_counter import budget_messages_with_trimmed_log
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from . import config as config_mod
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
@@ -166,20 +166,30 @@ async def judge_phase1(
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
     fighter_a_summary = _fighter_summary(state.get(C.FIGHTER_A, {}))
     fighter_b_summary = _fighter_summary(state.get(C.FIGHTER_B, {}))
-    user_content = {
-        f"fighter_{C.FIGHTER_A}_state_summary": fighter_a_summary,
-        f"fighter_{C.FIGHTER_B}_state_summary": fighter_b_summary,
-        f"{C.ATTEMPT}_{C.FIGHTER_A}": attemptA,
-        f"{C.ATTEMPT}_{C.FIGHTER_B}": attemptB,
-        "recent_combat_log": recent_log,
-        "current_state_reminder": _current_state_reminder(fighter_a_summary, fighter_b_summary),
-    }
-    user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
-
-    messages = [system, user]
     max_tok_j, best_j, max_retries = _judge_settings()
     context_limit = _ollama_num_ctx(max_tok_j)
-    max_tok = compute_completion_tokens(messages, max_tok_j, context_limit)
+
+    def build_messages(candidate_recent_log: str) -> list[dict[str, str]]:
+        user_content = {
+            f"fighter_{C.FIGHTER_A}_state_summary": fighter_a_summary,
+            f"fighter_{C.FIGHTER_B}_state_summary": fighter_b_summary,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}": attemptA,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}": attemptB,
+            "recent_combat_log": candidate_recent_log,
+            "current_state_reminder": _current_state_reminder(fighter_a_summary, fighter_b_summary),
+        }
+        user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_content)}
+        return [system, user]
+
+    messages, max_tok, _ = budget_messages_with_trimmed_log(
+        build_messages,
+        recent_log,
+        requested_max_tokens=max_tok_j,
+        context_limit=context_limit,
+        min_completion_tokens=C.PROMPT_MIN_COMPLETION_JUDGE_P1,
+        phase=C.PROMPT_PHASE_JUDGE_P1,
+        log_window_setting=C.CONFIG_FIGHTER_LOG_WINDOW,
+    )
 
     async def _call():
         if on_metadata is None:
@@ -230,19 +240,34 @@ async def judge_phase2(
     """
     system_prompt_content = JUDGE_P2_SYSTEM_PROMPT
     system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
-    # user_content already prepared and passed as p2_input_state, merge with rolls
-    user_payload = {**p2_input_state, C.SUCCESSFUL_ROLLS: rolls}
-    user_payload["current_state_reminder"] = _current_state_reminder(
-        p2_input_state.get("fighter_A", {}),
-        p2_input_state.get("fighter_B", {}),
-    )
-    user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
-
-    messages = [system, user]
     max_tok_j, best_j, max_retries = _judge_settings()
     parse_retries = min(max_retries, 2)
     context_limit = _ollama_num_ctx(max_tok_j)
-    max_tok = compute_completion_tokens(messages, max_tok_j, context_limit)
+    original_recent_log = str(p2_input_state.get("recent_combat_log", ""))
+
+    def build_messages(candidate_recent_log: str, *, repair: bool = False) -> list[dict[str, str]]:
+        user_payload = {**p2_input_state, "recent_combat_log": candidate_recent_log, C.SUCCESSFUL_ROLLS: rolls}
+        user_payload["current_state_reminder"] = _current_state_reminder(
+            p2_input_state.get("fighter_A", {}),
+            p2_input_state.get("fighter_B", {}),
+        )
+        if repair:
+            user_payload["strict_output_reminder"] = (
+                "Return one compact JSON object only with keys narration, delta, fight_end, and winner. "
+                "Use no markdown, no prose outside JSON, and no reasoning text."
+            )
+        user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
+        return [system, user]
+
+    messages, max_tok, _ = budget_messages_with_trimmed_log(
+        build_messages,
+        original_recent_log,
+        requested_max_tokens=max_tok_j,
+        context_limit=context_limit,
+        min_completion_tokens=C.PROMPT_MIN_COMPLETION_JUDGE_P2,
+        phase=C.PROMPT_PHASE_JUDGE_P2,
+        log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
+    )
 
     async def _call_with_schema() -> dict[str, Any]:
         if on_metadata is None:
@@ -270,21 +295,19 @@ async def judge_phase2(
         return _parse_first_json_response(response_texts)
 
     async def _call_without_schema() -> dict[str, Any]:
-        repair_payload = {
-            **user_payload,
-            "strict_output_reminder": (
-                "Return one compact JSON object only with keys narration, delta, fight_end, and winner. "
-                "Use no markdown, no prose outside JSON, and no reasoning text."
-            ),
-        }
-        repair_messages = [
-            system,
-            {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(repair_payload)},
-        ]
+        repair_messages, repair_max_tok, _ = budget_messages_with_trimmed_log(
+            lambda candidate_recent_log: build_messages(candidate_recent_log, repair=True),
+            original_recent_log,
+            requested_max_tokens=max_tok_j,
+            context_limit=context_limit,
+            min_completion_tokens=C.PROMPT_MIN_COMPLETION_JUDGE_P2_REPAIR,
+            phase=C.PROMPT_PHASE_JUDGE_P2_REPAIR,
+            log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
+        )
         if on_metadata is None:
             response_texts = await chat(
                 repair_messages,
-                max_tokens=max_tok,
+                max_tokens=repair_max_tok,
                 num_ctx=context_limit,
                 best_of=max(1, best_j),
                 retries=max_retries,
@@ -292,7 +315,7 @@ async def judge_phase2(
         else:
             results = await chat_with_metadata(
                 repair_messages,
-                max_tokens=max_tok,
+                max_tokens=repair_max_tok,
                 num_ctx=context_limit,
                 best_of=max(1, best_j),
                 retries=max_retries,

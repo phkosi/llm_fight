@@ -271,6 +271,18 @@ OUTCOME = "outcome"
 IN_PROGRESS = "in_progress"
 DRAW = "draw"
 
+# Prompt budget phases and minimum completion reserves
+PROMPT_PHASE_FIGHTER_ACTION = "fighter action"
+PROMPT_PHASE_JUDGE_P1 = "judge phase 1"
+PROMPT_PHASE_JUDGE_P2 = "judge phase 2"
+PROMPT_PHASE_JUDGE_P2_REPAIR = "judge phase 2 repair"
+PROMPT_PHASE_PROFILE_GENERATION = "fighter profile generation"
+PROMPT_MIN_COMPLETION_FIGHTER = 64
+PROMPT_MIN_COMPLETION_JUDGE_P1 = 256
+PROMPT_MIN_COMPLETION_JUDGE_P2 = 512
+PROMPT_MIN_COMPLETION_JUDGE_P2_REPAIR = 512
+PROMPT_MIN_COMPLETION_PROFILE_GENERATION = 512
+
 # Play events
 FIGHT_EVENT_PROFILE_GENERATION_START = "profile_generation_start"
 FIGHT_EVENT_PROFILE_GENERATION_END = "profile_generation_end"

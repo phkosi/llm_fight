@@ -9,6 +9,7 @@ from logging import CRITICAL
 from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.simulation import FightEvent
+from llm_fight.utils.token_counter import PromptBudgetError
 
 
 def _write_batch_csv(path, rows):
@@ -516,6 +517,28 @@ def test_cli_simulate_continue_on_error_exits_zero_with_warning(tmp_path):
     assert "1 error row(s)" in result.output
 
 
+def test_cli_simulate_prompt_budget_error_is_actionable():
+    runner = CliRunner()
+    error = PromptBudgetError(
+        phase=C.PROMPT_PHASE_FIGHTER_ACTION,
+        prompt_tokens=700,
+        context_limit=600,
+        requested_max_tokens=64,
+        reserved_completion=64,
+        log_window_setting=C.CONFIG_FIGHTER_LOG_WINDOW,
+    )
+
+    with (
+        patch("llm_fight.simulation.run_batch", new=AsyncMock(side_effect=error)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["simulate"])
+
+    assert result.exit_code != 0
+    assert "Prompt budget exceeded for fighter action" in result.output
+    assert C.CONFIG_FIGHTER_LOG_WINDOW in result.output
+
+
 def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "bad_batch.ini"
@@ -575,3 +598,27 @@ def test_cli_llm_validation_failure_is_actionable():
     assert result.exit_code != 0
     assert "LLM output could not be parsed" in result.output
     assert "max_tokens_judge" in result.output
+
+
+def test_cli_prompt_budget_error_is_actionable():
+    runner = CliRunner()
+    error = PromptBudgetError(
+        phase=C.PROMPT_PHASE_JUDGE_P2,
+        prompt_tokens=900,
+        context_limit=800,
+        requested_max_tokens=512,
+        reserved_completion=512,
+        log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
+    )
+
+    with (
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=error)),
+    ):
+        result = runner.invoke(app, ["play", "--simple-output"])
+
+    assert result.exit_code != 0
+    assert "Prompt budget exceeded for judge phase 2" in result.output
+    assert "prompt uses about 900 tokens" in result.output
+    assert "context limit is 800" in result.output
+    assert C.CONFIG_JUDGE_LOG_WINDOW in result.output

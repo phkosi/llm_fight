@@ -7,6 +7,7 @@ from llm_fight.judge import judge_phase1, judge_phase2
 from llm_fight.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
 from llm_fight.engine import constants as C
 from llm_fight.state import FighterState
+from llm_fight.utils.token_counter import PromptBudgetError
 
 # Mock states and attempts for testing
 MOCK_FIGHTER_A_STATE = {C.STATUS: "conscious", C.PAIN: 10}
@@ -193,6 +194,131 @@ async def test_judge_phase2_retries_empty_structured_response_as_plain_json(mock
     assert mock_chat.call_count == 2
     assert mock_chat.call_args_list[0].kwargs["schema"] == JudgeP2Schema
     assert "schema" not in mock_chat.call_args_list[1].kwargs
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase1_trims_long_recent_log_newest_first(mock_chat, mock_guarded_call):
+    mock_chat.return_value = [
+        json.dumps(
+            {
+                "judgement_text": "ok",
+                "attempt_A_valid": True,
+                "attempt_A_prob": "0.5",
+                "attempt_B_valid": True,
+                "attempt_B_prob": "0.5",
+            }
+        )
+    ]
+
+    async def mock_gc_logic(call_func, schema, max_retries=None):
+        return await call_func()
+
+    mock_guarded_call.side_effect = mock_gc_logic
+    long_log = "\n".join(f"Turn {idx}: {'old detail ' * 20}" for idx in range(1, 80))
+
+    with (
+        patch("llm_fight.judge._judge_settings", return_value=(512, 1, 0)),
+        patch("llm_fight.judge._ollama_num_ctx", return_value=1100),
+    ):
+        await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B, recent_log=long_log)
+
+    user_payload = json.loads(mock_chat.call_args[0][0][1][C.AGENT_CONTENT])
+    assert "Turn 79:" in user_payload["recent_combat_log"]
+    assert "Turn 1:" not in user_payload["recent_combat_log"]
+    assert user_payload[f"{C.ATTEMPT}_{C.FIGHTER_A}"] == MOCK_ATTEMPT_A
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.guarded_call")
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_trims_long_recent_log_newest_first(mock_chat, mock_guarded_call):
+    mock_chat.return_value = [json.dumps({C.NARRATION: "done", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None})]
+
+    async def mock_gc_logic(call_func, schema, max_retries=None):
+        return await call_func()
+
+    mock_guarded_call.side_effect = mock_gc_logic
+    p2_input = {
+        **MOCK_P2_INPUT_STATE,
+        "recent_combat_log": "\n".join(f"Turn {idx}: {'old detail ' * 20}" for idx in range(1, 100)),
+    }
+
+    with (
+        patch("llm_fight.judge._judge_settings", return_value=(512, 1, 0)),
+        patch("llm_fight.judge._ollama_num_ctx", return_value=1900),
+    ):
+        await judge_phase2(p2_input, MOCK_ROLLS)
+
+    user_payload = json.loads(mock_chat.call_args[0][0][1][C.AGENT_CONTENT])
+    assert "Turn 99:" in user_payload["recent_combat_log"]
+    assert "Turn 1:" not in user_payload["recent_combat_log"]
+    assert user_payload[C.SUCCESSFUL_ROLLS] == MOCK_ROLLS
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_repair_budget_error_does_not_call_second_chat(mock_chat):
+    mock_chat.return_value = [""]
+    budget_error = PromptBudgetError(
+        phase=C.PROMPT_PHASE_JUDGE_P2_REPAIR,
+        prompt_tokens=1000,
+        context_limit=900,
+        requested_max_tokens=512,
+        reserved_completion=512,
+        log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
+    )
+
+    with patch(
+        "llm_fight.judge.budget_messages_with_trimmed_log",
+        side_effect=[([{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "{}"}], 512, ""), budget_error],
+    ):
+        with pytest.raises(PromptBudgetError) as exc_info:
+            await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+
+    assert exc_info.value.phase == C.PROMPT_PHASE_JUDGE_P2_REPAIR
+    mock_chat.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase1_required_payload_budget_error_does_not_call_chat(mock_chat):
+    with (
+        patch("llm_fight.judge._judge_settings", return_value=(128, 1, 0)),
+        patch("llm_fight.judge._ollama_num_ctx", return_value=120),
+        pytest.raises(PromptBudgetError) as exc_info,
+    ):
+        await judge_phase1(
+            MOCK_STATE_SUMMARY,
+            "A attempts an unavoidable attack." * 20,
+            "B attempts an elaborate counter." * 20,
+            recent_log="Turn 1: this log can be removed but required content remains too large.",
+        )
+
+    assert exc_info.value.phase == C.PROMPT_PHASE_JUDGE_P1
+    mock_chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_required_payload_budget_error_does_not_call_chat(mock_chat):
+    oversized_state = {
+        **MOCK_P2_INPUT_STATE,
+        C.LOG_ATTEMPT_A: "A describes an extremely detailed maneuver. " * 50,
+        C.LOG_ATTEMPT_B: "B describes an extremely detailed response. " * 50,
+        "recent_combat_log": "Turn 1: removable history.",
+    }
+
+    with (
+        patch("llm_fight.judge._judge_settings", return_value=(512, 1, 0)),
+        patch("llm_fight.judge._ollama_num_ctx", return_value=900),
+        pytest.raises(PromptBudgetError) as exc_info,
+    ):
+        await judge_phase2(oversized_state, MOCK_ROLLS)
+
+    assert exc_info.value.phase == C.PROMPT_PHASE_JUDGE_P2
+    mock_chat.assert_not_awaited()
 
 
 @pytest.mark.asyncio

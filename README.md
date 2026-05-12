@@ -182,6 +182,16 @@ The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endp
 
 For native Ollama, `ollama_keep_alive` is sent with each chat request so the model can stay resident between fighter and judge calls during local playtests. `ollama_num_ctx` is the fixed context window sent to every fighter and judge call in a run; keep it stable to avoid runner reloads caused by alternating context sizes. Increase `ollama_keep_alive` for long runs if you want the model resident after the CLI exits, and lower it if you want VRAM freed sooner.
 
+Prompt budgeting is strict. Fighter actions, Judge Phase 1, Judge Phase 2,
+Judge Phase 2 repair, and generated fighter profiles reserve phase-specific
+completion space before contacting the model. Long `recent_combat_log` payloads
+are trimmed deterministically by dropping oldest lines first while preserving
+current fighter state, attempts, rolls, valid target parts, and active-effect
+reminders. If required non-log combat prompt content still cannot fit, the CLI
+fails before transport with an actionable context/log-window error instead of
+sending a one-token completion request. Generated fighter profile budget
+failures are sanitized through the existing profile-generation fallback path.
+
 ```ini
 ollama_api_url = http://localhost:11434/v1/chat/completions
 ```
