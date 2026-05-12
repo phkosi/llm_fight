@@ -44,14 +44,17 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
     judge = turn.judge_ruling_text()
     if judge:
         table.add_row("Judge ruling", Text(judge, style="yellow"))
+    rolls = turn.rolls_text()
+    if rolls:
+        table.add_row("Rolls", Text(rolls, style="blue"))
     if turn.narration:
         table.add_row("Outcome", Text(turn.narration, style="green"))
     fallback = turn.p2_fallback_text()
     if fallback:
         table.add_row("Warning", Text(fallback, style="bold red"))
-    changes = turn.status_changes_text()
+    changes = turn.mechanical_changes_text()
     if changes:
-        table.add_row("Status changes", changes)
+        table.add_row("Mechanical changes", changes)
     return table
 
 

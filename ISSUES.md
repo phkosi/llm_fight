@@ -255,25 +255,27 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-021: Combat state changes are mostly hidden in terminal output
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Turn Diff And Roll Transparency
 - Source: codebase review
 - Area: UX, rendering
 - Evidence: `CombatTurn` stores before/after state, but `status_changes_text()` only reports status changes in `src/llm_fight/engine/combat_log.py:47`; render only adds that row in `src/llm_fight/engine/render.py:49`.
 - Impact: Pain, exhaustion, heat, wounds, effects, and part damage usually exist only in prose, making mechanics hard to inspect.
 - Suggested fix: Render a turn diff: stat deltas, wounds by part, effects added/removed/expired, and final fighter state.
-- Tests: Snapshot rich/simple output for wounds, stat changes, effects, and no-op turns.
+- Resolution: `CombatTurn` now derives display diffs from actual before/after state snapshots after authorized deltas and effect ticks, including stats, wounds, body-part layer HP/status/severing, effect add/remove/update, status changes, and explicit no-op turns.
+- Tests: Combat-log/render/CLI/simulation coverage verifies stat, wound, body-part, effect, status, no-op, and streamed output visibility; full suite verification passed: `uv run pytest -q` -> 432 passed, 6 skipped, 1 warning.
 
 ### ISSUE-022: Roll outcomes are not visible to players
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Turn Diff And Roll Transparency
 - Source: codebase review
 - Area: UX, transparency
 - Evidence: `rolls` is computed in `src/llm_fight/simulation.py:116` and passed to P2, but `CombatTurn` has no field for it in `src/llm_fight/engine/combat_log.py:12`.
 - Impact: Users see success probabilities but not whether each action actually succeeded.
 - Suggested fix: Store `successful_rolls` and optionally raw roll values on `CombatTurn`; render a compact success/failure row.
-- Tests: Simulation/render tests proving rolls appear in rich and simple output.
+- Resolution: Simulation now stores per-fighter roll metadata on `CombatTurn`, including validity, probability text/value, raw roll when attempted, success flag, and reason; rich/simple output renders success, failure, invalid/not-rolled, and invalid-probability states.
+- Tests: Simulation asserts stored roll metadata without extra RNG calls; combat-log/render/CLI tests prove rolls appear in rich and simple output; full suite verification passed: `uv run pytest -q` -> 432 passed, 6 skipped, 1 warning.
 
 ### ISSUE-023: Token/model-call metadata is discarded
 

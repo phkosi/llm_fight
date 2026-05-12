@@ -671,7 +671,7 @@ Verification:
 
 Addresses: ISSUE-021, ISSUE-022
 
-- [ ] Store roll outcomes on `CombatTurn` and render visible mechanical turn diffs for roll success, stat changes, wounds, body-part changes, effects, and status changes.
+- [x] Store roll outcomes on `CombatTurn` and render visible mechanical turn diffs for roll success, stat changes, wounds, body-part changes, effects, and status changes.
 
 Acceptance goals:
 
@@ -685,6 +685,11 @@ Required tests:
 - Simulation tests prove `CombatTurn` stores roll metadata.
 - Combat-log/render snapshot-style tests cover rolls, wounds, stat deltas, effects, status changes, and no-op turns.
 - README usage/output examples are updated if the visible play format changes.
+
+Verification:
+
+- Focused tests: `uv run pytest -q tests/engine/test_combat_log.py tests/test_render.py tests/test_simulation.py tests/test_cli.py` -> 98 passed, 1 warning.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 432 passed, 6 skipped, 1 warning.
 
 ## Fight-Scoped JSONL Trace Transcripts
 

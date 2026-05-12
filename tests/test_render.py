@@ -59,7 +59,56 @@ def test_make_turn_table_simple():
     assert "Fighter A attempt: hit" in result
     assert "Fighter B attempt: parry" in result
     assert "Outcome: A hits" in result
-    assert "Status changes:" in result
+    assert "Mechanical changes:" in result
+    assert "B status fighting -> dead" in result
+
+
+def test_make_turn_table_simple_shows_rolls_and_no_op_changes():
+    state = {
+        C.STATUS: C.FighterStatus.FIGHTING,
+        C.PAIN: 0,
+        C.EXHAUSTION: 0,
+        C.HEAT: 0,
+        "parts": {},
+        C.BUFFS: [],
+        C.DEBUFFS: [],
+    }
+    turn = CombatTurn(
+        turn=1,
+        attempt_A="feint",
+        attempt_B="guard",
+        judge_p2={C.NARRATION: "Nothing lands."},
+        state_A_before=state,
+        state_A_after=state,
+        state_B_before=state,
+        state_B_after=state,
+        rolls={
+            C.FIGHTER_A: {
+                "valid": True,
+                "probability": 0.5,
+                "probability_text": "0.5",
+                "roll": 0.9,
+                "success": False,
+                "reason": "failed",
+            },
+            C.FIGHTER_B: {
+                "valid": False,
+                "probability": None,
+                "probability_text": "0.0",
+                "roll": None,
+                "success": False,
+                "reason": "invalid_attempt",
+            },
+        },
+    )
+
+    result = render.make_turn_table(turn, simple=True)
+
+    assert "Rolls:" in result
+    assert "Fighter A: failed (roll 0.900 >= p=0.5)" in result
+    assert "Fighter B: invalid / not rolled (p=0.0)" in result
+    assert "Mechanical changes:" in result
+    assert "No mechanical state changes." in result
 
 
 def test_make_turn_table_simple_marks_phase2_fallback():
@@ -93,6 +142,7 @@ def test_make_turn_table_rich_uses_explicit_turn_phases():
     assert "Fighter A attempt" in output
     assert "Fighter B attempt" in output
     assert "Judge ruling" in output
+    assert "Rolls" not in output
     assert "Outcome" in output
 
     fighter_a_line = next(line for line in lines if "Fighter A attempt" in line)
@@ -129,6 +179,40 @@ def test_make_turn_table_rich_marks_phase2_fallback():
 
     assert "Warning" in output
     assert C.P2_FALLBACK_MARKER_TEXT in output
+
+
+def test_make_turn_table_rich_shows_rolls_and_mechanical_changes():
+    if not render.RICH_AVAILABLE:
+        return
+
+    turn = CombatTurn(
+        turn=1,
+        judge_p2={C.NARRATION: "A lands a hit."},
+        state_A_before={C.STATUS: C.FighterStatus.FIGHTING},
+        state_A_after={C.STATUS: C.FighterStatus.FIGHTING},
+        state_B_before={C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0, "parts": {}},
+        state_B_after={C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 4, "parts": {}},
+        rolls={
+            C.FIGHTER_A: {
+                "valid": True,
+                "probability": 1.0,
+                "probability_text": "1.0",
+                "roll": 0.1,
+                "success": True,
+                "reason": "success",
+            }
+        },
+    )
+
+    table = render.make_turn_table(turn)
+    console = render.Console(record=True, width=120, color_system=None)
+    console.print(table)
+    output = console.export_text()
+
+    assert "Rolls" in output
+    assert "Fighter A: success" in output
+    assert "Mechanical changes" in output
+    assert "B pain +4 (0 -> 4)" in output
 
 
 def test_make_turn_table_fallback_uses_explicit_turn_phases():

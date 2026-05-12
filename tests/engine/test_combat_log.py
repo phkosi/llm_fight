@@ -103,4 +103,123 @@ def test_combat_turn_to_simple_text():
     assert any("Judge ruling:" in l for l in lines)
     assert any("A misses" in l for l in lines)
     assert any("Outcome: B blocks" in l for l in lines)
-    assert any("Status changes:" in l and "B unconscious" in l for l in lines)
+    assert any("Mechanical changes:" in l for l in lines)
+    assert any("B status fighting -> unconscious" in l for l in lines)
+
+
+def test_combat_turn_rolls_and_mechanical_changes_text():
+    before_b = {
+        C.STATUS: C.FighterStatus.FIGHTING,
+        C.PAIN: 0,
+        C.EXHAUSTION: 1,
+        C.HEAT: 0,
+        "parts": {
+            "left_arm": {
+                C.STATUS: "intact",
+                "severed": False,
+                "layers": [{C.NAME: "skin", C.MAX_HP: 10, C.CURRENT_HP: 10}],
+            }
+        },
+        C.BUFFS: [],
+        C.DEBUFFS: [
+            {
+                C.NAME: "bleeding",
+                "magnitude": 2,
+                C.EFFECT_TTL: 3,
+                C.METADATA: {C.TARGETED_PART: "left_arm"},
+            }
+        ],
+    }
+    after_b = {
+        C.STATUS: C.FighterStatus.UNCONSCIOUS,
+        C.PAIN: 5,
+        C.EXHAUSTION: 1,
+        C.HEAT: 0,
+        "parts": {
+            "left_arm": {
+                C.STATUS: C.STATUS_SEVERED,
+                "severed": True,
+                "layers": [{C.NAME: "skin", C.MAX_HP: 10, C.CURRENT_HP: 3}],
+            }
+        },
+        C.BUFFS: [],
+        C.DEBUFFS: [
+            {
+                C.NAME: "poisoned",
+                "magnitude": 1,
+                C.EFFECT_TTL: 2,
+                C.METADATA: {C.TARGETED_PART: "left_arm"},
+            }
+        ],
+    }
+    turn = CombatTurn(
+        turn=1,
+        judge_p2={
+            C.DELTA: {
+                C.FIGHTER_B: {
+                    C.WOUNDS: [
+                        {
+                            C.SOURCE: C.FIGHTER_A,
+                            C.TARGETED_PART: "left_arm",
+                            C.TYPE: C.DamageType.SLASHING,
+                            C.VALUE: 7,
+                        }
+                    ]
+                }
+            }
+        },
+        state_A_before={C.STATUS: C.FighterStatus.FIGHTING},
+        state_A_after={C.STATUS: C.FighterStatus.FIGHTING},
+        state_B_before=before_b,
+        state_B_after=after_b,
+        rolls={
+            C.FIGHTER_A: {
+                "valid": True,
+                "probability": 0.8,
+                "probability_text": "0.8",
+                "roll": 0.2,
+                "success": True,
+                "reason": "success",
+            },
+            C.FIGHTER_B: {
+                "valid": False,
+                "probability": None,
+                "probability_text": "0.4",
+                "roll": None,
+                "success": False,
+                "reason": "invalid_attempt",
+            },
+        },
+    )
+
+    assert "Fighter A: success (roll 0.200 < p=0.8)" in turn.rolls_text()
+    assert "Fighter B: invalid / not rolled (p=0.4)" in turn.rolls_text()
+
+    changes = turn.mechanical_changes_text()
+    assert "B pain +5 (0 -> 5)" in changes
+    assert "B wound: left_arm slashing 7 from A" in changes
+    assert "B left_arm: status intact -> severed; severed False -> True; skin hp 10 -> 3" in changes
+    assert "B debuff bleeding on left_arm removed/expired" in changes
+    assert "B debuff poisoned on left_arm added (ttl=2, magnitude=1)" in changes
+    assert "B status fighting -> unconscious" in changes
+
+
+def test_combat_turn_reports_no_mechanical_changes_when_snapshots_match():
+    state = {
+        C.STATUS: C.FighterStatus.FIGHTING,
+        C.PAIN: 0,
+        C.EXHAUSTION: 0,
+        C.HEAT: 0,
+        "parts": {},
+        C.BUFFS: [],
+        C.DEBUFFS: [],
+    }
+    turn = CombatTurn(
+        turn=1,
+        state_A_before=state,
+        state_A_after=state,
+        state_B_before=state,
+        state_B_after=state,
+    )
+
+    assert turn.mechanical_change_lines() == ["No mechanical state changes."]

@@ -169,6 +169,62 @@ def _authorized_phase2_sources(p1: Dict[str, Any], rolls: Dict[str, bool]) -> se
     }
 
 
+def _resolve_attempt_roll(
+    p1: Dict[str, Any],
+    fighter_id: str,
+    fight_rng: random.Random | None = None,
+) -> dict[str, Any]:
+    """Resolve one attempt roll and return display metadata."""
+    valid = p1.get(f"{C.ATTEMPT}_{fighter_id}_valid", False) is True
+    raw_probability = p1.get(f"{C.ATTEMPT}_{fighter_id}_prob", "0.0")
+    probability_text = str(raw_probability) if raw_probability is not None else ""
+    metadata = {
+        "valid": valid,
+        "probability": None,
+        "probability_text": probability_text,
+        "roll": None,
+        "success": False,
+        "reason": "invalid_attempt",
+    }
+
+    if not valid:
+        return metadata
+
+    try:
+        probability = float(probability_text) if probability_text else 0.0
+    except ValueError:
+        logger.warning(
+            f"Could not parse probability string for Fighter {fighter_id}: "
+            f"{probability_text!r}. Defaulting to failed without rolling."
+        )
+        metadata["reason"] = "invalid_probability"
+        return metadata
+
+    roll = fight_rng.random() if fight_rng is not None else rand()
+    success = roll < probability
+    metadata.update(
+        {
+            "probability": probability,
+            "roll": roll,
+            "success": success,
+            "reason": "success" if success else "failed",
+        }
+    )
+    return metadata
+
+
+def _resolve_turn_rolls(
+    p1: Dict[str, Any],
+    fight_rng: random.Random | None = None,
+) -> tuple[dict[str, bool], dict[str, dict[str, Any]]]:
+    roll_metadata = {
+        fighter_id: _resolve_attempt_roll(p1, fighter_id, fight_rng=fight_rng)
+        for fighter_id in (C.FIGHTER_A, C.FIGHTER_B)
+    }
+    successful_rolls = {fighter_id: bool(metadata.get("success")) for fighter_id, metadata in roll_metadata.items()}
+    return successful_rolls, roll_metadata
+
+
 def _is_authorized_consequence(entry: Any, authorized_sources: set[str], field_name: str) -> bool:
     if not isinstance(entry, dict):
         logger.warning("Dropping Judge Phase 2 %s consequence without source object.", field_name)
@@ -775,29 +831,15 @@ async def _single_fight(
 
         # Determine success of attempts based on probabilities from Judge P1
         _emit_event(on_event, FightEvent(C.FIGHT_EVENT_ROLLS_START, turn=turn))
-        rolls = {"A": False, "B": False}
-        try:
-            prob_a_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_prob", "0.0")
-            prob_a = float(prob_a_str) if prob_a_str else 0.0
-            if p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_valid", False):
-                rolls["A"] = (fight_rng.random() if fight_rng is not None else rand()) < prob_a
-        except ValueError:
-            logger.warning(
-                f"Could not parse probability string for Fighter A: '{prob_a_str}'. Defaulting to 0.0 probability."
-            )
-            # rolls['A'] remains False
-
-        try:
-            prob_b_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_prob", "0.0")
-            prob_b = float(prob_b_str) if prob_b_str else 0.0
-            if p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_valid", False):
-                rolls["B"] = (fight_rng.random() if fight_rng is not None else rand()) < prob_b
-        except ValueError:
-            logger.warning(
-                f"Could not parse probability string for Fighter B: '{prob_b_str}'. Defaulting to 0.0 probability."
-            )
-            # rolls['B'] remains False
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_ROLLS_END, turn=turn, data={"rolls": dict(rolls)}))
+        rolls, roll_metadata = _resolve_turn_rolls(p1, fight_rng=fight_rng)
+        _emit_event(
+            on_event,
+            FightEvent(
+                C.FIGHT_EVENT_ROLLS_END,
+                turn=turn,
+                data={"rolls": dict(rolls), C.ROLL_METADATA: roll_metadata},
+            ),
+        )
 
         # Pass the judgement text to P2 for narration context, full states, and combat log
         judge_recent_log = combat_log.to_summary(last_n=judge_log_window)
@@ -841,6 +883,7 @@ async def _single_fight(
             judge_p2=p2,
             state_A_before=p2_input_state["fighter_A"],
             state_B_before=p2_input_state["fighter_B"],
+            rolls=roll_metadata,
         )
 
         # Apply deltas to fighter states

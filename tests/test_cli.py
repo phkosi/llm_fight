@@ -174,6 +174,20 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
         attempt_A="A tests range",
         attempt_B="B guards",
         judge_p2={C.NARRATION: "The fighters measure each other."},
+        state_A_before={C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0, C.EXHAUSTION: 0, C.HEAT: 0, "parts": {}},
+        state_A_after={C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0, C.EXHAUSTION: 0, C.HEAT: 0, "parts": {}},
+        state_B_before={C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0, C.EXHAUSTION: 0, C.HEAT: 0, "parts": {}},
+        state_B_after={C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 2, C.EXHAUSTION: 0, C.HEAT: 0, "parts": {}},
+        rolls={
+            C.FIGHTER_A: {
+                "valid": True,
+                "probability": 0.8,
+                "probability_text": "0.8",
+                "roll": 0.2,
+                "success": True,
+                "reason": "success",
+            }
+        },
     )
     log = CombatLog()
     log.append(turn)
@@ -222,6 +236,10 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
     assert "Fighter Designs" in result.output
     assert "Winged Duelist" in result.output
     assert "Turn 1:" in result.output
+    assert "Rolls:" in result.output
+    assert "Fighter A: success" in result.output
+    assert "Mechanical changes:" in result.output
+    assert "B pain +2 (0 -> 2)" in result.output
     assert "Token usage: prompt 10, completion 4, total 14" in result.output
     assert result.output.count("Turn 1:") == 1
     assert result.output.index("Generating fighter profile") < result.output.index("Fighter Designs")

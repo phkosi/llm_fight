@@ -78,7 +78,10 @@ uv run llmfight play --max-turns 2 --simple-output
 `play` renders the fighter designs before turn 1 and shows live phase status
 while fighter and judge calls are running. When the configured provider returns
 real token usage metadata, `play` summarizes prompt/completion/total tokens at
-the end; providers that omit usage metadata are handled silently.
+the end; providers that omit usage metadata are handled silently. Each rendered
+turn shows Judge Phase 1 roll outcomes and a compact mechanical diff for actual
+state changes such as stat shifts, wounds, body-part damage, effects, statuses,
+or an explicit no-op line when nothing changed.
 
 Run a one-fight batch simulation:
 
@@ -290,7 +293,7 @@ The installable package lives under `src/llm_fight/`. The core flow is:
 
 1. Fighter A and Fighter B propose actions concurrently.
 2. Judge Phase 1 returns validity and success probabilities.
-3. Python rolls against those probabilities.
+3. Python rolls against those probabilities and stores the roll metadata on the combat turn for display.
 4. Judge Phase 2 receives attempts, the full P1 result, successful rolls, combat log, valid body parts, and fighter state.
 5. Judge Phase 2 deltas must mark each mechanical consequence with the source fighter whose valid action succeeded.
 6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, applies anatomy consequence policies, then ticks eligible effects and resolves the winner from resulting state. Burning ticks damage the selected active tissue layer directly and preserve stable targeted effect metadata.
