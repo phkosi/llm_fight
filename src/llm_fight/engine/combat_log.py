@@ -43,6 +43,7 @@ class CombatTurn:
             metadata = self.rolls.get(fighter, {})
             if not metadata:
                 continue
+            label = self._fighter_label(fighter)
             reason = metadata.get("reason")
             probability_text = metadata.get("probability_text")
             roll = metadata.get("roll")
@@ -50,15 +51,15 @@ class CombatTurn:
 
             if reason == "invalid_attempt":
                 suffix = f" (p={probability_text})" if probability_text not in (None, "") else ""
-                lines.append(f"Fighter {fighter}: invalid / not rolled{suffix}")
+                lines.append(f"{label}: invalid / not rolled{suffix}")
             elif reason == "invalid_probability":
-                lines.append(f"Fighter {fighter}: invalid probability {probability_text!r} / not rolled")
+                lines.append(f"{label}: invalid probability {probability_text!r} / not rolled")
             elif reason in {"success", "failed"} and isinstance(roll, (int, float)):
                 comparison = "<" if success else ">="
                 outcome = "success" if success else "failed"
-                lines.append(f"Fighter {fighter}: {outcome} (roll {roll:.3f} {comparison} p={probability_text})")
+                lines.append(f"{label}: {outcome} (roll {roll:.3f} {comparison} p={probability_text})")
             else:
-                lines.append(f"Fighter {fighter}: {reason or 'unknown'}")
+                lines.append(f"{label}: {reason or 'unknown'}")
         return lines
 
     def rolls_text(self, separator: str = "\n") -> str:
@@ -74,7 +75,7 @@ class CombatTurn:
         for fighter in (C.FIGHTER_A, C.FIGHTER_B):
             detail = self._judge_attempt_ruling(fighter)
             if detail:
-                lines.append(f"Fighter {fighter}: {detail}")
+                lines.append(f"{self._fighter_label(fighter)}: {detail}")
 
         explanation = self.judge_p1.get("explanation")
         if explanation:
@@ -109,9 +110,9 @@ class CombatTurn:
         """Return a concise, human-readable summary of the turn."""
         parts = [f"Turn {self.turn}"]
         if self.attempt_A:
-            parts.append(f"Fighter A attempt: {self.attempt_A}")
+            parts.append(f"{self._fighter_label(C.FIGHTER_A)} attempt: {self.attempt_A}")
         if self.attempt_B:
-            parts.append(f"Fighter B attempt: {self.attempt_B}")
+            parts.append(f"{self._fighter_label(C.FIGHTER_B)} attempt: {self.attempt_B}")
         judge = self.judge_ruling_text(separator="; ")
         if judge:
             parts.append(f"Judge ruling: {judge}")
@@ -133,9 +134,9 @@ class CombatTurn:
         """Return a multi-line debug representation of the turn."""
         lines = [f"Turn {self.turn}:"]
         if self.attempt_A:
-            lines.append(f"Fighter A attempt: {self.attempt_A}")
+            lines.append(f"{self._fighter_label(C.FIGHTER_A)} attempt: {self.attempt_A}")
         if self.attempt_B:
-            lines.append(f"Fighter B attempt: {self.attempt_B}")
+            lines.append(f"{self._fighter_label(C.FIGHTER_B)} attempt: {self.attempt_B}")
         judge_lines = self.judge_ruling_lines()
         if judge_lines:
             lines.append("Judge ruling:")
@@ -178,6 +179,21 @@ class CombatTurn:
             return self.state_A_before, self.state_A_after
         return self.state_B_before, self.state_B_after
 
+    def _fighter_display_name(self, fighter: str) -> str:
+        before, after = self._fighter_states(fighter)
+        for state in (after, before):
+            if isinstance(state, dict):
+                display_name = " ".join(str(state.get(C.DISPLAY_NAME, "")).strip().split())
+                if display_name:
+                    return display_name
+        return fighter
+
+    def _fighter_label(self, fighter: str) -> str:
+        display_name = self._fighter_display_name(fighter)
+        if display_name and display_name != fighter:
+            return f"Fighter {fighter} ({display_name})"
+        return f"Fighter {fighter}"
+
     def _has_state_snapshots(self) -> bool:
         return any((self.state_A_before, self.state_A_after, self.state_B_before, self.state_B_after))
 
@@ -190,8 +206,17 @@ class CombatTurn:
                 if before_value != after_value:
                     delta = after_value - before_value
                     sign = "+" if delta > 0 else ""
-                    lines.append(f"{fighter} {stat} {sign}{delta:g} ({before_value:g} -> {after_value:g})")
+                    lines.append(
+                        f"{self._fighter_display_name_suffix(fighter)} {stat} "
+                        f"{sign}{delta:g} ({before_value:g} -> {after_value:g})"
+                    )
         return lines
+
+    def _fighter_display_name_suffix(self, fighter: str) -> str:
+        display_name = self._fighter_display_name(fighter)
+        if display_name and display_name != fighter:
+            return f"{fighter} ({display_name})"
+        return fighter
 
     def _wound_lines(self, fighter: str) -> list[str]:
         delta = self.judge_p2.get(C.DELTA, {})
@@ -213,7 +238,9 @@ class CombatTurn:
             value = wound.get(C.VALUE, "?")
             source = wound.get(C.SOURCE)
             source_text = f" from {source}" if source else ""
-            lines.append(f"{fighter} wound: {part} {damage_type} {value}{source_text}")
+            lines.append(
+                f"{self._fighter_display_name_suffix(fighter)} wound: {part} {damage_type} {value}{source_text}"
+            )
         return lines
 
     def _body_part_change_lines(self, fighter: str, before: dict[str, Any], after: dict[str, Any]) -> list[str]:
@@ -227,10 +254,10 @@ class CombatTurn:
             before_part = before_parts.get(part_name)
             after_part = after_parts.get(part_name)
             if before_part is None:
-                lines.append(f"{fighter} {part_name}: part added")
+                lines.append(f"{self._fighter_display_name_suffix(fighter)} {part_name}: part added")
                 continue
             if after_part is None:
-                lines.append(f"{fighter} {part_name}: part removed")
+                lines.append(f"{self._fighter_display_name_suffix(fighter)} {part_name}: part removed")
                 continue
 
             changes = []
@@ -244,7 +271,7 @@ class CombatTurn:
                 changes.append(f"severed {before_severed} -> {after_severed}")
             changes.extend(self._layer_hp_change_lines(before_part, after_part))
             if changes:
-                lines.append(f"{fighter} {part_name}: " + "; ".join(changes))
+                lines.append(f"{self._fighter_display_name_suffix(fighter)} {part_name}: " + "; ".join(changes))
         return lines
 
     def _layer_hp_change_lines(self, before_part: dict[str, Any], after_part: dict[str, Any]) -> list[str]:
@@ -266,11 +293,12 @@ class CombatTurn:
         before_effects = self._effect_map(before)
         after_effects = self._effect_map(after)
         lines = []
+        fighter_label = self._fighter_display_name_suffix(fighter)
         for identity in sorted(set(after_effects) - set(before_effects)):
             details = self._effect_details(after_effects[identity])
-            lines.append(f"{fighter} {self._format_effect_identity(identity)} added {details}".rstrip())
+            lines.append(f"{fighter_label} {self._format_effect_identity(identity)} added {details}".rstrip())
         for identity in sorted(set(before_effects) - set(after_effects)):
-            lines.append(f"{fighter} {self._format_effect_identity(identity)} removed/expired")
+            lines.append(f"{fighter_label} {self._format_effect_identity(identity)} removed/expired")
         for identity in sorted(set(before_effects) & set(after_effects)):
             changes = []
             before_eff = before_effects[identity]
@@ -281,7 +309,7 @@ class CombatTurn:
                 if before_value != after_value:
                     changes.append(f"{field_name} {before_value} -> {after_value}")
             if changes:
-                lines.append(f"{fighter} {self._format_effect_identity(identity)} updated: " + ", ".join(changes))
+                lines.append(f"{fighter_label} {self._format_effect_identity(identity)} updated: " + ", ".join(changes))
         return lines
 
     def _effect_map(self, state: dict[str, Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
@@ -304,7 +332,7 @@ class CombatTurn:
             before_status = self._status_value(before.get(C.STATUS))
             after_status = self._status_value(after.get(C.STATUS))
             if before_status and after_status and before_status != after_status:
-                changes.append(f"{fighter} status {before_status} -> {after_status}")
+                changes.append(f"{self._fighter_display_name_suffix(fighter)} status {before_status} -> {after_status}")
         return changes
 
     @staticmethod

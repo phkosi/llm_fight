@@ -143,13 +143,20 @@ then the current working directory.
 
 ```ini
 [A]
+name = Sir Galant
 class = Winged Duelist
 loadout = hook blades
 anatomy_profile = profiles/winged_duelist.json
 
 [B]
+name = Shade
 profile = humanoid
 ```
+
+`name` is a display label only. Combat mechanics, JSON deltas, transcripts'
+`fighter_id` fields, the `winner` result, and batch CSV winner ids continue to
+use the stable ids `A` and `B`. When `name` is omitted, output falls back to the
+stable fighter id.
 
 Profile files use canonical part ids:
 

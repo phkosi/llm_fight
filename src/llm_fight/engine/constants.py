@@ -5,6 +5,7 @@ from enum import Enum
 # General
 STATUS = "status"
 NAME = "name"
+DISPLAY_NAME = "display_name"
 DESCRIPTION = "description"
 EFFECTS = "effects"
 TARGET = "target"
@@ -239,6 +240,7 @@ CONFIG_MAX_TURNS = "max_turns"  # Added config key for simulation
 CONFIG_CONCURRENT_RUNS = "concurrent_runs"  # Simulation option controlling async concurrency
 CONFIG_DEFAULTS = "DEFAULTS"  # For configparser default section
 CONFIG_FIGHTER_CLASS = "class"  # Per-fighter class
+CONFIG_FIGHTER_NAME = NAME  # Per-fighter display name
 CONFIG_FIGHTER_LOADOUT = "loadout"  # Per-fighter starting gear
 CONFIG_FIGHTER_ENVIRONMENT = "environment"  # Fighting environment
 CONFIG_FIGHTER_ANATOMY_PROFILE = ANATOMY_PROFILE  # Optional per-fighter anatomy profile JSON path
@@ -290,6 +292,9 @@ LOG_STATE_A_BEFORE = "state_A_before"
 LOG_STATE_B_BEFORE = "state_B_before"
 LOG_STATE_A_AFTER = "state_A_after"
 LOG_STATE_B_AFTER = "state_B_after"
+LOG_FIGHTER_A_DISPLAY_NAME = "fighter_A_display_name"
+LOG_FIGHTER_B_DISPLAY_NAME = "fighter_B_display_name"
+LOG_WINNER_DISPLAY_NAME = "winner_display_name"
 EFFECT_FIRE_FROM_EFFECT = "fire_from_effect"
 
 # Misc

@@ -213,6 +213,7 @@ def test_fighter_section_settings_override_profile_defaults(tmp_path):
         "\n".join(
             [
                 "[A]",
+                "name = Sir Galant",
                 f"anatomy_profile = {profile_path.name}",
                 "class = Config Champion",
                 "loadout = config spear",
@@ -224,6 +225,7 @@ def test_fighter_section_settings_override_profile_defaults(tmp_path):
 
     fighter = FighterState.from_config("A", "A", config=Config(config_path))
 
+    assert fighter.display_name == "Sir Galant"
     assert fighter.class_ == "Config Champion"
     assert fighter.loadout == "config spear"
     assert fighter.environment == "config bridge"
@@ -237,10 +239,32 @@ def test_profile_defaults_override_seeded_a_b_defaults_when_not_explicit(tmp_pat
 
     fighter = FighterState.from_config("A", "A", config=Config(config_path))
 
+    assert fighter.display_name == "A"
     assert fighter.class_ == "Winged Duelist"
     assert fighter.loadout == "hook blades and wing spurs"
     assert fighter.environment == "windy arena"
     assert "left_wing" in fighter.parts
+
+
+def test_display_name_survives_from_preset_and_generated_profile_paths(tmp_path):
+    cfg_path = tmp_path / "fighters.ini"
+    cfg_path.write_text("[Knight]\nname = Sir Galant\nclass = Knight\nloadout = sword\n", encoding="utf-8")
+    cfg = Config(cfg_path)
+
+    preset_fighter = FighterState.from_preset(C.FIGHTER_A, "humanoid", config_section="Knight", config=cfg)
+    generated_profile = build_fighter_profile(custom_profile())
+    generated_fighter = FighterState.from_profile(
+        C.FIGHTER_A,
+        generated_profile,
+        config_section="Knight",
+        config=cfg,
+        allow_config_overrides=False,
+    )
+
+    assert preset_fighter.id == C.FIGHTER_A
+    assert preset_fighter.display_name == "Sir Galant"
+    assert generated_fighter.id == C.FIGHTER_A
+    assert generated_fighter.display_name == "Sir Galant"
 
 
 def test_invalid_profile_without_vital_part_is_rejected():

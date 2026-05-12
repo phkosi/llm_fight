@@ -12,6 +12,11 @@ def humanoid_fighter():
     return FighterState.from_preset("TestFighter", "humanoid")
 
 
+def test_fighter_state_display_name_defaults_to_id(humanoid_fighter: FighterState):
+    assert humanoid_fighter.display_name == "TestFighter"
+    assert humanoid_fighter.to_json()[C.DISPLAY_NAME] == "TestFighter"
+
+
 def part_current_hp(fighter: FighterState, part_name: str) -> int:
     return sum(layer.current_hp for layer in fighter.parts[part_name].layers)
 

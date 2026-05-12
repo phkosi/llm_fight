@@ -107,6 +107,26 @@ def test_cli_play_simple_output():
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
 
 
+def test_cli_play_formats_configured_winner_display_name():
+    runner = CliRunner()
+    log = MagicMock(turns=[])
+    result_payload = {
+        C.WINNER: C.FIGHTER_A,
+        C.LOG_TURN: "1",
+        C.LOG_WINNER_DISPLAY_NAME: "Sir Galant",
+    }
+    with (
+        patch("llm_fight.simulation._single_fight", new=AsyncMock(return_value=(result_payload, log))),
+        patch("llm_fight.cli.render") as mock_render,
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        mock_render.RICH_AVAILABLE = True
+        result = runner.invoke(app, ["play"])
+
+    assert result.exit_code == 0
+    assert "Winner: A (Sir Galant)" in result.output
+
+
 def test_cli_play_simple_output_no_rich():
     runner = CliRunner()
     log = MagicMock(turns=[MagicMock()])
@@ -193,6 +213,7 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
     log.append(turn)
     fighters = {
         C.FIGHTER_A: {
+            C.DISPLAY_NAME: "Wings",
             "class_": "Winged Duelist",
             C.THEME: "sky mutant",
             C.LOADOUT: "hook blades",
@@ -234,6 +255,7 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
     assert result.exit_code == 0
     assert "Generating fighter profile (Fighter A)" in result.output
     assert "Fighter Designs" in result.output
+    assert "Fighter A (Wings)" in result.output
     assert "Winged Duelist" in result.output
     assert "Turn 1:" in result.output
     assert "Rolls:" in result.output

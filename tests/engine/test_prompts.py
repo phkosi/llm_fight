@@ -5,7 +5,10 @@ from llm_fight.engine.state_summary import environment_scope_guardrail
 
 def _render_fighter_prompt(environment="an open arena"):
     return FIGHTER_SYSTEM_PROMPT.format(
-        name="A",
+        fighter_id="A",
+        display_name="Sir Galant",
+        opponent_id="B",
+        opponent_display_name="Shade",
         class_="Knight",
         environment=environment,
         pain_desc="no pain",
@@ -53,6 +56,9 @@ def test_judge_p2_prompt_documents_structured_targeted_effect_removal():
 def test_fighter_prompt_does_not_add_article_before_environment():
     rendered = _render_fighter_prompt()
 
+    assert "You are Fighter A (display name: Sir Galant)" in rendered
+    assert "Your opponent is Fighter B (display name: Shade)" in rendered
+    assert "stable combat ids remain A and B" in rendered
     assert "inside an open arena" in rendered
     assert "inside a an open arena" not in rendered
 
@@ -84,7 +90,10 @@ def test_fighter_prompt_allows_explicit_environment_features():
 def test_fighter_prompt_repeats_active_effects_after_recent_log():
     recent_log = "Turn 1: Smoke fills the arena."
     rendered = FIGHTER_SYSTEM_PROMPT.format(
-        name="A",
+        fighter_id="A",
+        display_name="Sir Galant",
+        opponent_id="B",
+        opponent_display_name="Shade",
         class_="Knight",
         environment="an open arena",
         pain_desc="no pain",
@@ -114,3 +123,10 @@ def test_judge_prompts_treat_current_state_as_authoritative():
         assert "Current" in prompt and "authoritative" in prompt
         assert "recent combat log as history, not active state" in prompt
         assert "Temporary conditions from older narration" in prompt
+
+
+def test_judge_prompts_keep_display_names_label_only():
+    assert "Display names in fighter summaries are labels only" in JUDGE_P1_SYSTEM_PROMPT
+    assert "mechanical fighter ids remain A and B" in JUDGE_P1_SYSTEM_PROMPT
+    assert "Display names in fighter states are labels only" in JUDGE_P2_SYSTEM_PROMPT
+    assert "winner values must remain stable ids A or B" in JUDGE_P2_SYSTEM_PROMPT

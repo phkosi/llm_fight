@@ -61,9 +61,41 @@ def test_config_loading_correct_values(temp_config_instance):
 
 def test_get_fighter_settings(temp_config_instance):
     settings = temp_config_instance.get_fighter_settings("FighterA")
+    assert settings[C.DISPLAY_NAME] == "Arnold"
     assert settings["class_"] == "Barbarian"
     assert settings["loadout"] == "axe and shield"
     assert settings["environment"] == "dusty arena"
+
+
+def test_get_fighter_settings_display_name_falls_back_to_stable_id(tmp_path):
+    file_path = tmp_path / "names.ini"
+    file_path.write_text(
+        """
+[General]
+fighter_A = CustomKnight
+
+[CustomKnight]
+class = Knight
+loadout = sword
+""",
+        encoding="utf-8",
+    )
+    cfg = Config(file_path)
+
+    settings = cfg.get_fighter_settings("CustomKnight", display_name_fallback=C.FIGHTER_A)
+
+    assert settings[C.DISPLAY_NAME] == C.FIGHTER_A
+    assert cfg.get_fighter_display_name("CustomKnight", fallback=C.FIGHTER_A) == C.FIGHTER_A
+
+
+def test_get_fighter_settings_cleans_blank_display_name(tmp_path):
+    file_path = tmp_path / "blank_name.ini"
+    file_path.write_text("[A]\nname =   \nclass = Knight\nloadout = sword\n", encoding="utf-8")
+    cfg = Config(file_path)
+
+    settings = cfg.get_fighter_settings("A", display_name_fallback=C.FIGHTER_A)
+
+    assert settings[C.DISPLAY_NAME] == C.FIGHTER_A
 
 
 def test_config_get_with_type_conversion(temp_config_instance):

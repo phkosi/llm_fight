@@ -119,6 +119,7 @@ def compact_fighter_state_summary(state: Any) -> dict[str, Any]:
     parts = data.get("parts", {}) or {}
     return {
         "id": data.get("id"),
+        C.DISPLAY_NAME: data.get(C.DISPLAY_NAME) or data.get("id"),
         "class": data.get("class_") or data.get("class"),
         C.LOADOUT: data.get(C.LOADOUT),
         "environment": data.get("environment"),

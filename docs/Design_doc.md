@@ -67,7 +67,12 @@ src/llm_fight/
 - `pain`, `exhaustion`, `heat`.
 - `buffs` and `debuffs` as `Effect` objects.
 - `status`: `fighting`, `unconscious`, or `dead`.
-- `class_`, `loadout`, and `environment` from config.
+- `display_name`, `class_`, `loadout`, and `environment` from config.
+
+`id` remains the authoritative mechanics key (`A` or `B`). `display_name` is a
+human-facing label shown in prompts, traces, and terminal output; omitted names
+fall back to the stable id and never replace delta keys, `fighter_id`, or
+`winner` values.
 
 Critical invariants:
 

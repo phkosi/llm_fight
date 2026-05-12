@@ -65,6 +65,7 @@ def test_make_turn_table_simple():
 
 def test_make_turn_table_simple_shows_rolls_and_no_op_changes():
     state = {
+        C.DISPLAY_NAME: "Sir Galant",
         C.STATUS: C.FighterStatus.FIGHTING,
         C.PAIN: 0,
         C.EXHAUSTION: 0,
@@ -105,8 +106,8 @@ def test_make_turn_table_simple_shows_rolls_and_no_op_changes():
     result = render.make_turn_table(turn, simple=True)
 
     assert "Rolls:" in result
-    assert "Fighter A: failed (roll 0.900 >= p=0.5)" in result
-    assert "Fighter B: invalid / not rolled (p=0.0)" in result
+    assert "Fighter A (Sir Galant): failed (roll 0.900 >= p=0.5)" in result
+    assert "Fighter B (Sir Galant): invalid / not rolled (p=0.0)" in result
     assert "Mechanical changes:" in result
     assert "No mechanical state changes." in result
 
@@ -253,6 +254,7 @@ def test_make_summary_table_fallback():
 def test_make_fighter_design_view_simple_includes_dynamic_design_details():
     fighters = {
         C.FIGHTER_A: {
+            C.DISPLAY_NAME: "Wings",
             "class_": "Winged Duelist",
             C.THEME: "sky mutant",
             C.LOADOUT: "hook blades",
@@ -275,6 +277,7 @@ def test_make_fighter_design_view_simple_includes_dynamic_design_details():
     result = render.make_fighter_design_view(fighters, simple=True)
 
     assert "Fighter Designs" in result
+    assert "Fighter A (Wings): Winged Duelist (sky mutant)" in result
     assert "Winged Duelist (sky mutant)" in result
     assert "left_wing, second_head" in result
     assert "crystal_rot" in result

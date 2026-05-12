@@ -748,7 +748,7 @@ Verification:
 
 Addresses: ISSUE-027
 
-- [ ] Implement config `name` as an end-to-end fighter display name while preserving stable ids `A` and `B` for machine logic.
+- [x] Implement config `name` as an end-to-end fighter display name while preserving stable ids `A` and `B` for machine logic.
 
 Acceptance goals:
 
@@ -762,6 +762,11 @@ Required tests:
 - Config tests for `name` loading and fallback.
 - `FighterState.from_preset`, prompt, render, transcript, and CLI winner-output tests.
 - README/config docs explain fighter names versus ids.
+
+Verification:
+
+- Focused tests: `uv run pytest -q tests/test_config.py tests/test_simulation.py tests/test_cli.py tests/engine/test_prompts.py tests/engine/test_fighter.py tests/engine/test_state_summary.py tests/test_profiles.py tests/test_render.py tests/test_state.py` -> 273 passed, 1 warning.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 446 passed, 6 skipped, 1 warning; `git diff --check` -> passed.
 
 ## Runtime Config And RNG Isolation
 

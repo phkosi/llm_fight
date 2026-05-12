@@ -108,6 +108,7 @@ def mock_fighter_state():
     fighter.pain = 25
     fighter.exhaustion = 40
     fighter.heat = 5
+    fighter.display_name = "Arnold"
     fighter.buffs = [Effect(name="Strength Buff", magnitude=1, ttl=2, on_apply="Stronger")]
     fighter.debuffs = [Effect(name="Weakness Debuff", magnitude=1, ttl=1, on_apply="Weaker")]
     fighter.class_ = "Barbarian"
@@ -119,6 +120,7 @@ def mock_fighter_state():
 @pytest.fixture
 def mock_opponent_state():
     opponent = FighterState(id="FighterB", parts={})  # Simplified
+    opponent.display_name = "Beth"
     return opponent
 
 
@@ -187,7 +189,10 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         expected_loadout = mock_fighter_state.loadout
 
         expected_system_content = FIGHTER_SYSTEM_PROMPT.format(
-            name=mock_fighter_state.id,
+            fighter_id=mock_fighter_state.id,
+            display_name=mock_fighter_state.display_name,
+            opponent_id=mock_opponent_state.id,
+            opponent_display_name=mock_opponent_state.display_name,
             class_=mock_fighter_state.class_,
             environment=mock_fighter_state.environment,
             pain_desc=expected_pain_desc,
@@ -208,7 +213,10 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         )
         assert system_message[C.AGENT_CONTENT] == expected_system_content
 
-        expected_user_content = f"It's your turn to act, {mock_fighter_state.id}. Opponent {mock_opponent_state.id} is visible. What do you do?"
+        expected_user_content = (
+            f"It's your turn to act, Fighter {mock_fighter_state.id} ({mock_fighter_state.display_name}). "
+            f"Opponent Fighter {mock_opponent_state.id} ({mock_opponent_state.display_name}) is visible. What do you do?"
+        )
         assert user_message[C.AGENT_CONTENT] == expected_user_content
 
 

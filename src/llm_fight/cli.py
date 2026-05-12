@@ -90,6 +90,17 @@ def _batch_error_warning(summary) -> str:
     )
 
 
+def _format_winner_label(result: dict, fighter_display_names: dict[str, str] | None = None) -> str:
+    winner = result.get(C.WINNER, C.DRAW)
+    display_name = result.get(C.LOG_WINNER_DISPLAY_NAME, "")
+    if not display_name and fighter_display_names:
+        display_name = fighter_display_names.get(winner, "")
+    display_name = " ".join(str(display_name or "").strip().split())
+    if winner in {C.FIGHTER_A, C.FIGHTER_B} and display_name and display_name != winner:
+        return f"{winner} ({display_name})"
+    return str(winner)
+
+
 @app.command()
 def simulate(
     output_csv: Path = typer.Option(
@@ -267,6 +278,7 @@ def play(
     console = render.Console()
     rendered_turns: set[int] = set()
     token_metadata: list[dict] = []
+    fighter_display_names: dict[str, str] = {}
 
     def handle_event(event) -> None:
         if event.name == C.FIGHT_EVENT_TOKEN_METADATA:
@@ -275,7 +287,13 @@ def play(
                 token_metadata.append(metadata)
             return
         if event.name == C.FIGHT_EVENT_FIGHTERS_READY:
-            console.print(render.make_fighter_design_view(event.data.get("fighters", {}), simple=simple_output))
+            fighters = event.data.get("fighters", {})
+            for fighter_id, state in fighters.items():
+                if isinstance(state, dict):
+                    display_name = str(state.get(C.DISPLAY_NAME, "")).strip()
+                    if display_name:
+                        fighter_display_names[fighter_id] = display_name
+            console.print(render.make_fighter_design_view(fighters, simple=simple_output))
             return
         if event.name == C.FIGHT_EVENT_TURN_COMPLETE:
             turn = event.data.get("turn")
@@ -331,4 +349,4 @@ def play(
     if token_metadata:
         console.print(render.format_token_summary(token_metadata))
 
-    typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")
+    typer.echo(f"Winner: {_format_winner_label(result, fighter_display_names)}")

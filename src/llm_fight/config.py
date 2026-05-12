@@ -220,21 +220,45 @@ class Config:
             )
         return policy
 
-    def _fighter_setting(self, fighter_id: str, key: str, *, profile_default: str | None, fallback: str) -> str:
-        explicit_value = self._explicit_section_value(fighter_id, key)
+    @staticmethod
+    def _clean_display_name(value: str | None, fallback: str) -> str:
+        text = " ".join(str(value or "").strip().split())
+        return text or fallback
+
+    def _fighter_setting(self, section: str, key: str, *, profile_default: str | None, fallback: str) -> str:
+        explicit_value = self._explicit_section_value(section, key)
         if explicit_value is not None:
             return explicit_value
         if profile_default:
             return profile_default
-        return self.get(fighter_id, key, str, fallback=fallback)
+        return self.get(section, key, str, fallback=fallback)
 
-    def get_fighter_settings(self, fighter_id: str, profile_defaults: dict | None = None) -> dict:
-        """Return class, loadout, and environment for a fighter."""
+    def get_fighter_display_name(self, section: str, fallback: str) -> str:
+        """Return the configured fighter display name, falling back to stable id."""
+        value = self._explicit_section_value(section, C.CONFIG_FIGHTER_NAME)
+        return self._clean_display_name(value, fallback)
+
+    def get_fighter_settings(
+        self,
+        fighter_id: str,
+        profile_defaults: dict | None = None,
+        *,
+        display_name_fallback: str | None = None,
+    ) -> dict:
+        """Return display name, class, loadout, and environment for a fighter."""
         profile_defaults = profile_defaults or {}
         default_class = self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str)
         default_loadout = self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str)
         default_environment = self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_ENVIRONMENT, str)
+        display_name_fallback = display_name_fallback or fighter_id
+        display_name = self._fighter_setting(
+            fighter_id,
+            C.CONFIG_FIGHTER_NAME,
+            profile_default=profile_defaults.get(C.DISPLAY_NAME) or profile_defaults.get(C.CONFIG_FIGHTER_NAME),
+            fallback=display_name_fallback,
+        )
         return {
+            C.DISPLAY_NAME: self._clean_display_name(display_name, display_name_fallback),
             "class_": self._fighter_setting(
                 fighter_id,
                 C.CONFIG_FIGHTER_CLASS,

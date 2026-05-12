@@ -66,8 +66,17 @@ def _effect_names(state: dict[str, Any]) -> str:
     return ", ".join(names) if names else "none"
 
 
+def _fighter_label(fighter_id: str, state: dict[str, Any] | None = None) -> str:
+    display_name = ""
+    if isinstance(state, dict):
+        display_name = " ".join(str(state.get(C.DISPLAY_NAME, "")).strip().split())
+    if display_name and display_name != fighter_id:
+        return f"Fighter {fighter_id} ({display_name})"
+    return f"Fighter {fighter_id}"
+
+
 def _fighter_design_lines(fighter_id: str, state: dict[str, Any]) -> list[str]:
-    title = f"Fighter {fighter_id}: {state.get('class_', 'Unknown Fighter')}"
+    title = f"{_fighter_label(fighter_id, state)}: {state.get('class_', 'Unknown Fighter')}"
     theme = state.get(C.THEME)
     if theme:
         title += f" ({theme})"
@@ -97,7 +106,7 @@ def make_fighter_design_view(fighters: dict[str, dict[str, Any]], simple: bool =
     table.add_column("Design")
     for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
         state = fighters.get(fighter_id, {})
-        table.add_row(fighter_id, "\n".join(_fighter_design_lines(fighter_id, state)))
+        table.add_row(_fighter_label(fighter_id, state), "\n".join(_fighter_design_lines(fighter_id, state)))
     return table
 
 

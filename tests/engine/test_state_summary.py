@@ -26,6 +26,7 @@ def test_compact_summary_covers_custom_anatomy_and_effects_without_unsafe_prose(
                 consequence_tags=[C.CONSEQUENCE_FATAL_IF_DESTROYED],
             ),
         },
+        display_name="Wings",
         class_="Wingblade",
         loadout="hook blades",
         environment="a tower with pillars",
@@ -53,6 +54,7 @@ def test_compact_summary_covers_custom_anatomy_and_effects_without_unsafe_prose(
     rendered = render_fighter_state_summary(summary)
 
     assert summary["id"] == "A"
+    assert summary[C.DISPLAY_NAME] == "Wings"
     assert summary["class"] == "Wingblade"
     assert summary[C.VALID_TARGET_PARTS] == ["left_wing", "second_head"]
     assert {

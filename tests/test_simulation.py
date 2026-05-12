@@ -22,6 +22,14 @@ def _source_value(source=C.FIGHTER_A, value=1):
     return {C.SOURCE: source, C.VALUE: value}
 
 
+def _display_columns(a="", b="", winner=""):
+    return {
+        C.LOG_FIGHTER_A_DISPLAY_NAME: a,
+        C.LOG_FIGHTER_B_DISPLAY_NAME: b,
+        C.LOG_WINNER_DISPLAY_NAME: winner,
+    }
+
+
 def _custom_profile(part_id: str, vital: bool = True):
     return {
         C.CONFIG_FIGHTER_CLASS: f"{part_id} fighter",
@@ -79,6 +87,7 @@ async def test_single_fight_runs_to_completion(
     # Create MagicMock instances for fighters
     fighter_a_mock = MagicMock(spec=FighterState)
     fighter_a_mock.id = "A"
+    fighter_a_mock.display_name = "A"
     fighter_a_mock.status = C.FighterStatus.FIGHTING
     fighter_a_mock.parts = {"head": object(), "torso": object()}
     fighter_a_mock.to_json.return_value = {
@@ -91,6 +100,7 @@ async def test_single_fight_runs_to_completion(
 
     fighter_b_mock = MagicMock(spec=FighterState)
     fighter_b_mock.id = "B"
+    fighter_b_mock.display_name = "B"
     fighter_b_mock.status = C.FighterStatus.FIGHTING
     fighter_b_mock.parts = {"head": object(), "torso": object()}
     fighter_b_mock.to_json.return_value = {"id": "B", C.STATUS: C.FighterStatus.FIGHTING, C.PAIN: 0}
@@ -563,6 +573,64 @@ async def test_single_fight_emits_play_events_and_token_metadata():
 
 
 @pytest.mark.asyncio
+async def test_single_fight_result_keeps_winner_id_and_adds_display_names(tmp_path):
+    config_path = tmp_path / "named.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[SIMULATION]",
+                "max_turns = 1",
+                "",
+                "[A]",
+                "name = Sir Galant",
+                "",
+                "[B]",
+                "name = Shade",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A can finish the fight.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "Sir Galant drops Shade.",
+            C.DELTA: {C.FIGHTER_B: {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)}},
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        ):
+            result = await sim_module._single_fight(fight_rng=random.Random(1))
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    assert result[C.WINNER] == C.FIGHTER_A
+    assert result[C.LOG_WINNER_DISPLAY_NAME] == "Sir Galant"
+    assert result[C.LOG_FIGHTER_A_DISPLAY_NAME] == "Sir Galant"
+    assert result[C.LOG_FIGHTER_B_DISPLAY_NAME] == "Shade"
+
+
+@pytest.mark.asyncio
 async def test_single_fight_writes_ordered_trace_with_exchanges_rolls_deltas_and_states(tmp_path):
     transcript_dir = tmp_path / "traces"
     config_path = tmp_path / "game.ini"
@@ -575,6 +643,12 @@ async def test_single_fight_writes_ordered_trace_with_exchanges_rolls_deltas_and
                 "",
                 "[SIMULATION]",
                 "max_turns = 1",
+                "",
+                "[A]",
+                "name = Sir Galant",
+                "",
+                "[B]",
+                "name = Shade",
             ]
         ),
         encoding="utf-8",
@@ -632,6 +706,9 @@ async def test_single_fight_writes_ordered_trace_with_exchanges_rolls_deltas_and
         sim_module.config_mod.CONFIG = old_config
 
     assert result[C.WINNER] == C.DRAW
+    assert result[C.LOG_FIGHTER_A_DISPLAY_NAME] == "Sir Galant"
+    assert result[C.LOG_FIGHTER_B_DISPLAY_NAME] == "Shade"
+    assert result[C.LOG_WINNER_DISPLAY_NAME] == ""
     assert combat_log.turns[0].state_B_after[C.PAIN] == 3
     assert list(transcript_dir.glob("*.json")) == []
     [trace_file] = list(transcript_dir.glob("*.jsonl"))
@@ -646,6 +723,9 @@ async def test_single_fight_writes_ordered_trace_with_exchanges_rolls_deltas_and
         C.FIGHT_EVENT_ROLLS_END,
         C.FIGHT_EVENT_TURN_COMPLETE,
     }
+    ready_event = next(event for event in events if event["event"] == C.FIGHT_EVENT_FIGHTERS_READY)
+    assert ready_event["data"]["fighters"][C.FIGHTER_A][C.DISPLAY_NAME] == "Sir Galant"
+    assert ready_event["data"]["fighters"][C.FIGHTER_B][C.DISPLAY_NAME] == "Shade"
     exchanges = [event for event in events if event["event"] == "llm_exchange"]
     assert {event["phase"] for event in exchanges} == {"fighter_action", "judge_phase1", "judge_phase2"}
     assert {event["fighter_id"] for event in exchanges if event["phase"] == "fighter_action"} == {
@@ -1201,6 +1281,7 @@ async def test_run_batch_flushes_each_completed_result(tmp_path):
             C.LOG_TURN: "1",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         }
     ]
 
@@ -1212,12 +1293,14 @@ async def test_run_batch_flushes_each_completed_result(tmp_path):
             C.LOG_TURN: "1",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         },
         {
             C.WINNER: "B",
             C.LOG_TURN: "2",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         },
     ]
 
@@ -1260,18 +1343,21 @@ async def test_run_batch_writes_rows_in_run_index_order_with_out_of_order_comple
             C.LOG_TURN: "1",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         },
         {
             C.WINNER: "1",
             C.LOG_TURN: "2",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         },
         {
             C.WINNER: "2",
             C.LOG_TURN: "3",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         },
     ]
 
@@ -1382,6 +1468,9 @@ async def test_run_batch_zero_runs(tmp_path):
         C.LOG_TURN,
         C.LOG_P2_FALLBACK_TURNS,
         C.LOG_P2_FALLBACK_USED,
+        C.LOG_FIGHTER_A_DISPLAY_NAME,
+        C.LOG_FIGHTER_B_DISPLAY_NAME,
+        C.LOG_WINNER_DISPLAY_NAME,
     ]
     assert rows == []
     mock_fight.assert_not_called()
@@ -1504,6 +1593,7 @@ async def test_run_batch_writes_fallback_columns_and_summary_counts(tmp_path):
             C.LOG_TURN: "3",
             C.LOG_P2_FALLBACK_TURNS: "1",
             C.LOG_P2_FALLBACK_USED: "true",
+            **_display_columns(),
         }
     ]
     summary = sim_module.summarize_batch_csv(path)
@@ -1534,6 +1624,7 @@ async def test_run_batch_fail_closed_p2_exception_writes_error_row(tmp_path):
             C.LOG_TURN: "0",
             C.LOG_P2_FALLBACK_TURNS: "0",
             C.LOG_P2_FALLBACK_USED: "false",
+            **_display_columns(),
         }
     ]
 

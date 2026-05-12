@@ -157,7 +157,10 @@ async def get_fighter_attempt(
 
     def build_messages(recent_log: str, retry: bool = False) -> list[dict[str, str]]:
         system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
-            name=fighter.id,
+            fighter_id=fighter.id,
+            display_name=fighter.display_name,
+            opponent_id=opponent.id,
+            opponent_display_name=opponent.display_name,
             class_=fighter.class_,
             environment=fighter.environment,
             pain_desc=pain_desc,
@@ -178,15 +181,18 @@ async def get_fighter_attempt(
         )
 
         system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
-        user_prompt_content = f"It's your turn to act, {fighter.id}. Opponent {opponent.id} is visible. What do you do?"
+        user_prompt_content = (
+            f"It's your turn to act, Fighter {fighter.id} ({fighter.display_name}). "
+            f"Opponent Fighter {opponent.id} ({opponent.display_name}) is visible. What do you do?"
+        )
         user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
         messages = [system, user]
         if retry:
             retry_user = {
                 C.AGENT_ROLE: C.AGENT_USER,
                 C.AGENT_CONTENT: (
-                    f"Your previous response was empty. Give one concrete physical action for {fighter.id} now. "
-                    "Raw action text only."
+                    f"Your previous response was empty. Give one concrete physical action for Fighter {fighter.id} "
+                    f"({fighter.display_name}) now. Raw action text only."
                 ),
             }
             messages.append(retry_user)

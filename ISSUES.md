@@ -324,14 +324,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-027: Example fighter names are ignored
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Configured Fighter Display Names
 - Source: codebase review
 - Area: Config, UX
 - Evidence: `llmfight.ini.example` defines `name` at `llmfight.ini.example:39`, but `get_fighter_settings()` returns only class/loadout/environment in `src/llm_fight/config.py:161`; prompts use `fighter.id` in `src/llm_fight/engine/fighter.py:129`.
 - Impact: Users can edit the obvious identity field and see no effect in prompts, transcripts, or output.
 - Suggested fix: Implement `display_name`/`name` through config, state, prompts, rendering, and winner output, or remove unsupported example keys.
-- Tests: Example-supported fighter names appear in runtime prompts and pre-fight/turn/final output.
+- Resolution: Config `name` now flows into `FighterState.display_name` for preset, config-profile, and generated-profile paths while stable `id`, delta keys, `fighter_id`, and `winner` remain `A`/`B`. Prompts, compact state summaries, pre-fight render output, turn render labels, JSONL trace state, CLI winner output, and batch CSV metadata expose display names without replacing machine ids.
+- Tests: Config fallback, state/profile creation, prompt wording, render labels, CLI winner output, trace/state persistence, and batch CSV display columns cover configured and missing names. Verification passed: `uv run black --check .`, `uv run flake8`, focused tests (`273 passed, 1 warning`), `uv run pytest -q` (`446 passed, 6 skipped, 1 warning`), and `git diff --check`.
 
 ### ISSUE-028: Config and RNG rely on process-global state
 

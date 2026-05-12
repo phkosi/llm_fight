@@ -135,11 +135,15 @@ class FighterState:
     buffs: List[Effect] = field(default_factory=list)
     debuffs: List[Effect] = field(default_factory=list)
     status: C.FighterStatus = C.FighterStatus.FIGHTING
+    display_name: str = ""
     class_: str = "Generic Fighter"
     theme: str = ""
     loadout: str = "their bare fists and wits"
     environment: str = "an open arena"
     profile_generation: Dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        self.display_name = " ".join(str(self.display_name or "").strip().split()) or self.id
 
     @classmethod
     def from_preset(
@@ -160,11 +164,12 @@ class FighterState:
 
         section = config_section or id_
         cfg = config or config_mod.CONFIG
-        settings = cfg.get_fighter_settings(section)
+        settings = cfg.get_fighter_settings(section, display_name_fallback=id_)
 
         return cls(
             id=id_,
             parts=parts_copy,
+            display_name=settings[C.DISPLAY_NAME],
             class_=settings["class_"],
             theme=settings.get(C.THEME, ""),
             loadout=settings["loadout"],
@@ -191,9 +196,10 @@ class FighterState:
             "environment": profile.environment,
         }
         if allow_config_overrides:
-            settings = cfg.get_fighter_settings(section, profile_defaults=profile_defaults)
+            settings = cfg.get_fighter_settings(section, profile_defaults=profile_defaults, display_name_fallback=id_)
         else:
             settings = {
+                C.DISPLAY_NAME: cfg.get_fighter_display_name(section, fallback=id_),
                 "class_": profile.class_ or cfg.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str),
                 C.THEME: profile.theme or "",
                 "loadout": profile.loadout or cfg.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str),
@@ -207,6 +213,7 @@ class FighterState:
         return cls(
             id=id_,
             parts=copy.deepcopy(profile.parts),
+            display_name=settings[C.DISPLAY_NAME],
             class_=settings["class_"],
             theme=settings.get(C.THEME, ""),
             loadout=settings["loadout"],

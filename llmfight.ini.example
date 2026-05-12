@@ -49,6 +49,7 @@ class = Generic Fighter
 loadout = their bare fists and wits
 
 [A]
+# Display labels are shown to users and prompts; mechanics still use stable id A.
 name = Sir Galant
 class = Veteran Knight
 loadout = longsword and tower shield
@@ -57,6 +58,7 @@ loadout = longsword and tower shield
 # anatomy_profile = humanoid
 
 [B]
+# Display labels are shown to users and prompts; mechanics still use stable id B.
 name = Shade
 class = Cunning Assassin
 loadout = poison dagger and smoke bombs

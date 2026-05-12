@@ -71,10 +71,11 @@ def _parse_first_json_response(response_texts: list[str]) -> dict[str, Any]:
     raise json.JSONDecodeError("None of the LLM responses were valid JSON.", "", 0)
 
 
-def _generation_seed_context(section: str, config) -> dict[str, Any]:
-    settings = config.get_fighter_settings(section)
+def _generation_seed_context(section: str, config, display_name_fallback: str) -> dict[str, Any]:
+    settings = config.get_fighter_settings(section, display_name_fallback=display_name_fallback)
     return {
         "section": section,
+        C.DISPLAY_NAME: settings[C.DISPLAY_NAME],
         "class": settings["class_"],
         C.THEME: settings.get(C.THEME, ""),
         C.LOADOUT: settings[C.LOADOUT],
@@ -111,12 +112,13 @@ async def generate_fighter_profile(
     cfg = config or config_mod.CONFIG
     if nudge not in C.FIGHTER_CREATION_NUDGES:
         raise ValueError(f"Unknown fighter creation nudge: {nudge!r}")
+    opponent_id = C.FIGHTER_B if fighter_id == C.FIGHTER_A else C.FIGHTER_A
 
     user_payload = {
         "fighter_id": fighter_id,
         "creation_nudge": nudge,
-        "configured_seed": _generation_seed_context(section, cfg),
-        "opponent_seed": _generation_seed_context(opponent_section, cfg),
+        "configured_seed": _generation_seed_context(section, cfg, fighter_id),
+        "opponent_seed": _generation_seed_context(opponent_section, cfg, opponent_id),
         "requirements": [
             "Return class, theme, loadout, environment, and body_parts.",
             "Use non-empty canonical body part ids.",

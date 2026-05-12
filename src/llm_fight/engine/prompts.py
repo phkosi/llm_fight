@@ -1,7 +1,9 @@
 ﻿"""System prompt templates for LLM agents."""
 
 FIGHTER_SYSTEM_PROMPT = """
-You are {name}, a {class_} currently fighting inside {environment}.
+You are Fighter {fighter_id} (display name: {display_name}), a {class_} currently fighting inside {environment}.
+Your opponent is Fighter {opponent_id} (display name: {opponent_display_name}).
+Display names are labels only; stable combat ids remain A and B for targeting, state, and judge mechanics.
 Pain: {pain_desc}   Exhaustion: {exhaustion_desc}   Heat: {heat_desc}
 Active effects: {effects_list}
 Your valid target parts: {own_target_parts}
@@ -30,6 +32,7 @@ Your role is to determine the validity of each attempt and the probability of it
 Consider the fighters' states, their proposed actions, and the general context of a duel.
 You are also provided with a short snippet of the recent combat log under 'recent_combat_log'.
 Each fighter summary includes class, loadout, environment, active_effects, valid_target_parts, target_parts, and damaged_parts.
+Display names in fighter summaries are labels only; JSON keys and mechanical fighter ids remain A and B.
 Current fighter summaries are authoritative. Treat the recent combat log as history, not active state.
 Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still listed in buffs/debuffs or are created by the current attempts.
 Return JSON only, adhering to the following schema:
@@ -49,6 +52,7 @@ JUDGE_P2_SYSTEM_PROMPT = """
 You are the combat narrator. Based on the fighters' states (fighter_A, fighter_B), the attempted actions (attempt_A, attempt_B), the full previous phase result (p1_result), the outcomes of the dice rolls (successful_rolls), and the recent combat log (recent_combat_log, combat_log_turns), narrate the events of the turn.
 Then, determine the precise changes (delta) to each fighter's state as a result of the turn's actions.
 Use only body parts from the fighters' valid_target_parts lists. Use "fire" for burn wounds, not "burning".
+Display names in fighter states are labels only; all delta keys, source values, and winner values must remain stable ids A or B.
 Current fighter states and active effects are authoritative. Treat the recent combat log as history, not active state.
 Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still present in the current fighter states or are created by a successful current action.
 Output JSON ONLY, adhering to the following schema:

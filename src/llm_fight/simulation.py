@@ -137,6 +137,13 @@ def _status_outcome(A: FighterState, B: FighterState) -> str | None:
     return None
 
 
+def _winner_display_name(winner: str | None, fighters: dict[str, FighterState]) -> str:
+    fighter = fighters.get(str(winner))
+    if fighter is None:
+        return ""
+    return fighter.display_name
+
+
 def _judge_outcome(p2: Dict[str, Any]) -> str | None:
     if not p2.get(C.FIGHT_END, False):
         if p2.get(C.WINNER) is not None:
@@ -981,6 +988,9 @@ async def _single_fight(
             C.LOG_TURN: str(turn),
             C.LOG_P2_FALLBACK_TURNS: str(p2_fallback_turns),
             C.LOG_P2_FALLBACK_USED: str(p2_fallback_turns > 0).lower(),
+            C.LOG_FIGHTER_A_DISPLAY_NAME: A.display_name,
+            C.LOG_FIGHTER_B_DISPLAY_NAME: B.display_name,
+            C.LOG_WINNER_DISPLAY_NAME: _winner_display_name(outcome, {C.FIGHTER_A: A, C.FIGHTER_B: B}),
         }
         _emit_event(on_event, FightEvent(C.FIGHT_EVENT_FIGHT_COMPLETE, turn=turn, data={"result": result}))
         if return_log:
@@ -1063,6 +1073,9 @@ async def run_batch(
                     C.LOG_TURN: "0",
                     C.LOG_P2_FALLBACK_TURNS: "0",
                     C.LOG_P2_FALLBACK_USED: "false",
+                    C.LOG_FIGHTER_A_DISPLAY_NAME: "",
+                    C.LOG_FIGHTER_B_DISPLAY_NAME: "",
+                    C.LOG_WINNER_DISPLAY_NAME: "",
                 }
 
     csv_path = Path(output_csv)
@@ -1074,6 +1087,9 @@ async def run_batch(
                 C.LOG_TURN,
                 C.LOG_P2_FALLBACK_TURNS,
                 C.LOG_P2_FALLBACK_USED,
+                C.LOG_FIGHTER_A_DISPLAY_NAME,
+                C.LOG_FIGHTER_B_DISPLAY_NAME,
+                C.LOG_WINNER_DISPLAY_NAME,
             ],
         )
         writer.writeheader()
@@ -1088,8 +1104,12 @@ async def run_batch(
                 buffered_results[run_index] = result
                 while next_to_write in buffered_results:
                     row = buffered_results.pop(next_to_write)
+                    row.setdefault(C.LOG_TURN, "0")
                     row.setdefault(C.LOG_P2_FALLBACK_TURNS, "0")
                     row.setdefault(C.LOG_P2_FALLBACK_USED, "false")
+                    row.setdefault(C.LOG_FIGHTER_A_DISPLAY_NAME, "")
+                    row.setdefault(C.LOG_FIGHTER_B_DISPLAY_NAME, "")
+                    row.setdefault(C.LOG_WINNER_DISPLAY_NAME, "")
                     writer.writerow(row)
                     fp.flush()
                     next_to_write += 1
