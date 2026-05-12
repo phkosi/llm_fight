@@ -1,6 +1,5 @@
 import csv
 import random
-from logging import CRITICAL
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -88,6 +87,27 @@ def test_cli_play_verbose():
     assert mock_render.make_turn_table.call_count == 2
     for call in mock_render.make_turn_table.call_args_list:
         assert call.kwargs.get("simple") is False
+
+
+def test_cli_play_verbose_routes_engine_logs_to_stderr():
+    runner = CliRunner()
+    log = MagicMock(turns=[])
+
+    async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False, on_event=None):
+        from llm_fight.engine.logger import logger
+
+        logger.warning("engine warning on stderr")
+        return {C.WINNER: C.DRAW, C.LOG_TURN: "1"}, log
+
+    with (
+        patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["play", "--verbose", "--simple-output"])
+
+    assert result.exit_code == 0
+    assert "engine warning on stderr" in result.stderr
+    assert "engine warning on stderr" not in result.stdout
 
 
 def test_cli_play_simple_output():
@@ -282,11 +302,13 @@ def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_
     log = MagicMock(turns=[])
 
     from llm_fight import config as config_mod
+    from llm_fight.engine import logger as logger_module
 
     original = config_mod.CONFIG
+    previous_handlers = logger_module.logger.handlers[:]
+    previous_level = logger_module.logger.level
     with (
         patch("llm_fight.engine.logger.update_logger_level") as mock_update,
-        patch("llm_fight.engine.logger.logger") as mock_logger,
         patch(
             "llm_fight.simulation._single_fight",
             new=AsyncMock(return_value=({C.WINNER: C.DRAW, C.LOG_TURN: "1"}, log)),
@@ -299,7 +321,8 @@ def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_
 
     assert result.exit_code == 0
     mock_update.assert_called_once()
-    mock_logger.setLevel.assert_called_once_with(CRITICAL)
+    assert logger_module.logger.handlers == previous_handlers
+    assert logger_module.logger.level == previous_level
     config_mod.CONFIG = original
 
 

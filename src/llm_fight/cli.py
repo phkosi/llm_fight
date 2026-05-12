@@ -173,12 +173,12 @@ def simulate(
     from logging import CRITICAL
 
     from . import config as config_mod
-    from .engine.logger import logger, update_logger_level
+    from .engine.logger import cli_logging, logger, update_logger_level
 
     if not render.RICH_AVAILABLE:
         raise ClickException("The 'rich' library is required for this command")
 
-    with _command_runtime(config, runs=runs, max_turns=max_turns):
+    with _command_runtime(config, runs=runs, max_turns=max_turns), cli_logging(update_level=False):
         batch_runs, _ = _validate_batch_config()
         update_logger_level()
         log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
@@ -283,12 +283,12 @@ def play(
     """Run a single fight and print the winner."""
     from logging import CRITICAL
 
-    from .engine.logger import logger, update_logger_level
+    from .engine.logger import cli_logging, logger, update_logger_level
 
     if not render.RICH_AVAILABLE and not simple_output:
         raise ClickException("The 'rich' library is required for this command")
 
-    with _command_runtime(config, max_turns=max_turns):
+    with _command_runtime(config, max_turns=max_turns), cli_logging(update_level=False):
         update_logger_level()
         if not verbose:
             logger.setLevel(CRITICAL)
