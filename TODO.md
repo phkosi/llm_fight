@@ -869,7 +869,7 @@ Verification:
 
 Addresses: ISSUE-032, ISSUE-035
 
-- [ ] Centralize live/perf test gating and stop bypassing installed package behavior.
+- [x] Centralize live/perf test gating and stop bypassing installed package behavior.
 
 Acceptance goals:
 
@@ -883,6 +883,14 @@ Required tests:
 - Add pytester-style tests for live/perf marker gating if practical.
 - Add packaging smoke coverage for import and `llmfight --help` without manual `sys.path` insertion.
 - Update README, AGENTS live-test commands, and CI notes.
+
+Verification:
+
+- Removed test-time `src/` path insertion; CI now syncs with `uv sync --locked --dev`, runs `uv run llmfight --help`, and keeps live extras out of the default installed-package job.
+- Added centralized `--run-live`/`--run-perf` gating with `API_URL` enforcement, plus pytester coverage for default skip, quick-live-only, missing-API, and explicit perf paths.
+- Moved the optional `ollama` import in `tests/test_memory_usage.py` behind a perf/live runtime skip.
+- Focused tests after `uv sync --locked --dev`: `uv run pytest -q tests\test_test_gating.py tests\test_packaging.py tests\test_memory_usage.py` -> 6 passed, 1 skipped.
+- Console-script smoke: `uv run llmfight --help` -> passed.
 
 ## Current Gameplay And Retry Contract Docs
 

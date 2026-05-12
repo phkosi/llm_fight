@@ -269,6 +269,7 @@ $env:API_URL = "http://localhost:11434/api/chat"
 Run the standard local checks:
 
 ```bash
+uv sync --locked --dev
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src/llm_fight
@@ -288,20 +289,34 @@ uv run pre-commit run --all-files
 uv run pre-commit run --hook-stage pre-push --all-files
 ```
 
-Live Ollama tests are skipped by default. To opt in, set `API_URL` and run only the live tests:
+The normal test suite uses the installed package from the locked `uv`
+environment; tests do not add `src/` to `sys.path`. CI also runs the installed
+`llmfight --help` console script as a package smoke test.
+
+Live Ollama tests are skipped by default. To run the quick live smoke tests,
+install the live extra, set `API_URL`, and pass `--run-live`:
 
 Bash:
 
 ```bash
+uv sync --locked --all-extras --dev
 export API_URL="http://localhost:11434/api/chat"
-uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py
+uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py tests/test_live_simulation.py
 ```
 
 PowerShell:
 
 ```powershell
+uv sync --locked --all-extras --dev
 $env:API_URL = "http://localhost:11434/api/chat"
-uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py
+uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py tests/test_live_simulation.py
+```
+
+Heavy local performance probes are separate from quick live tests. Keep
+`API_URL` set and the live extra installed, then add `--run-perf`:
+
+```bash
+uv run pytest -q --run-live --run-perf tests/test_memory_usage.py
 ```
 
 CI runs on Python 3.14 using the locked `uv` workflow. See [.github/workflows/ci.yml](.github/workflows/ci.yml).

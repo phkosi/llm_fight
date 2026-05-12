@@ -206,20 +206,31 @@ sanitized `fight_error` or `fight_interrupted` events.
 ## 8. Developer Workflow
 
 ```bash
-uv sync --locked --all-extras --dev
+uv sync --locked --dev
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src/llm_fight
 uv run pytest -q
 ```
 
-Live tests are opt-in:
+The standard suite runs against the installed package path and includes a
+console-script smoke test for `llmfight --help`; tests do not inject `src/`
+directly into `sys.path`.
+
+Live tests are opt-in and require `API_URL`:
 
 ```bash
 uv run pytest -q --run-live
 ```
 
-CI runs on Python 3.14 with the same locked `uv` workflow.
+Performance probes are additionally gated:
+
+```bash
+uv run pytest -q --run-live --run-perf tests/test_memory_usage.py
+```
+
+CI runs on Python 3.14 with the same locked `uv` workflow and omits optional
+live extras unless a live job is added explicitly.
 
 ## 9. Future Work
 
