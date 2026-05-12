@@ -4,7 +4,7 @@ from typer.testing import CliRunner
 from llm_fight.cli import app
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from pathlib import Path
-from click import ClickException
+from click import ClickException, unstyle
 from logging import CRITICAL
 from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
@@ -26,6 +26,10 @@ def _write_batch_csv(path, rows):
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _plain_cli_output(result):
+    return " ".join(unstyle(result.output).split())
 
 
 def test_cli_help():
@@ -650,7 +654,7 @@ def test_cli_simulate_negative_runs_override_fails_before_ping():
         result = runner.invoke(app, ["simulate", "--runs", "-1"])
 
     assert result.exit_code != 0
-    assert "--runs must be 0 or greater" in result.output
+    assert "--runs must be 0 or greater" in _plain_cli_output(result)
     ping.assert_not_awaited()
 
 
