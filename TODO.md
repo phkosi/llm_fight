@@ -947,7 +947,7 @@ Verification:
 
 Addresses: ISSUE-039
 
-- [ ] Extract effect lifecycle logic and split state tests while preserving `FighterState` behavior.
+- [x] Extract effect lifecycle logic and split state tests while preserving `FighterState` behavior.
 
 Implementation intent:
 
@@ -968,6 +968,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Extracted effect dataclass, payload validation, effect removal selectors, fresh-turn marking, dynamic mechanics, and burn/bleed ticking into `src\llm_fight\effects.py`; `FighterState.apply_delta()` and `FighterState.apply_effects()` remain the public state surface.
+- Size impact: `src\llm_fight\state.py` -> 597 LOC; `src\llm_fight\effects.py` -> 400 LOC; `tests\test_state.py` -> 669 LOC; `tests\test_state_effect_ticks.py` -> 366 LOC; `tests\test_state_effect_removal.py` -> 225 LOC.
+- Focused tests: `uv run pytest -q tests\test_state.py tests\test_state_effect_ticks.py tests\test_state_effect_removal.py tests\property\test_apply_delta_property.py tests\property\test_apply_damage_property.py` -> 76 passed.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## Simulation And Phase 2 Test Shard Split
 
