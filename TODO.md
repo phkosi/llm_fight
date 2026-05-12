@@ -695,21 +695,54 @@ Verification:
 
 Addresses: ISSUE-026
 
-- [ ] Replace isolated prompt/response transcript fragments with one fight-scoped JSONL trace containing ordered events for each fight.
+- [x] Replace isolated prompt/response transcript fragments with one fight-scoped JSONL trace containing ordered events for each fight.
+
+Implementation intent:
+
+- Reuse `[General] save_transcripts` and `transcript_dir`; do not add a new user-facing switch.
+- Add a fight trace writer, likely in `src/llm_fight/transcripts.py`, that returns a no-op writer when transcripts are disabled and otherwise creates exactly one `.jsonl` file per `_single_fight()` run.
+- Name trace files with timestamp plus a stable generated `fight_id`; for batch/concurrent runs also include the run index passed from `run_batch()` so filenames remain unique and sortable enough for debugging.
+- Each JSONL line should use stable top-level fields:
+  - `schema_version`
+  - `event_index`
+  - `timestamp`
+  - `fight_id`
+  - optional `run_index`
+  - nullable `turn`
+  - `phase`
+  - `event`
+  - nullable `fighter_id`
+  - `data`
+- Write and flush append-only events so failed or interrupted fights preserve all events written so far.
+- Create the trace at fight start and write `fight_start`, `fighters_ready`, per-phase `FightEvent` events, rich `turn_complete` snapshots, and `fight_complete`. On exceptions or cancellation, write a sanitized `fight_error` or `fight_interrupted` event before re-raising.
+- Make `turn_complete` the rich per-turn snapshot event containing attempts, Judge Phase 1 result, roll metadata, Judge Phase 2 result, sanitized delta, state before, state after, and any fallback metadata.
+- Route prompt/response exchanges from active fighter/judge calls into the current fight trace as `llm_exchange` events with phase, turn, fighter id when applicable, messages, responses, and provider metadata when available. Do not create legacy per-exchange transcript fragment files while an active fight trace exists.
+- Keep `log_exchange(messages, responses)` as a compatibility wrapper outside an active fight trace so direct tests or non-fight callers still work.
+- Preserve generated-profile safety: generated profile calls currently suppress raw transcript logging. The trace may record sanitized profile-generation start/end/error metadata, but must not record raw generated profile prompt/response text or rejected unsafe profile text.
+- Token/latency metadata from provider responses should be captured in trace events when available and omitted cleanly when absent.
 
 Acceptance goals:
 
 - With `save_transcripts = true`, each fight produces one readable ordered trace file.
+- Active fight prompt/response exchanges are represented as ordered trace events, not isolated timestamped fragment files.
 - Every event has fight id, turn, phase, and relevant fighter metadata.
 - Failed or interrupted fights still preserve events written so far.
 - `save_transcripts = false` remains silent.
+- Generated profile rejection/fallback does not leak raw unsafe generation text into traces.
 - Existing transcript tests either remain compatible through a wrapper or are migrated cleanly.
 
 Required tests:
 
-- Transcript tests for one-file-per-fight, event order, metadata fields, disabled mode, and failure-path persistence.
-- Mocked simulation coverage proving rolls, deltas, and states appear in the trace.
+- Transcript tests for disabled no-op mode, one-file-per-fight, event order/indexes, required metadata fields, active `llm_exchange` routing, legacy wrapper behavior outside an active trace, and failure-path persistence.
+- Mocked simulation coverage proving fighter configs, prompts/responses, token metadata, rolls, deltas, before/after states, and final result appear in the trace.
+- Batch/concurrency tests proving multiple runs create one unique trace per fight and no legacy fragment files.
+- Generated-profile regression proving rejected raw profile text is absent from traces while sanitized profile-generation metadata can appear.
 - README/docs document the trace format and config.
+
+Verification:
+
+- Focused tests: `uv run pytest -q tests/test_transcripts.py tests/test_simulation.py tests/test_simulation_failures.py tests/test_agents.py tests/test_cli.py` -> 120 passed, 1 warning.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 439 passed, 6 skipped, 1 warning.
 
 ## Configured Fighter Display Names
 

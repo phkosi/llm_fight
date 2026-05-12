@@ -17,6 +17,7 @@ max_retries = 1
 judge_phase2_failure_policy = fail_open
 log_level = INFO
 log_combat_turns = false
+# When true, each fight writes one ordered fight-scoped JSONL trace file.
 save_transcripts = false
 transcript_dir = transcripts
 fighter_sentence_limit = 1

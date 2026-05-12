@@ -491,7 +491,11 @@ async def chat_with_metadata(
         responses = await _collect(session)
 
     if log_transcript:
-        log_exchange(messages, [response.content for response in responses])
+        log_exchange(
+            messages,
+            [response.content for response in responses],
+            [response.metadata for response in responses if response.metadata],
+        )
     return responses
 
 

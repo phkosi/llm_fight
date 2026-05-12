@@ -213,9 +213,13 @@ Proxy handling is controlled by `[General] ollama_proxy_mode`:
 Transport retry/error logs are redacted. They include operational metadata such
 as request id, endpoint mode, redacted URL, model, message count, message
 character count, completion cap, and schema-present status, but not raw prompts,
-schemas, responses, userinfo, query strings, or payload dumps. Opt-in
-transcripts are separate and still record prompt/response exchanges for
-debugging when `save_transcripts = true`.
+schemas, responses, userinfo, query strings, or payload dumps. When
+`save_transcripts = true`, each fight writes one ordered JSONL trace under
+`transcript_dir`. Trace events include fight id, sequence index, phase, turn,
+fighter id when relevant, fighter/judge prompt-response exchanges, provider
+token/duration metadata when available, rolls, deltas, state snapshots, errors,
+and final result. Generated-profile rejection keeps raw unsafe profile text out
+of traces and records only sanitized profile-generation metadata.
 
 Prompt budgeting is strict. Fighter actions, Judge Phase 1, Judge Phase 2,
 Judge Phase 2 repair, and generated fighter profiles reserve phase-specific

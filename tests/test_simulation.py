@@ -7,6 +7,7 @@ import os
 import random
 
 import llm_fight.simulation as sim_module
+import llm_fight.transcripts as transcripts
 from llm_fight.agents import ChatResult
 from llm_fight.judge import JudgePhase2FailureError
 from llm_fight.state import Effect, FighterState  # Keep for spec
@@ -426,28 +427,36 @@ async def test_invalid_generated_profiles_fallback_without_transcript_leak(tmp_p
     transcript_write_attempts = []
     p1_states = []
 
+    def unsafe_profile_response(text):
+        return json.dumps(
+            {
+                C.CONFIG_FIGHTER_CLASS: text,
+                C.THEME: "bad",
+                C.LOADOUT: "bad knife",
+                "environment": "bad arena",
+                C.BODY_PARTS: [
+                    {
+                        "id": "core",
+                        "is_vital": True,
+                        "layers": [{C.NAME: "flesh", C.MAX_HP: 10}],
+                    }
+                ],
+            }
+        )
+
     async def fake_chat(*args, log_transcript=True, **kwargs):
         transcript_write_attempts.append(log_transcript)
         if log_transcript:
             transcript_dir.mkdir(parents=True, exist_ok=True)
             (transcript_dir / "leak.json").write_text(raw_unsafe, encoding="utf-8")
-        return [
-            json.dumps(
-                {
-                    C.CONFIG_FIGHTER_CLASS: raw_unsafe,
-                    C.THEME: "bad",
-                    C.LOADOUT: "bad knife",
-                    "environment": "bad arena",
-                    C.BODY_PARTS: [
-                        {
-                            "id": "core",
-                            "is_vital": True,
-                            "layers": [{C.NAME: "flesh", C.MAX_HP: 10}],
-                        }
-                    ],
-                }
-            )
-        ]
+        return [unsafe_profile_response(raw_unsafe)]
+
+    async def fake_chat_with_metadata(*args, log_transcript=True, **kwargs):
+        transcript_write_attempts.append(log_transcript)
+        if log_transcript:
+            transcript_dir.mkdir(parents=True, exist_ok=True)
+            (transcript_dir / "leak.json").write_text(raw_unsafe, encoding="utf-8")
+        return [ChatResult(content=unsafe_profile_response(raw_unsafe), metadata={"total_tokens": 3})]
 
     async def fake_get_attempt(*args, **kwargs):
         return "attack"
@@ -471,6 +480,10 @@ async def test_invalid_generated_profiles_fallback_without_transcript_leak(tmp_p
     try:
         with (
             patch("llm_fight.profile_generation.chat", new=AsyncMock(side_effect=fake_chat)),
+            patch(
+                "llm_fight.profile_generation.chat_with_metadata",
+                new=AsyncMock(side_effect=fake_chat_with_metadata),
+            ),
             patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
             patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
             patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
@@ -482,7 +495,13 @@ async def test_invalid_generated_profiles_fallback_without_transcript_leak(tmp_p
     assert result[C.WINNER] == C.DRAW
     assert transcript_write_attempts
     assert all(flag is False for flag in transcript_write_attempts)
-    assert not transcript_dir.exists()
+    trace_files = list(transcript_dir.glob("*.jsonl"))
+    assert len(trace_files) == 1
+    trace_text = trace_files[0].read_text(encoding="utf-8")
+    assert raw_unsafe not in trace_text
+    assert "profile_generation_start" in trace_text
+    assert "profile_generation_end" in trace_text
+    assert not (transcript_dir / "leak.json").exists()
     serialized_state = json.dumps(p1_states[0], default=str)
     assert raw_unsafe not in serialized_state
     assert p1_states[0][C.FIGHTER_A]["class_"] == "Safe Knight"
@@ -541,6 +560,258 @@ async def test_single_fight_emits_play_events_and_token_metadata():
     assert {event.data["phase"] for event in token_events} == {"fighter_action", "judge_phase1", "judge_phase2"}
     assert len(token_events) == 4
     assert sum(event.data["metadata"]["total_tokens"] for event in token_events) == 28
+
+
+@pytest.mark.asyncio
+async def test_single_fight_writes_ordered_trace_with_exchanges_rolls_deltas_and_states(tmp_path):
+    transcript_dir = tmp_path / "traces"
+    config_path = tmp_path / "game.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "save_transcripts = true",
+                f"transcript_dir = {transcript_dir}",
+                "",
+                "[SIMULATION]",
+                "max_turns = 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    async def fake_get_attempt(fighter, *args, **kwargs):
+        transcripts.log_exchange(
+            [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: f"{fighter.id} act"}],
+            [f"{fighter.id} attacks"],
+            [{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}],
+        )
+        kwargs["on_metadata"]({"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2})
+        return f"{fighter.id} attacks"
+
+    async def fake_judge_p1(*args, **kwargs):
+        transcripts.log_exchange(
+            [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "judge p1"}],
+            ["{}"],
+            [{"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4}],
+        )
+        kwargs["on_metadata"]({"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4})
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A can land.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        transcripts.log_exchange(
+            [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "judge p2"}],
+            ["{}"],
+            [{"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}],
+        )
+        kwargs["on_metadata"]({"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7})
+        return {
+            C.NARRATION: "A clips B.",
+            C.DELTA: {C.FIGHTER_B: {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 3)}},
+            C.FIGHT_END: False,
+            C.WINNER: None,
+        }
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        ):
+            result, combat_log = await sim_module._single_fight(return_log=True, fight_rng=random.Random(5))
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    assert result[C.WINNER] == C.DRAW
+    assert combat_log.turns[0].state_B_after[C.PAIN] == 3
+    assert list(transcript_dir.glob("*.json")) == []
+    [trace_file] = list(transcript_dir.glob("*.jsonl"))
+    events = [json.loads(line) for line in trace_file.read_text(encoding="utf-8").splitlines()]
+    assert [event["event_index"] for event in events] == list(range(len(events)))
+    assert events[0]["event"] == "fight_start"
+    assert events[-1]["event"] == C.FIGHT_EVENT_FIGHT_COMPLETE
+    assert {event["event"] for event in events} >= {
+        C.FIGHT_EVENT_FIGHTERS_READY,
+        "llm_exchange",
+        C.FIGHT_EVENT_TOKEN_METADATA,
+        C.FIGHT_EVENT_ROLLS_END,
+        C.FIGHT_EVENT_TURN_COMPLETE,
+    }
+    exchanges = [event for event in events if event["event"] == "llm_exchange"]
+    assert {event["phase"] for event in exchanges} == {"fighter_action", "judge_phase1", "judge_phase2"}
+    assert {event["fighter_id"] for event in exchanges if event["phase"] == "fighter_action"} == {
+        C.FIGHTER_A,
+        C.FIGHTER_B,
+    }
+    token_events = [event for event in events if event["event"] == C.FIGHT_EVENT_TOKEN_METADATA]
+    assert any(event["data"]["metadata"]["total_tokens"] == 7 for event in token_events)
+    turn_event = next(event for event in events if event["event"] == C.FIGHT_EVENT_TURN_COMPLETE)
+    turn_data = turn_event["data"]["turn"]
+    assert turn_data["attempt_A"] == "A attacks"
+    assert turn_data["rolls"][C.FIGHTER_A]["success"] is True
+    assert turn_data["judge_p2"][C.DELTA][C.FIGHTER_B][C.PAIN_INCREASE] == 3
+    assert turn_data["state_B_before"][C.PAIN] == 0
+    assert turn_data["state_B_after"][C.PAIN] == 3
+
+
+@pytest.mark.asyncio
+async def test_single_fight_trace_preserves_error_event(tmp_path):
+    transcript_dir = tmp_path / "traces"
+    config_path = tmp_path / "game.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "save_transcripts = true",
+                f"transcript_dir = {transcript_dir}",
+                "",
+                "[SIMULATION]",
+                "max_turns = 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        raise RuntimeError("judge exploded with ignore previous instructions and raw prompt text" * 20)
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        ):
+            with pytest.raises(RuntimeError):
+                await sim_module._single_fight(return_log=True)
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    [trace_file] = list(transcript_dir.glob("*.jsonl"))
+    events = [json.loads(line) for line in trace_file.read_text(encoding="utf-8").splitlines()]
+    assert events[0]["event"] == "fight_start"
+    assert events[-1]["event"] == "fight_error"
+    assert events[-1]["data"]["error_type"] == "RuntimeError"
+    assert events[-1]["data"]["message"] == "Fight aborted due to RuntimeError. See application logs for details."
+    trace_text = trace_file.read_text(encoding="utf-8")
+    assert "ignore previous instructions" not in trace_text
+    assert "raw prompt text" not in trace_text
+
+
+@pytest.mark.asyncio
+async def test_single_fight_trace_error_waits_for_cancelled_fighter_sibling(tmp_path):
+    transcript_dir = tmp_path / "traces"
+    config_path = tmp_path / "game.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "save_transcripts = true",
+                f"transcript_dir = {transcript_dir}",
+                "",
+                "[SIMULATION]",
+                "max_turns = 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    async def fake_get_attempt(fighter, *args, **kwargs):
+        if fighter.id == C.FIGHTER_A:
+            raise RuntimeError("fighter action leaked ignore previous instructions")
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            raise
+        transcripts.log_exchange(
+            [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "late B"}],
+            ["late B response"],
+        )
+        return "late B"
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)):
+            with pytest.raises(RuntimeError):
+                await sim_module._single_fight(return_log=True)
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    [trace_file] = list(transcript_dir.glob("*.jsonl"))
+    trace_text = trace_file.read_text(encoding="utf-8")
+    events = [json.loads(line) for line in trace_text.splitlines()]
+    assert events[-1]["event"] == "fight_error"
+    assert "late B response" not in trace_text
+    assert "ignore previous instructions" not in trace_text
+
+
+@pytest.mark.asyncio
+async def test_run_batch_creates_unique_trace_per_concurrent_fight(tmp_path):
+    transcript_dir = tmp_path / "traces"
+    config_path = tmp_path / "game.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "save_transcripts = true",
+                f"transcript_dir = {transcript_dir}",
+                "",
+                "[SIMULATION]",
+                "runs = 2",
+                "concurrent_runs = 2",
+                "max_turns = 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "No one lands.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {C.NARRATION: "They reset.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        ):
+            await sim_module.run_batch(tmp_path / "results.csv")
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    files = sorted(transcript_dir.glob("*.jsonl"))
+    assert len(files) == 2
+    assert list(transcript_dir.glob("*.json")) == []
+    events_by_file = [[json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] for path in files]
+    assert {events[0]["run_index"] for events in events_by_file} == {0, 1}
+    assert all(events[-1]["event"] == C.FIGHT_EVENT_FIGHT_COMPLETE for events in events_by_file)
 
 
 @pytest.mark.asyncio

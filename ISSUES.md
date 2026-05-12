@@ -312,14 +312,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-026: Transcripts are raw exchange fragments, not fight traces
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Fight-Scoped JSONL Trace Transcripts
 - Source: codebase review
 - Area: Observability, transcripts
 - Evidence: `log_exchange()` writes one timestamped prompt/response fragment in `src/llm_fight/transcripts.py:31`; it has no fight id, turn, phase, rolls, deltas, state snapshots, token metrics, or outcome.
 - Impact: Transcripts are hard to read, replay, or debug after a session.
 - Suggested fix: Write one fight-scoped JSONL trace with ordered events: fighter configs, prompts/responses, rolls, deltas, states, token/latency metrics, and final result.
-- Tests: Assert one trace preserves event order and contains turn/phase/fighter metadata.
+- Resolution: `save_transcripts = true` now creates one fight-scoped JSONL trace per fight with ordered event indexes, fight/run identity, lifecycle events, active fighter/judge `llm_exchange` events, token metadata, rolls, deltas, before/after state snapshots, sanitized failure events, and final results. Legacy per-exchange JSON fragments remain only for direct non-fight `log_exchange()` callers.
+- Tests: Transcript, simulation, batch concurrency, generated-profile redaction, agent logging, and CLI tests cover trace event order, disabled mode, wrapper compatibility, no legacy fight fragments, failure persistence, cancelled sibling task draining, token metadata, roll/delta/state snapshots, and profile text redaction; full suite verification passed: `uv run pytest -q` -> 439 passed, 6 skipped, 1 warning.
 
 ### ISSUE-027: Example fighter names are ignored
 

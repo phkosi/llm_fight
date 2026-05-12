@@ -182,6 +182,15 @@ profile text from transcripts. Invalid generated profiles fall back to the
 configured profile or humanoid preset with sanitized `profile_generation`
 metadata.
 
+`save_transcripts = true` writes one fight-scoped JSONL trace per fight under
+`transcript_dir`. Each line has `schema_version`, ordered `event_index`,
+timestamp, fight id, optional run index, turn, phase, event name, fighter id,
+and event data. Active fighter/judge prompt-response exchanges are routed into
+that trace as `llm_exchange` events instead of isolated fragment files; direct
+non-fight callers of `log_exchange()` keep the legacy wrapper behavior. Trace
+writes flush after each event so failures preserve partial history, including
+sanitized `fight_error` or `fight_interrupted` events.
+
 ## 8. Developer Workflow
 
 ```bash

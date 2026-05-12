@@ -16,6 +16,7 @@ from .engine.fighter import get_fighter_attempt
 from .engine import constants as C
 from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
+from .transcripts import active_trace, create_fight_trace, llm_trace_context
 from .profile_generation import (
     ProfileGenerationError,
     choose_fighter_creation_nudge,
@@ -751,6 +752,8 @@ async def _single_fight(
     return_log: bool = False,
     fight_rng: random.Random | None = None,
     on_event: FightEventCallback | None = None,
+    run_index: int | None = None,
+    fight_id: str | None = None,
 ) -> Dict[str, str] | tuple[Dict[str, str], CombatLog]:
     """
     Simulates a single fight between two AI fighters (A and B).
@@ -773,172 +776,235 @@ async def _single_fight(
     if fighter_b_section is None:
         fighter_b_section = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str, fallback="B")
 
+    trace_writer = create_fight_trace(run_index=run_index, fight_id=fight_id)
+    external_on_event = on_event
+
+    def trace_and_forward(event: FightEvent) -> None:
+        trace_writer.write_fight_event(event)
+        _emit_event(external_on_event, event)
+
+    on_event = trace_and_forward if getattr(trace_writer, "enabled", False) or external_on_event is not None else None
+    wants_event_metadata = on_event is not None
     turn = 0
-    outcome = None
-    p2_fallback_turns = 0
-    combat_log = CombatLog()
-    A, B = await _build_match_fighters(fighter_a_section, fighter_b_section, combat_log, fight_rng, on_event=on_event)
-    fighter_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
-    judge_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)
+    trace_writer.write_event(
+        event="fight_start",
+        phase="fight",
+        data={
+            "fighter_a_section": fighter_a_section,
+            "fighter_b_section": fighter_b_section,
+        },
+    )
+    try:
+        outcome = None
+        p2_fallback_turns = 0
+        combat_log = CombatLog()
+        A, B = await _build_match_fighters(
+            fighter_a_section,
+            fighter_b_section,
+            combat_log,
+            fight_rng,
+            on_event=on_event,
+        )
+        fighter_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
+        judge_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)
 
-    while not outcome:
-        turn += 1
+        while not outcome:
+            turn += 1
 
-        # Fighters propose actions concurrently, each receiving the combat log
-        async def _fighter_attempt(fighter: FighterState, opponent: FighterState) -> str:
-            _emit_event(
-                on_event,
-                FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_START, turn=turn, fighter_id=fighter.id),
-            )
-            try:
-                attempt_kwargs: dict[str, Any] = {
-                    "combat_log": combat_log,
-                    "turn_window": fighter_log_window,
-                }
-                if on_event is not None:
-                    attempt_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
-                        on_event,
-                        phase="fighter_action",
-                        metadata=metadata,
-                        turn=turn,
-                        fighter_id=fighter.id,
-                    )
-                return await get_fighter_attempt(fighter, opponent, **attempt_kwargs)
-            finally:
+            # Fighters propose actions concurrently, each receiving the combat log
+            async def _fighter_attempt(fighter: FighterState, opponent: FighterState) -> str:
                 _emit_event(
                     on_event,
-                    FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_END, turn=turn, fighter_id=fighter.id),
+                    FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_START, turn=turn, fighter_id=fighter.id),
                 )
+                try:
+                    attempt_kwargs: dict[str, Any] = {
+                        "combat_log": combat_log,
+                        "turn_window": fighter_log_window,
+                    }
+                    if wants_event_metadata:
+                        attempt_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                            on_event,
+                            phase="fighter_action",
+                            metadata=metadata,
+                            turn=turn,
+                            fighter_id=fighter.id,
+                        )
+                    with (
+                        active_trace(trace_writer),
+                        llm_trace_context(
+                            phase="fighter_action",
+                            turn=turn,
+                            fighter_id=fighter.id,
+                        ),
+                    ):
+                        return await get_fighter_attempt(fighter, opponent, **attempt_kwargs)
+                finally:
+                    _emit_event(
+                        on_event,
+                        FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_END, turn=turn, fighter_id=fighter.id),
+                    )
 
-        attemptA, attemptB = await asyncio.gather(
-            _fighter_attempt(A, B),
-            _fighter_attempt(B, A),
-        )
-        # Provide recent combat log context to judge_phase1
-        p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE1_START, turn=turn))
-        p1_kwargs: dict[str, Any] = {"recent_log": p1_recent_log}
-        if on_event is not None:
-            p1_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+            fighter_attempt_tasks = [
+                asyncio.create_task(_fighter_attempt(A, B)),
+                asyncio.create_task(_fighter_attempt(B, A)),
+            ]
+            try:
+                attemptA, attemptB = await asyncio.gather(*fighter_attempt_tasks)
+            except BaseException:
+                for task in fighter_attempt_tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*fighter_attempt_tasks, return_exceptions=True)
+                raise
+            # Provide recent combat log context to judge_phase1
+            p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE1_START, turn=turn))
+            p1_kwargs: dict[str, Any] = {"recent_log": p1_recent_log}
+            if wants_event_metadata:
+                p1_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                    on_event,
+                    phase="judge_phase1",
+                    metadata=metadata,
+                    turn=turn,
+                )
+            with active_trace(trace_writer), llm_trace_context(phase="judge_phase1", turn=turn):
+                p1 = await judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, **p1_kwargs)
+            p1 = _apply_effect_roll_modifiers(p1, {C.FIGHTER_A: A, C.FIGHTER_B: B})
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE1_END, turn=turn, data={"p1": p1}))
+
+            # Determine success of attempts based on probabilities from Judge P1
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_ROLLS_START, turn=turn))
+            rolls, roll_metadata = _resolve_turn_rolls(p1, fight_rng=fight_rng)
+            _emit_event(
                 on_event,
-                phase="judge_phase1",
-                metadata=metadata,
-                turn=turn,
+                FightEvent(
+                    C.FIGHT_EVENT_ROLLS_END,
+                    turn=turn,
+                    data={"rolls": dict(rolls), C.ROLL_METADATA: roll_metadata},
+                ),
             )
-        p1 = await judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, **p1_kwargs)
-        p1 = _apply_effect_roll_modifiers(p1, {C.FIGHTER_A: A, C.FIGHTER_B: B})
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE1_END, turn=turn, data={"p1": p1}))
 
-        # Determine success of attempts based on probabilities from Judge P1
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_ROLLS_START, turn=turn))
-        rolls, roll_metadata = _resolve_turn_rolls(p1, fight_rng=fight_rng)
-        _emit_event(
-            on_event,
-            FightEvent(
-                C.FIGHT_EVENT_ROLLS_END,
+            # Pass the judgement text to P2 for narration context, full states, and combat log
+            judge_recent_log = combat_log.to_summary(last_n=judge_log_window)
+
+            p2_input_state = {
+                "fighter_A": A.to_json(),
+                "fighter_B": B.to_json(),
+                C.LOG_ATTEMPT_A: attemptA,
+                C.LOG_ATTEMPT_B: attemptB,
+                "p1_result": p1,
+                "p1_judgement": p1.get("judgement_text", ""),
+                "p1_explanation": p1.get("explanation", ""),
+                "valid_target_parts": {
+                    C.FIGHTER_A: sorted(A.parts.keys()),
+                    C.FIGHTER_B: sorted(B.parts.keys()),
+                },
+                "combat_log_turns": len(combat_log),
+                "recent_combat_log": judge_recent_log,
+            }
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_START, turn=turn))
+            p2_kwargs: dict[str, Any] = {}
+            if wants_event_metadata:
+                p2_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                    on_event,
+                    phase="judge_phase2",
+                    metadata=metadata,
+                    turn=turn,
+                )
+            with active_trace(trace_writer), llm_trace_context(phase="judge_phase2", turn=turn):
+                p2 = await judge_phase2(p2_input_state, rolls, **p2_kwargs)
+            p2 = _authorize_phase2_result(p2, p1, rolls, {C.FIGHTER_A: A, C.FIGHTER_B: B})
+            p2_metadata = p2.get(C.METADATA, {})
+            if isinstance(p2_metadata, dict) and p2_metadata.get(C.P2_FALLBACK_USED) is True:
+                p2_fallback_turns += 1
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_END, turn=turn, data={"p2": p2}))
+
+            turn_entry = CombatTurn(
                 turn=turn,
-                data={"rolls": dict(rolls), C.ROLL_METADATA: roll_metadata},
-            ),
-        )
-
-        # Pass the judgement text to P2 for narration context, full states, and combat log
-        judge_recent_log = combat_log.to_summary(last_n=judge_log_window)
-
-        p2_input_state = {
-            "fighter_A": A.to_json(),
-            "fighter_B": B.to_json(),
-            C.LOG_ATTEMPT_A: attemptA,
-            C.LOG_ATTEMPT_B: attemptB,
-            "p1_result": p1,
-            "p1_judgement": p1.get("judgement_text", ""),
-            "p1_explanation": p1.get("explanation", ""),
-            "valid_target_parts": {
-                C.FIGHTER_A: sorted(A.parts.keys()),
-                C.FIGHTER_B: sorted(B.parts.keys()),
-            },
-            "combat_log_turns": len(combat_log),
-            "recent_combat_log": judge_recent_log,
-        }
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_START, turn=turn))
-        p2_kwargs: dict[str, Any] = {}
-        if on_event is not None:
-            p2_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
-                on_event,
-                phase="judge_phase2",
-                metadata=metadata,
-                turn=turn,
+                attempt_A=attemptA,
+                attempt_B=attemptB,
+                judge_p1=p1,
+                judge_p2=p2,
+                state_A_before=p2_input_state["fighter_A"],
+                state_B_before=p2_input_state["fighter_B"],
+                rolls=roll_metadata,
             )
-        p2 = await judge_phase2(p2_input_state, rolls, **p2_kwargs)
-        p2 = _authorize_phase2_result(p2, p1, rolls, {C.FIGHTER_A: A, C.FIGHTER_B: B})
-        p2_metadata = p2.get(C.METADATA, {})
-        if isinstance(p2_metadata, dict) and p2_metadata.get(C.P2_FALLBACK_USED) is True:
-            p2_fallback_turns += 1
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_END, turn=turn, data={"p2": p2}))
 
-        turn_entry = CombatTurn(
-            turn=turn,
-            attempt_A=attemptA,
-            attempt_B=attemptB,
-            judge_p1=p1,
-            judge_p2=p2,
-            state_A_before=p2_input_state["fighter_A"],
-            state_B_before=p2_input_state["fighter_B"],
-            rolls=roll_metadata,
-        )
+            # Apply deltas to fighter states
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_DELTAS_START, turn=turn))
+            if "delta" in p2 and isinstance(p2["delta"], dict):
+                A.apply_delta(p2["delta"].get("A", {}))
+                B.apply_delta(p2["delta"].get("B", {}))
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_DELTAS_END, turn=turn))
 
-        # Apply deltas to fighter states
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_DELTAS_START, turn=turn))
-        if "delta" in p2 and isinstance(p2["delta"], dict):
-            A.apply_delta(p2["delta"].get("A", {}))
-            B.apply_delta(p2["delta"].get("B", {}))
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_DELTAS_END, turn=turn))
+            # Tick effects for both fighters AFTER deltas are applied for the turn
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_EFFECTS_START, turn=turn))
+            A.apply_effects(rng=fight_rng)
+            B.apply_effects(rng=fight_rng)
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_EFFECTS_END, turn=turn))
 
-        # Tick effects for both fighters AFTER deltas are applied for the turn
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_EFFECTS_START, turn=turn))
-        A.apply_effects(rng=fight_rng)
-        B.apply_effects(rng=fight_rng)
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_EFFECTS_END, turn=turn))
+            turn_entry.state_A_after = A.to_json()
+            turn_entry.state_B_after = B.to_json()
 
-        turn_entry.state_A_after = A.to_json()
-        turn_entry.state_B_after = B.to_json()
+            combat_log.append(turn_entry)
+            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_TURN_COMPLETE, turn=turn, data={"turn": turn_entry}))
+            if config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
+                logger.info(turn_entry.to_simple_text())
 
-        combat_log.append(turn_entry)
-        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_TURN_COMPLETE, turn=turn, data={"turn": turn_entry}))
-        if config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
-            logger.info(turn_entry.to_simple_text())
-
-        # Check for fight end conditions
-        status_outcome = _status_outcome(A, B)
-        judge_outcome = _judge_outcome(p2)
-        if status_outcome:
-            if judge_outcome and judge_outcome != status_outcome:
+            # Check for fight end conditions
+            status_outcome = _status_outcome(A, B)
+            judge_outcome = _judge_outcome(p2)
+            if status_outcome:
+                if judge_outcome and judge_outcome != status_outcome:
+                    logger.warning(
+                        "Judge outcome %s contradicted post-delta state outcome %s; using state outcome.",
+                        judge_outcome,
+                        status_outcome,
+                    )
+                outcome = status_outcome
+            elif judge_outcome:
                 logger.warning(
-                    "Judge outcome %s contradicted post-delta state outcome %s; using state outcome.",
+                    "Ignoring judge-only outcome %s because post-delta state outcome is not terminal.",
                     judge_outcome,
-                    status_outcome,
                 )
-            outcome = status_outcome
-        elif judge_outcome:
-            logger.warning(
-                "Ignoring judge-only outcome %s because post-delta state outcome is not terminal.",
-                judge_outcome,
-            )
-        if not outcome and turn >= config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100):
-            outcome = C.DRAW
-        # else: outcome remains None, loop continues
+            if not outcome and turn >= config_mod.CONFIG.get(
+                C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100
+            ):
+                outcome = C.DRAW
+            # else: outcome remains None, loop continues
 
-    logger.info(f"Fight ended. Outcome: {outcome}, Turns: {turn}")
-    logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
-    result = {
-        C.WINNER: outcome,
-        C.LOG_TURN: str(turn),
-        C.LOG_P2_FALLBACK_TURNS: str(p2_fallback_turns),
-        C.LOG_P2_FALLBACK_USED: str(p2_fallback_turns > 0).lower(),
-    }
-    _emit_event(on_event, FightEvent(C.FIGHT_EVENT_FIGHT_COMPLETE, turn=turn, data={"result": result}))
-    if return_log:
-        return result, combat_log
-    return result
+        logger.info(f"Fight ended. Outcome: {outcome}, Turns: {turn}")
+        logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
+        result = {
+            C.WINNER: outcome,
+            C.LOG_TURN: str(turn),
+            C.LOG_P2_FALLBACK_TURNS: str(p2_fallback_turns),
+            C.LOG_P2_FALLBACK_USED: str(p2_fallback_turns > 0).lower(),
+        }
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_FIGHT_COMPLETE, turn=turn, data={"result": result}))
+        if return_log:
+            return result, combat_log
+        return result
+    except asyncio.CancelledError:
+        trace_writer.write_event(
+            event="fight_interrupted",
+            phase="fight",
+            turn=turn or None,
+            data={"error_type": "CancelledError"},
+        )
+        raise
+    except Exception as exc:
+        trace_writer.write_event(
+            event="fight_error",
+            phase="fight",
+            turn=turn or None,
+            data={
+                "error_type": type(exc).__name__,
+                "message": f"Fight aborted due to {type(exc).__name__}. See application logs for details.",
+            },
+        )
+        raise
 
 
 async def run_batch(
@@ -985,6 +1051,7 @@ async def run_batch(
                     fighter_a_section=fighter_a_section,
                     fighter_b_section=fighter_b_section,
                     fight_rng=random.Random(_derive_fight_seed(batch_seed, run_index)),
+                    run_index=run_index,
                 )
                 return run_index, result
             except PromptBudgetError:
