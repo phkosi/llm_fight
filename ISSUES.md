@@ -26,7 +26,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 ### ISSUE-001: Custom anatomy is not reachable at runtime
 
 - Status: tasked
-- Task: TODO.md - Emergent Fighter Anatomy And Effects
+- Task: TODO.md - Structured Custom Fighter Anatomy Profiles; Match-Start LLM Fighter Profile Creation; Creativity Gate For Dynamic Anatomy And Effects
 - Source: codebase review
 - Area: Gameplay systems, dynamic anatomy
 - Evidence: `_single_fight()` always creates both fighters with the `humanoid` preset in `src/llm_fight/simulation.py:95`; `PRESETS` only registers `humanoid` in `src/llm_fight/anatomy.py:64`; fighter config only loads class/loadout/environment in `src/llm_fight/config.py:161`.
@@ -37,7 +37,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 ### ISSUE-002: Creative/custom effects have no general mechanics
 
 - Status: tasked
-- Task: TODO.md - Emergent Fighter Anatomy And Effects
+- Task: TODO.md - Declarative Dynamic Effect Mechanics; Creativity Gate For Dynamic Anatomy And Effects
 - Source: codebase review
 - Area: Gameplay systems, dynamic effects
 - Evidence: `apply_effects()` only handles `burning` and `bleeding` in `src/llm_fight/state.py:360`; `EFFECT_STUNNED` exists but has no handler in `src/llm_fight/engine/constants.py:57`; poison is normalized to generic damage in `src/llm_fight/state.py:58`.

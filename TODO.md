@@ -96,22 +96,103 @@ Successful rich play streak after fixes:
 - Clean run 3: `transcripts\gemma4_26b_playtest\rich_play_20260512_001823.out.log`
 - Notes: all three runs completed with `Winner: draw`, rich tables only, no `INFO - Turn` duplicate preamble, no validation/fallback/runtime error in stdout, and no new actionable rich-output issue found during review.
 
-## Emergent Fighter Anatomy And Effects
+## Structured Custom Fighter Anatomy Profiles
 
-Addresses: ISSUE-001, ISSUE-002
+Addresses: ISSUE-001
 
-- [ ] Support creative fighter designs with dynamic anatomy and dynamically generated effects, including a match-start variant where LLMs create their own fighter profile before combat. Fighter prompts/config should be able to define non-humanoid bodies such as three arms, two heads, wings, tentacles, tails, or other custom parts, and the judge/simulation should treat those parts as valid combat targets with reasonable tissue, vital/severing, and damage behavior. The fighter-creation variant should use light random nudges such as warrior, mage, monster, trickster, hybrid, or fully original/creative so the system can produce varied characters instead of only mirrored humanoids. The same system should allow successful actions to create new debuffs/effects such as poison, blindness, corrosion, freezing, or entanglement even when they are not hard-coded ahead of time, with the judge proposing reasonable magnitude, TTL, affected stats/body parts, and tick behavior that Python validates and applies safely.
+- [ ] Add profile-backed custom fighter anatomy while preserving the current humanoid default. Config or test-authored fighter profiles should be able to define canonical non-humanoid body parts such as `left_wing`, `tail`, `second_head`, `tentacle_1`, or `third_arm`, and the simulation should create `FighterState` objects from those profiles instead of always hard-coding the humanoid preset.
 
 Acceptance goals:
 
-- Creative fighter body plans are represented in state and shown to fighter/judge prompts as authoritative valid target parts.
-- The LLM-created-fighter mode produces structured fighter profiles with class/theme, loadout, anatomy, and any starting traits/effects before turn 1.
-- Judge-created effects use a structured contract, not only narration, so their current state survives across turns.
-- Python validates dynamic parts/effects for sane names, positive values, bounded TTL/magnitude, deterministic tick behavior, and safe fallback/rejection when generated payloads are unusable.
-- Existing humanoid fights continue to work unchanged.
-- Add deterministic tests with mocked LLM/judge outputs for custom anatomy, generated fighter profiles, valid-target propagation, judge-created poison-style effects, effect expiry, invalid dynamic payload rejection, and transcript/state persistence.
-- Add creativity-focused tests or gates that prove the system allows genuinely dynamic outcomes: at minimum, a non-humanoid body plan, a body part not present in the fixed humanoid preset, and an effect not listed in the current hard-coded effect constants must survive into state and prompts.
-- Add an opt-in Codex-agent creativity gate for richer samples, where agents review generated fighter/effect artifacts and flag runs that collapse back to fixed humanoid anatomy, purely narrated effects, or repetitive low-creativity designs.
+- Add a schema-backed profile builder for fighter class/theme, loadout, environment, and anatomy/body parts.
+- Add an explicit config contract for custom anatomy: `anatomy_profile = <json-path-or-humanoid>` is the canonical fighter-section key; `profile = <json-path-or-humanoid>` is accepted as an alias. If both keys are present with different values, raise a config validation error. Missing, empty, or explicit `humanoid` keeps the current humanoid preset. For this slice, non-humanoid profile values are JSON file paths only; resolve relative paths against the active config file directory first, then the current working directory; absolute paths are used as-is. Bare ids other than `humanoid` are out of scope unless a built-in profile registry is added in this same task.
+- Profile `class`, `theme`, `loadout`, and `environment` provide defaults; explicit fighter-section `class`, `loadout`, and `environment` values override profile values. Anatomy/body parts come from the profile whenever `anatomy_profile` or `profile` is set.
+- Add a resolver such as `resolve_fighter_profile(section)` that returns either the existing `humanoid` preset or a validated profile dict, and make `_single_fight()` construct fighters only through this resolver.
+- Validate profile body parts for sane canonical ids, display names, bounded part/layer counts, positive bounded layer HP, duplicate canonical names, at least one targetable part, and at least one vital part unless an explicit safe non-vital policy is added.
+- Keep `FighterState.from_preset("humanoid")` and existing humanoid fights unchanged.
+- Add a `FighterState.from_profile()` or equivalent resolver and make `_single_fight()` create fighters through a profile/preset resolver rather than hard-coding both fighters to humanoid.
+- Show custom anatomy as authoritative valid target parts in fighter prompts, Judge Phase 1 summaries, Judge Phase 2 inputs, combat-log state snapshots, and transcripts/state JSON.
+- Keep prompt anatomy summaries compact; do not dump full tissue-layer JSON into every fighter prompt unless needed.
+- Update `llmfight.ini.example`, README, or docs for the new profile key and default humanoid behavior.
+
+Required tests:
+
+- Default config still creates humanoid fighters with existing parts.
+- A custom profile creates non-humanoid parts such as `left_wing`, `tail`, and `second_head`.
+- Relative profile paths resolve against the active config file directory before the current working directory.
+- Setting both `profile` and `anatomy_profile` to different values raises a config validation error.
+- Fighter-section class/loadout/environment override profile defaults while profile anatomy remains authoritative.
+- Damage to a configured custom part applies; damage to an unknown part is rejected.
+- A custom vital part can affect fighter status through existing invariant logic.
+- A temp config with fighter-specific profile paths causes `_single_fight()` to build A/B from those profiles and pass their custom `valid_target_parts` into Judge Phase 1 and Phase 2.
+- Fighter prompts include own/opponent valid custom target parts without relying on old narration.
+- Transcript/combat-log state snapshots preserve custom parts.
+
+## Declarative Dynamic Effect Mechanics
+
+Addresses: ISSUE-002
+
+- [ ] Add a safe declarative mechanics contract for judge-created effects so effects such as poison, blindness, corrosion, freezing, entanglement, or mobility impairment can persist and affect state even when their names are not hard-coded constants.
+
+Acceptance goals:
+
+- Extend effect validation with bounded, non-executable `mechanics`, while preserving current `burning` and `bleeding` behavior.
+- Support deterministic mechanic kinds such as `stat_tick` for pain/exhaustion/heat, `damage_tick` for a validated target part and damage type, `targeting_modifier` for blindness/vision impairment, and `action_modifier` for stunned, entangled, or mobility-limited states. Prompt-facing tags may describe those mechanics, but must not be the only behavior for effects that claim to alter targeting or actions.
+- Reject arbitrary formulas, Python code, probabilities, unbounded values, unknown target selectors, unsafe names/text, and mechanics targeting nonexistent body parts.
+- Effects with `mechanics: []` may remain narrative-only; effects with invalid mechanics must not enter state or future prompts.
+- Fresh effect timing remains authoritative: newly created effects are visible in the next fighter/judge context before their first eligible tick.
+- Dynamic effect current state is serialized into fighter/judge context from `FighterState.to_json()`, not resurrected from old narration.
+
+Required tests:
+
+- A judge-created poison-style effect with stat ticks increases pain/exhaustion deterministically, observes fresh-turn timing, and expires.
+- A dynamic damage tick affects a validated targeted body part and rejects unknown targets.
+- A blinded or vision-impaired mechanic deterministically affects targeting/visibility and is visible in fighter/judge context.
+- A stunned, action-limited, entangled, or mobility-limited mechanic deterministically restricts or invalidates incompatible actions and expires.
+- Invalid mechanic payloads are rejected before they appear in buffs/debuffs or later prompts.
+- Prompt/judge summaries include active dynamic effect name, TTL, magnitude, target, and mechanics/tags.
+- Existing `burning`, `bleeding`, narrative-only unknown effects, and effect payload safety tests continue to pass.
+
+## Match-Start LLM Fighter Profile Creation
+
+Addresses: ISSUE-001
+
+- [ ] Add an optional match-start fighter creation mode where the LLM creates structured fighter profiles before turn 1, using bounded random nudges such as warrior, mage, monster, trickster, hybrid, or fully original/creative.
+
+Acceptance goals:
+
+- Add an opt-in config mode for generated fighter profiles; the default remains config/preset-backed humanoid behavior.
+- Reuse the same profile schema and sanitizer as configured custom anatomy.
+- Generate class/theme, loadout, environment-compatible flavor, anatomy/body parts, and optional starting traits/effects before the first combat turn.
+- Use the fight-local RNG or simulation seed for deterministic nudge selection in tests and batch runs.
+- On invalid LLM-created profiles, retry a small bounded number of times, then fall back to the configured/preset profile with a visible warning and transcript/state marker.
+- Do not let generated profile text inject prompt instructions or bypass anatomy/effect validation.
+
+Required tests:
+
+- Mocked LLM profile creation produces a non-humanoid fighter before turn 1 and the resulting custom parts enter state and judge payloads.
+- Random nudges are deterministic under a fixed seed/fight RNG.
+- Invalid generated profiles fall back safely without crashing or leaking unsafe body/effect text into prompts.
+- Existing non-generated play/simulate paths do not make an extra profile-generation LLM call.
+
+## Creativity Gate For Dynamic Anatomy And Effects
+
+Addresses: ISSUE-001, ISSUE-002
+
+- [ ] Add creativity-focused tests and an opt-in Codex-agent/manual review gate proving the dynamic systems allow genuinely non-humanoid body plans and non-hard-coded effects instead of collapsing back to fixed humanoid anatomy or pure narration.
+
+Acceptance goals:
+
+- Add deterministic unit/integration tests that prove at least one non-humanoid body part absent from the humanoid preset survives into state, prompts, judge payloads, and transcript/state artifacts.
+- Add deterministic unit/integration tests that prove at least one non-hard-coded effect with declarative mechanics survives into state and prompts, ticks deterministically, and expires.
+- Add an opt-in review command or documented gate where Codex agents can review generated fighter/effect samples for creative variety and flag repetitive low-creativity outputs.
+- Keep the agent creativity gate outside default pytest and local smoke checks; default tests should remain deterministic and offline.
+
+Required tests:
+
+- Deterministic offline test proving a non-humanoid body part absent from `PRESETS["humanoid"]` survives into `FighterState.to_json()`, fighter prompts, Judge Phase 1, Judge Phase 2, and combat-log state snapshots.
+- Deterministic offline test proving a non-hard-coded declarative effect enters state, appears in prompts with mechanics/tags, ticks once after the fresh-turn delay, and expires.
+- Documentation or command test proving the Codex/manual creativity gate is opt-in and excluded from default `pytest`.
 
 ## Terminal Fight Startup And Progress Feedback
 
