@@ -942,3 +942,264 @@ Verification:
 - Added logger reload/import/root-handler/CLI-stderr restoration tests and a CLI test proving verbose engine logs go to stderr, not stdout.
 - Focused tests: `uv run pytest -q tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py` -> 42 passed, 1 warning.
 - Focused gates: `uv run ruff format --check src\llm_fight\engine\logger.py src\llm_fight\cli.py tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py`; `uv run ruff check src\llm_fight\engine\logger.py src\llm_fight\cli.py tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py`; `uv run mypy src/llm_fight` -> passed.
+
+## State Effect Lifecycle Extraction And State Test Split
+
+Addresses: ISSUE-039
+
+- [ ] Extract effect lifecycle logic and split state tests while preserving `FighterState` behavior.
+
+Implementation intent:
+
+- Extract `Effect`, effect payload validation, effect removal selectors, fresh-turn handling, and effect ticking from `src\llm_fight\state.py` into a focused module such as `src\llm_fight\effects.py`.
+- Keep `FighterState.apply_delta()` and `FighterState.apply_effects()` as the public behavior surface, and keep `Effect` import-compatible through `llm_fight.state`.
+- Split `tests\test_state.py` into focused files such as state damage/anatomy, effect payload/removal, and effect ticking/mechanics shards.
+
+Acceptance goals:
+
+- `src\llm_fight\state.py` drops below the 700 LOC issue threshold.
+- No behavior changes to damage, burning, bleeding, TTL expiry, dynamic mechanics, status invariants, or `to_json()` output.
+- `tests\test_state.py` and every new state test shard stay below 800 LOC.
+
+Required tests:
+
+- `uv run pytest -q tests\test_state*.py tests\property\test_apply_delta_property.py tests\property\test_apply_damage_property.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## Simulation And Phase 2 Test Shard Split
+
+Addresses: ISSUE-039
+
+- [ ] Split oversized simulation and Phase 2 authorization test modules without production behavior changes.
+
+Implementation intent:
+
+- Move tests from `tests\test_simulation.py` by responsibility: profile/config generation, trace/events/token metadata, effect roll modifiers, and fight-loop authorization integration.
+- Split `tests\test_phase2_authorization.py` into target-validation and prompt-sanitization shards.
+- Preserve monkeypatch paths such as `llm_fight.simulation.get_fighter_attempt`.
+
+Acceptance goals:
+
+- `tests\test_simulation.py`, `tests\test_phase2_authorization.py`, and every new shard stay below 800 LOC.
+- No production source edits.
+
+Required tests:
+
+- `uv run pytest -q tests\test_simulation.py tests\test_simulation_*.py tests\test_phase2_authorization*.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run pytest -q`
+
+## Single Fight Loop Orchestration Extraction
+
+Addresses: ISSUE-039, ISSUE-040
+
+- [ ] Extract helper units from `_single_fight()` without changing fight-loop behavior.
+
+Implementation intent:
+
+- Extract narrow helpers from `src\llm_fight\simulation.py::_single_fight()` around fighter section resolution, profile generation/fighter construction, event/trace lifecycle, per-turn LLM phase orchestration, result shaping, and final logging.
+- Keep `_single_fight()` as the compatibility entry point used by CLI/tests.
+- Preserve existing monkeypatch targets for fighter/judge calls and current transcript/event behavior.
+
+Acceptance goals:
+
+- `_single_fight()` drops below the 100 LOC function issue threshold.
+- `src\llm_fight\simulation.py` remains below the 700 LOC file issue threshold.
+- No behavior changes to profile fallback, play events, trace events, turn logs, P2 fallback accounting, per-fight RNG, winner resolution, or returned result/log shape.
+
+Required tests:
+
+- `uv run pytest -q tests\test_simulation.py tests\test_simulation_*.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_cli*.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## Agents And CLI Test Shard Split
+
+Addresses: ISSUE-039
+
+- [ ] Split oversized agents and CLI test modules without production behavior changes.
+
+Implementation intent:
+
+- Split `tests\test_agents.py` into payload/schema/metadata, endpoint/proxy/health, and transport/retry/privacy shards.
+- Split `tests\test_cli.py` into play-mode, simulate-mode, and CLI error/config shards.
+- Keep shared helpers tiny and local, or move them into non-collected helper modules.
+
+Acceptance goals:
+
+- `tests\test_agents.py`, `tests\test_cli.py`, and every new shard stay below 800 LOC.
+- No production source edits.
+
+Required tests:
+
+- `uv run pytest -q tests\test_agents*.py tests\test_cli*.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run pytest -q`
+
+## ISSUE-039 Closure Measurement
+
+Addresses: ISSUE-039
+
+- [ ] Re-run code-size measurements and close ISSUE-039 once production and test file thresholds are satisfied.
+
+Acceptance goals:
+
+- `ISSUES.md` marks ISSUE-039 `Status: resolved`.
+- Evidence lists final measured LOC for `state.py`, `simulation.py`, and all split test files relevant to ISSUE-039.
+- `_single_fight()` is below the function issue threshold or is explicitly tracked by the resolved ISSUE-040 closure evidence.
+- No unresolved ISSUE-039 task/status mismatch remains.
+
+Required tests:
+
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+- `git diff --check`
+
+## Fighter Attempt Prompt Pipeline
+
+Addresses: ISSUE-040
+
+- [ ] Extract helper units from `get_fighter_attempt()` without changing fighter prompt behavior.
+
+Implementation intent:
+
+- Extract recent-log selection, prompt context/settings, message building, metadata-aware chat dispatch, and empty-response retry handling from `src\llm_fight\engine\fighter.py::get_fighter_attempt()`.
+- Keep `get_fighter_attempt()` as the public async orchestration wrapper.
+
+Acceptance goals:
+
+- `get_fighter_attempt()` drops below 100 LOC.
+- Prompt text, trimming behavior, metadata callback behavior, retry cap, and fallback guard action are unchanged.
+- No new helper crosses the 100 LOC issue threshold.
+
+Required tests:
+
+- `uv run pytest -q tests\engine\test_fighter.py tests\test_creativity_gate.py tests\test_live_simulation.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## Judge Phase 2 Response Pipeline
+
+Addresses: ISSUE-040
+
+- [ ] Extract helper units from `judge_phase2()` without changing Judge Phase 2 behavior.
+
+Implementation intent:
+
+- Extract Phase 2 payload/message construction, budgeted schema-call setup, plain-JSON repair call, metadata forwarding, and fail-open/fail-closed handling from `src\llm_fight\judge.py::judge_phase2()`.
+- Keep `judge_phase2()` as a small public async orchestration wrapper.
+
+Acceptance goals:
+
+- `judge_phase2()` drops below 100 LOC.
+- Schema-first call, repair retry, parse retry cap, current-state reminder, prompt trimming, metadata stripping, and failure policy behavior are unchanged.
+
+Required tests:
+
+- `uv run pytest -q tests\engine\test_judge.py tests\test_validation.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## CLI Play Rendering Helpers
+
+Addresses: ISSUE-040
+
+- [ ] Extract helper units from `play()` without changing CLI play behavior.
+
+Implementation intent:
+
+- Extract event handling, token metadata collection, fighter display-name capture, turn rendering, rich status wrapping, missed-turn flush, and final winner output from `src\llm_fight\cli.py::play()`.
+- Keep Typer option declarations on `play()`.
+
+Acceptance goals:
+
+- `play()` drops below 100 LOC.
+- Rich vs simple output, status updates, one-time turn rendering, token summary ordering, logger suppression, and configured winner display names are unchanged.
+
+Required tests:
+
+- `uv run pytest -q tests\test_cli*.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## CLI Simulate Batch Helpers
+
+Addresses: ISSUE-040
+
+- [ ] Extract helper units from `simulate()` without changing CLI simulate behavior.
+
+Implementation intent:
+
+- Extract progress callback construction, batch invocation, verbose summary rendering, and error-summary exit handling from `src\llm_fight\cli.py::simulate()`.
+- Preserve pre-ping config validation, `--runs`/`--max-turns` override behavior, `run_batch` monkeypatch expectations, and `--continue-on-error` semantics.
+
+Acceptance goals:
+
+- `simulate()` drops below 100 LOC.
+- Verbose progress, summary table, error warning, and exit-code behavior are unchanged.
+
+Required tests:
+
+- `uv run pytest -q tests\test_cli*.py tests\test_batch.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## Fighter Profile Builder Extraction
+
+Addresses: ISSUE-040
+
+- [ ] Extract body-part construction helpers from `build_fighter_profile()` without changing profile validation behavior.
+
+Implementation intent:
+
+- Extract profile body-part construction, layer parsing, legacy vital consequence derivation, survival-consequence detection, and top-level profile field assembly from `src\llm_fight\profiles.py::build_fighter_profile()`.
+
+Acceptance goals:
+
+- `build_fighter_profile()` drops below 100 LOC.
+- Duplicate IDs/layers, safe text validation, legacy single-vital vs multi-vital behavior, explicit consequence tags/groups, and survival-consequence errors are unchanged.
+
+Required tests:
+
+- `uv run pytest -q tests\test_profiles.py tests\test_profile_generation.py tests\test_simulation*.py`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+
+## ISSUE-040 Closure Measurement
+
+Addresses: ISSUE-040
+
+- [ ] Re-run function-size measurements and close ISSUE-040 once standalone function thresholds are satisfied.
+
+Acceptance goals:
+
+- `ISSUES.md` marks ISSUE-040 `Status: resolved`.
+- Evidence lists final LOC for the functions named in ISSUE-040, including `_single_fight()` as the fight-loop function shared with ISSUE-039, and notes any 75-99 LOC watchlist helpers that remain below the issue threshold.
+- No unresolved ISSUE-040 task/status mismatch remains.
+
+Required tests:
+
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
+- `uv run pytest -q`
+- `git diff --check`
