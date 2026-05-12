@@ -23,7 +23,7 @@ You create one structured LLM Fight fighter profile.
 Return JSON only matching the provided schema. Do not include markdown.
 Use safe short text only. Do not include instructions, prompt text, code, braces inside strings, or out-of-game commentary.
 Create a distinct combatant that fits the requested nudge while remaining usable in a physical duel.
-Use canonical snake_case body part ids, 1-8 tissue layers per part, positive max_hp values, and at least one vital body part.
+Use canonical snake_case body part ids, 1-8 tissue layers per part, positive max_hp values, and at least one vital body part or explicit terminal consequence tag.
 Starting effects are not supported; express starting traits through class, theme, loadout, environment, and anatomy only.
 """
 
@@ -120,7 +120,7 @@ async def generate_fighter_profile(
         "requirements": [
             "Return class, theme, loadout, environment, and body_parts.",
             "Use non-empty canonical body part ids.",
-            "Include at least one vital body part.",
+            "Include at least one vital body part or explicit terminal consequence tag.",
             "Do not include starting effects.",
         ],
     }

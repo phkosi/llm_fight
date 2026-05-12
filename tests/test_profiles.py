@@ -55,23 +55,117 @@ def test_build_fighter_profile_creates_non_humanoid_parts():
     assert set(profile.parts) == {"second_head", "left_wing", "tail"}
     assert profile.parts["left_wing"].can_be_severed is True
     assert profile.parts["second_head"].is_vital is True
+    assert profile.parts["second_head"].consequence_tags == [C.CONSEQUENCE_FATAL_IF_DESTROYED]
+    assert profile.parts["left_wing"].layers[0].current_hp == profile.parts["left_wing"].layers[0].max_hp
 
 
 def test_from_profile_damage_and_vital_invariants():
     profile = build_fighter_profile(custom_profile())
     fighter = FighterState.from_profile("A", profile)
 
-    wing_hp = sum(layer.max_hp for layer in fighter.parts["left_wing"].layers)
+    wing_hp = sum(layer.current_hp for layer in fighter.parts["left_wing"].layers)
+    wing_max_hp = sum(layer.max_hp for layer in fighter.parts["left_wing"].layers)
     fighter.apply_damage_to_part("left_wing", 5, C.DamageType.SLASHING)
-    assert sum(layer.max_hp for layer in fighter.parts["left_wing"].layers) == wing_hp - 5
+    assert sum(layer.current_hp for layer in fighter.parts["left_wing"].layers) == wing_hp - 5
+    assert sum(layer.max_hp for layer in fighter.parts["left_wing"].layers) == wing_max_hp
 
     fighter.apply_damage_to_part("not_a_part", 99, C.DamageType.SLASHING)
     assert "not_a_part" not in fighter.parts
 
-    head_hp = sum(layer.max_hp for layer in fighter.parts["second_head"].layers)
+    head_hp = sum(layer.current_hp for layer in fighter.parts["second_head"].layers)
     fighter.apply_damage_to_part("second_head", head_hp, C.DamageType.BLUNT)
     assert fighter.parts["second_head"].status == C.IS_DESTROYED
     assert fighter.status == C.FighterStatus.DEAD
+
+
+def test_legacy_multi_vital_profile_uses_explicit_aggregate_group():
+    profile = build_fighter_profile(
+        custom_profile(
+            **{
+                C.BODY_PARTS: [
+                    {
+                        "id": "core_a",
+                        "is_vital": True,
+                        "layers": [{C.NAME: "core", C.MAX_HP: 5}],
+                    },
+                    {
+                        "id": "core_b",
+                        "is_vital": True,
+                        "layers": [{C.NAME: "core", C.MAX_HP: 5}],
+                    },
+                ]
+            }
+        )
+    )
+    fighter = FighterState.from_profile("A", profile)
+
+    assert profile.parts["core_a"].consequence_tags == [
+        C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
+        C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
+    ]
+    assert profile.parts["core_a"].consequence_group == C.CONSEQUENCE_GROUP_LEGACY_VITALS
+
+    fighter.apply_damage_to_part("core_a", 5, C.DamageType.GENERIC)
+    assert fighter.status == C.FighterStatus.UNCONSCIOUS
+
+    fighter.status = C.FighterStatus.FIGHTING
+    fighter.apply_damage_to_part("core_b", 5, C.DamageType.GENERIC)
+    assert fighter.status == C.FighterStatus.DEAD
+
+
+def test_explicit_profile_consequence_tags_are_accepted_without_is_vital():
+    profile = build_fighter_profile(
+        custom_profile(
+            **{
+                C.BODY_PARTS: [
+                    {
+                        "id": "glass_core",
+                        C.CONSEQUENCE_TAGS: [C.CONSEQUENCE_FATAL_IF_DESTROYED],
+                        "layers": [{C.NAME: "crystal", C.MAX_HP: 8}],
+                    },
+                    {
+                        "id": "left_wing",
+                        C.CONSEQUENCE_TAGS: [C.CONSEQUENCE_MOBILITY_MEMBER],
+                        C.CONSEQUENCE_GROUP: C.CONSEQUENCE_GROUP_LEGS,
+                        "layers": [{C.NAME: "feather", C.MAX_HP: 8}],
+                    },
+                ]
+            }
+        )
+    )
+
+    assert profile.parts["glass_core"].is_vital is False
+    assert profile.parts["glass_core"].consequence_tags == [C.CONSEQUENCE_FATAL_IF_DESTROYED]
+    assert profile.parts["left_wing"].consequence_group == C.CONSEQUENCE_GROUP_LEGS
+
+
+@pytest.mark.parametrize(
+    ("tag", "group"),
+    [
+        (C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER, None),
+        (C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER, C.CONSEQUENCE_GROUP_LEGS),
+        (C.CONSEQUENCE_VISION_MEMBER, None),
+        (C.CONSEQUENCE_MOBILITY_MEMBER, C.CONSEQUENCE_GROUP_VISION),
+    ],
+)
+def test_group_member_consequence_tags_require_matching_group(tag, group):
+    body_part = {
+        "id": "fragile_core",
+        C.CONSEQUENCE_TAGS: [C.CONSEQUENCE_FATAL_IF_DESTROYED],
+        "layers": [{C.NAME: "crystal", C.MAX_HP: 8}],
+    }
+    grouped_part = {
+        "id": "limb",
+        C.CONSEQUENCE_TAGS: [tag],
+        "layers": [{C.NAME: "soft", C.MAX_HP: 5}],
+    }
+    if group is not None:
+        grouped_part[C.CONSEQUENCE_GROUP] = group
+
+    profile = custom_profile(**{C.BODY_PARTS: [body_part, grouped_part]})
+
+    with pytest.raises(FighterProfileError, match="requires consequence_group"):
+        build_fighter_profile(profile)
 
 
 def test_relative_profile_paths_resolve_config_dir_before_cwd(tmp_path, monkeypatch):

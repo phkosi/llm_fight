@@ -439,6 +439,134 @@ class FighterState:
         eff.fresh_turns = 1
         return eff
 
+    def _layer_current_hp(self, layer) -> int:
+        current_hp = getattr(layer, C.CURRENT_HP, None)
+        if current_hp is None:
+            current_hp = layer.max_hp
+            layer.current_hp = current_hp
+        return int(current_hp)
+
+    def _part_is_lost(self, part: BodyPart) -> bool:
+        return (
+            part.severed
+            or part.status in {C.IS_DESTROYED, C.STATUS_SEVERED}
+            or all(self._layer_current_hp(layer) <= 0 for layer in part.layers)
+        )
+
+    def _remove_debuffs_by_name(self, names: set[str]) -> None:
+        if not names:
+            return
+        self.debuffs = [eff for eff in self.debuffs if eff.name not in names]
+
+    def _add_or_refresh_consequence_debuff(
+        self,
+        *,
+        name: str,
+        magnitude: float,
+        on_apply: str,
+        tags: list[str],
+        metadata: dict[str, Any],
+    ) -> None:
+        existing = next((eff for eff in self.debuffs if eff.name == name), None)
+        if existing is not None:
+            existing.magnitude = magnitude
+            existing.ttl = -1
+            existing.on_apply = on_apply
+            existing.metadata = metadata
+            existing.tags = tags
+            return
+        self.debuffs.append(
+            self._mark_effect_fresh(
+                Effect(
+                    name=name,
+                    magnitude=magnitude,
+                    ttl=-1,
+                    on_apply=on_apply,
+                    metadata=metadata,
+                    tags=tags,
+                )
+            )
+        )
+
+    def _apply_group_member_consequence(
+        self,
+        *,
+        tag: str,
+        group: str,
+        weak_name: str,
+        strong_name: str,
+        weak_on_apply: str,
+        strong_on_apply: str,
+        tag_name: str,
+    ) -> None:
+        members = [
+            (name, part)
+            for name, part in self.parts.items()
+            if tag in getattr(part, C.CONSEQUENCE_TAGS, []) and part.consequence_group == group
+        ]
+        lost_members = [name for name, part in members if self._part_is_lost(part)]
+        if len(lost_members) >= 2:
+            self._remove_debuffs_by_name({weak_name})
+            self._add_or_refresh_consequence_debuff(
+                name=strong_name,
+                magnitude=2,
+                on_apply=strong_on_apply,
+                tags=[C.EFFECT_TAG_ANATOMY_CONSEQUENCE, tag_name],
+                metadata={
+                    C.CONSEQUENCE_GROUP: group,
+                    "affected_parts": sorted(lost_members),
+                },
+            )
+        elif len(lost_members) == 1 and not any(eff.name == strong_name for eff in self.debuffs):
+            self._add_or_refresh_consequence_debuff(
+                name=weak_name,
+                magnitude=1,
+                on_apply=weak_on_apply,
+                tags=[C.EFFECT_TAG_ANATOMY_CONSEQUENCE, tag_name],
+                metadata={
+                    C.CONSEQUENCE_GROUP: group,
+                    C.TARGETED_PART: lost_members[0],
+                },
+            )
+
+    def _apply_anatomy_consequences(self) -> None:
+        lost_parts = {name: part for name, part in self.parts.items() if self._part_is_lost(part)}
+
+        for part in lost_parts.values():
+            tags = getattr(part, C.CONSEQUENCE_TAGS, [])
+            if C.CONSEQUENCE_FATAL_IF_DESTROYED in tags:
+                self._apply_status_change(C.FighterStatus.DEAD)
+            elif C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED in tags:
+                self._apply_status_change(C.FighterStatus.UNCONSCIOUS)
+
+        legacy_members = [
+            part
+            for part in self.parts.values()
+            if C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER in getattr(part, C.CONSEQUENCE_TAGS, [])
+            and part.consequence_group == C.CONSEQUENCE_GROUP_LEGACY_VITALS
+        ]
+        if legacy_members and all(self._part_is_lost(part) for part in legacy_members):
+            self._apply_status_change(C.FighterStatus.DEAD)
+
+        self._apply_group_member_consequence(
+            tag=C.CONSEQUENCE_VISION_MEMBER,
+            group=C.CONSEQUENCE_GROUP_VISION,
+            weak_name=C.EFFECT_IMPAIRED_VISION,
+            strong_name=C.EFFECT_BLINDED,
+            weak_on_apply="Vision is impaired after losing one eye.",
+            strong_on_apply="Both eyes are destroyed; vision is gone.",
+            tag_name=C.EFFECT_TAG_VISION_IMPAIRED,
+        )
+        self._apply_group_member_consequence(
+            tag=C.CONSEQUENCE_MOBILITY_MEMBER,
+            group=C.CONSEQUENCE_GROUP_LEGS,
+            weak_name=C.EFFECT_IMPAIRED_MOBILITY,
+            strong_name=C.EFFECT_GROUNDED,
+            weak_on_apply="Mobility is impaired after losing one leg.",
+            strong_on_apply="Both legs are destroyed or severed; the fighter is grounded.",
+            tag_name=C.EFFECT_TAG_MOBILITY_IMPAIRED,
+        )
+
     def _apply_effect_mechanics(self, eff: Effect) -> None:
         for mechanic in eff.mechanics:
             kind = mechanic.get(C.EFFECT_MECHANIC_KIND)
@@ -475,14 +603,7 @@ class FighterState:
         else:
             logger.debug(f"{self.id} did NOT meet conditions for death by pain.")
 
-        vital_parts = [part for part in self.parts.values() if part.is_vital]
-        destroyed_vital_parts = [part for part in vital_parts if part.status == C.IS_DESTROYED]
-        if vital_parts and len(destroyed_vital_parts) == len(vital_parts) and self.status != C.FighterStatus.DEAD:
-            self.status = C.FighterStatus.DEAD
-            logger.info(f"Fighter {self.id} died due to destruction of all vital parts.")
-        elif destroyed_vital_parts and self.status == C.FighterStatus.FIGHTING:
-            self.status = C.FighterStatus.UNCONSCIOUS
-            logger.info(f"Fighter {self.id} fell unconscious due to destruction of a vital part.")
+        self._apply_anatomy_consequences()
 
     def _apply_status_change(self, new_status: Any) -> None:
         if new_status in (None, ""):
@@ -536,17 +657,20 @@ class FighterState:
         for layer in part.layers:
             if remaining_damage <= 0:
                 break
-            # Apply damage to layer HP
-            dealt_to_layer = min(remaining_damage, layer.max_hp)  # Cannot deal more damage than current HP
-            layer.max_hp -= dealt_to_layer
+            current_hp = self._layer_current_hp(layer)
+            dealt_to_layer = min(remaining_damage, current_hp)
+            layer.current_hp = current_hp - dealt_to_layer
             remaining_damage -= dealt_to_layer
-            logger.debug(f"Dealt {dealt_to_layer} {dt} to {self.id}:{part_name}.{layer.name}, HP now {layer.max_hp}")
+            logger.debug(
+                f"Dealt {dealt_to_layer} {dt} to {self.id}:{part_name}.{layer.name}, "
+                f"HP now {layer.current_hp}/{layer.max_hp}"
+            )
 
         # Basic pain update - can be refined
         self.pain += damage_amount
 
         # Check for part destruction or severing
-        if all(layer.max_hp <= 0 for layer in part.layers):
+        if all(self._layer_current_hp(layer) <= 0 for layer in part.layers):
             if part.can_be_severed:
                 part.status = C.STATUS_SEVERED
                 part.severed = True
@@ -568,8 +692,6 @@ class FighterState:
             else:
                 part.status = C.IS_DESTROYED
             logger.info(f"{self.id}:{part_name} has been {part.status}.")
-            if part.is_vital:
-                self._apply_status_change(C.FighterStatus.UNCONSCIOUS)
 
         # Apply bleeding or burning effects based on damage type
         if dt == C.DamageType.FIRE.value:
@@ -706,7 +828,7 @@ class FighterState:
                     if affected_part_name and affected_part_name in self.parts:
                         target_part = self.parts[affected_part_name]
                         if target_part.status not in [C.IS_DESTROYED, C.STATUS_SEVERED] and target_part.layers:
-                            active_layers = [layer for layer in target_part.layers if layer.max_hp > 0]
+                            active_layers = [layer for layer in target_part.layers if self._layer_current_hp(layer) > 0]
                             if active_layers:
                                 random_layer_to_burn = (
                                     rng.choice(active_layers) if rng is not None else choice(active_layers)

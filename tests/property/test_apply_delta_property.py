@@ -78,7 +78,8 @@ def test_apply_delta_property(delta):
     fighter = FighterState.from_preset("prop_test", "humanoid")
 
     # Snapshot HP before applying delta
-    hp_before = {name: [layer.max_hp for layer in part.layers] for name, part in fighter.parts.items()}
+    hp_before = {name: [layer.current_hp for layer in part.layers] for name, part in fighter.parts.items()}
+    max_hp_before = {name: [layer.max_hp for layer in part.layers] for name, part in fighter.parts.items()}
 
     fighter.apply_delta(delta)
 
@@ -94,10 +95,11 @@ def test_apply_delta_property(delta):
         C.FighterStatus.DEAD,
     }
 
-    # No body part HP should increase from applying the delta
+    # No body part current HP should increase from applying the delta, and max HP should stay stable.
     for name, part in fighter.parts.items():
         for idx, layer in enumerate(part.layers):
-            assert layer.max_hp <= hp_before[name][idx]
+            assert layer.current_hp <= hp_before[name][idx]
+            assert layer.max_hp == max_hp_before[name][idx]
 
     # Adding duplicate permanent effects should not create multiple entries
     permanent_names = [eff.name for eff in (fighter.buffs + fighter.debuffs) if eff.ttl == -1]
@@ -109,4 +111,5 @@ def test_apply_delta_property(delta):
 
     for part in fighter.parts.values():
         for layer in part.layers:
-            assert layer.max_hp >= 0
+            assert layer.current_hp >= 0
+            assert layer.max_hp >= layer.current_hp

@@ -76,7 +76,10 @@ Critical invariants:
 - Burning and bleeding ticks can cause KO/death after effect application.
 - Effects created by a delta or wound side effect are visible in state and in the next turn's fighter/judge context before their first eligible tick.
 - Effects that existed before the current delta remain eligible and tick once per turn.
-- Destroyed vital parts and pain thresholds update status immediately.
+- Tissue layers keep stable `max_hp`; damage lowers `current_hp` and clamps at zero.
+- Destroyed or severed parts apply explicit anatomy consequence tags. Default humanoid heart/head destruction is fatal, torso destruction is incapacitating, and eye/leg loss creates persistent visible consequence debuffs.
+- Legacy custom-profile `is_vital` fields are translated to explicit terminal policies at load time.
+- Pain thresholds still update status immediately.
 
 ## 6. Ollama I/O
 

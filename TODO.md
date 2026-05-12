@@ -527,22 +527,36 @@ Verification:
 
 Addresses: ISSUE-017, ISSUE-020
 
-- [ ] Split tissue maximum durability from mutable combat health, then replace coarse `is_vital` outcome logic with explicit anatomy consequence policies.
+- [x] Split tissue maximum durability from mutable combat health, then replace coarse `is_vital` outcome logic with explicit anatomy consequence policies.
 
 Acceptance goals:
 
-- Damage lowers `current_hp` and never changes `max_hp`.
-- Existing humanoid fights serialize cleanly and run without schema or prompt regressions.
-- Status changes come from explicit consequence policies, not from counting all vital parts.
-- Heart and head destruction produce the chosen fatal outcome immediately.
-- Single-eye, both-eye, and leg destruction produce explicit non-death consequences visible in state.
+- `TissueLayer` stores both immutable `max_hp` and mutable `current_hp`; constructors and profile loading initialize `current_hp == max_hp`, and profile JSON input remains backward-compatible with existing `max_hp`-only layer definitions.
+- Damage reduces only `current_hp`, never mutates `max_hp`, clamps overkill at `0`, and uses `current_hp` for destruction/severing checks.
+- Existing humanoid fights serialize cleanly and run without schema or prompt regressions; serialized layers expose both `current_hp` and `max_hp`.
+- Status changes come from explicit consequence policies, not from counting all `is_vital` parts directly. Keep `is_vital` as a backward-compatible profile/serialization field for this slice. When a custom profile supplies `is_vital=True` but no explicit `consequence_tags`, translate exactly one legacy vital part to `fatal_if_destroyed`; translate multiple legacy vital parts to `incapacitating_if_destroyed` plus `legacy_vital_group_member` in group `legacy_vitals`, where destroying/severing all group members is the explicit fatal policy. This preserves old profile loading and aggregate multi-vital behavior while making the rule visible in state.
+- Implement the first consequence policy contract as `consequence_tags: list[str]` and `consequence_group: str | None` on body parts. Humanoid defaults should use `fatal_if_destroyed` for `heart` and `head`, `incapacitating_if_destroyed` for `torso`, `vision_member` with group `vision` for both eyes, and `mobility_member` with group `legs` for both legs.
+- Heart and head destruction produce `dead` immediately. Torso destruction produces `unconscious` unless the fighter is already dead.
+- Single-eye destruction adds or refreshes a persistent visible `impaired_vision` debuff; both-eye destruction adds or refreshes a stronger persistent visible `blinded` debuff without duplicating stale weaker state.
+- Single-leg destruction/severing adds or refreshes a persistent visible `impaired_mobility` debuff; both-leg destruction/severing adds or refreshes a stronger persistent visible `grounded` debuff without duplicating stale weaker state.
+- Judge damaged-part summaries use `current_hp` as the mutable value while preserving `max_hp` as capacity. In this slice, do not add a new fighter-prompt damaged-anatomy summary beyond the existing authoritative target-part list.
+- Judge damaged-layer summaries define damaged as `current_hp < max_hp`, not only fully depleted layers, and each reported layer includes `name`, `current_hp`, and `max_hp`.
 
 Required tests:
 
 - State tests for `current_hp` mutation, `max_hp` stability, overkill clamping, destruction, severing, and serialization.
 - Anatomy tests for initialized `current_hp == max_hp` and humanoid consequence tags.
-- Consequence tests for heart, head, torso, one eye, both eyes, one leg, and both legs.
+- Consequence tests for heart, head, torso, one eye, both eyes, one leg, and both legs, including debuff names/tags/metadata and deduplication.
+- Profile tests for legacy `is_vital` compatibility, explicit custom consequence tags/groups, and `current_hp` initialization.
+- Judge summary tests proving damaged layers use `current_hp`/`max_hp` instead of mutated `max_hp`.
+- Judge summary tests proving partially damaged layers are reported as damaged and unchanged fighter-prompt target-part behavior is not broadened in this slice.
 - Property tests updated so HP monotonicity checks `current_hp`, while `max_hp` remains stable.
+
+Verification:
+
+- Design review approved the tightened task contract after legacy `is_vital`, judge-summary scope, and damaged-layer shape were made explicit.
+- Focused tests: `uv run pytest -q tests/test_profiles.py tests/test_anatomy.py tests/test_state.py tests/property/test_apply_damage_property.py tests/property/test_apply_delta_property.py tests/engine/test_judge.py` -> 97 passed.
+- Full gate: `uv run pytest -q` -> 401 passed, 6 skipped, 1 warning; `uv run black --check .` -> passed; `uv run flake8` -> passed; `git diff --check` -> passed.
 
 ## Anatomy-Driven Bleeding, Burning, And Layer Accuracy
 

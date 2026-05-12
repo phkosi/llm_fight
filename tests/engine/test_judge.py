@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 import json
 
 from llm_fight import config as config_mod
-from llm_fight.judge import JudgePhase2FailureError, judge_phase1, judge_phase2
+from llm_fight.judge import JudgePhase2FailureError, _fighter_summary, judge_phase1, judge_phase2
 from llm_fight.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
 from llm_fight.engine import constants as C
 from llm_fight.state import FighterState
@@ -88,6 +88,16 @@ MOCK_P2_INPUT_STATE = {
     "combat_log_turns": 1,
 }
 MOCK_ROLLS = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+
+
+def test_fighter_summary_reports_partial_current_hp_damage():
+    fighter = FighterState.from_preset("A", "humanoid")
+
+    fighter.apply_damage_to_part("torso", 3, C.DamageType.GENERIC)
+
+    summary = _fighter_summary(fighter.to_json())
+    damaged_layers = summary["damaged_parts"]["torso"]["damaged_layers"]
+    assert damaged_layers == [{C.NAME: "skin", C.CURRENT_HP: 7, C.MAX_HP: 10}]
 
 
 @pytest.mark.asyncio

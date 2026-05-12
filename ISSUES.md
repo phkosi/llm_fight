@@ -205,14 +205,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-017: Vital-part consequences are too coarse
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Layer Health And Anatomy Consequence Policies
 - Source: codebase review
 - Area: Gameplay mechanics
 - Evidence: Death by anatomy requires all vital parts destroyed in `src/llm_fight/state.py:166`; one destroyed vital only causes unconsciousness in `src/llm_fight/state.py:171`; heart/head/torso are all `is_vital` in `src/llm_fight/anatomy.py:47`.
 - Impact: Destroying the heart or head is treated as unconsciousness unless every vital part is destroyed, which weakens organ-specific combat logic.
-- Suggested fix: Replace `is_vital` with consequence tags or policies such as `fatal_if_destroyed`, `incapacitating`, `vision`, `mobility`, `circulation`.
-- Tests: Heart destruction, head destruction, single-eye/both-eye destruction, and leg destruction should assert the chosen consequences.
+- Suggested fix: Replace direct `is_vital` status logic with explicit consequence tags/policies such as `fatal_if_destroyed`, `incapacitating_if_destroyed`, `vision_member`, and `mobility_member`.
+- Resolution: `src/llm_fight/anatomy.py` now gives humanoid parts explicit consequence tags/groups, `src/llm_fight/profiles.py` translates legacy custom-profile `is_vital` declarations into explicit policies, and `src/llm_fight/state.py` applies those policies for fatal, incapacitating, vision, and mobility consequences.
+- Tests: Heart/head fatal, torso incapacitating, one-eye/both-eye, one-leg/both-leg, legacy multi-vital, explicit custom consequence tags, group/tag validation, and full suite verification passed: `uv run pytest -q` -> 401 passed, 6 skipped, 1 warning.
 
 ### ISSUE-018: Effect removal is name-only and cannot target one wound
 
@@ -238,14 +239,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-020: Tissue `max_hp` is used as current HP
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Layer Health And Anatomy Consequence Policies
 - Source: codebase review
 - Area: State model
 - Evidence: `TissueLayer` only has `max_hp` in `src/llm_fight/anatomy.py:11`; damage subtracts from it in `src/llm_fight/state.py:205`; `CURRENT_HP` exists but is unused in `src/llm_fight/engine/constants.py:20`.
 - Impact: Original durability is lost, making healing, percentage summaries, balancing, and dynamic anatomy harder.
 - Suggested fix: Add `current_hp`, initialize it from `max_hp`, and mutate only `current_hp`.
-- Tests: Damage lowers `current_hp` while `max_hp` stays stable; serialization preserves both.
+- Resolution: `TissueLayer` now initializes `current_hp == max_hp`; damage, destruction, severing, burn ticks, property tests, and judge damaged-layer summaries use `current_hp` while preserving `max_hp`.
+- Tests: Damage lowers `current_hp` while `max_hp` stays stable; overkill clamps to zero; serialization and judge summaries preserve both values; property tests check `current_hp` monotonicity and `max_hp` stability; full suite verification passed: `uv run pytest -q` -> 401 passed, 6 skipped, 1 warning.
 
 ### ISSUE-021: Combat state changes are mostly hidden in terminal output
 

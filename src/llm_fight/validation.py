@@ -187,6 +187,16 @@ BodyPartSchema = {
             C.SCHEMA_MINIMUM: 0,
             C.SCHEMA_MAXIMUM: 50,
         },
+        C.CONSEQUENCE_TAGS: {
+            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
+            C.SCHEMA_ITEMS: {
+                C.SCHEMA_TYPE: C.SCHEMA_STRING,
+                C.SCHEMA_ENUM: list(C.CONSEQUENCE_ALLOWED_TAGS),
+            },
+            C.SCHEMA_UNIQUE_ITEMS: True,
+            C.SCHEMA_MAX_ITEMS: len(C.CONSEQUENCE_ALLOWED_TAGS),
+        },
+        C.CONSEQUENCE_GROUP: ProfileIdentifierSchema,
     },
     C.SCHEMA_REQUIRED: ["id", "layers"],
     C.SCHEMA_ADDITIONAL_PROPERTIES: False,

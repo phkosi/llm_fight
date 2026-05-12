@@ -12,16 +12,30 @@ def humanoid_fighter():
     return FighterState.from_preset("TestFighter", "humanoid")
 
 
+def part_current_hp(fighter: FighterState, part_name: str) -> int:
+    return sum(layer.current_hp for layer in fighter.parts[part_name].layers)
+
+
+def part_max_hp(fighter: FighterState, part_name: str) -> int:
+    return sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+
+
+def layer_current_hps(fighter: FighterState, part_name: str) -> list[int]:
+    return [layer.current_hp for layer in fighter.parts[part_name].layers]
+
+
 def test_apply_damage_to_part_reduces_hp(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_arm"
-    initial_hp_sum = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    initial_hp_sum = part_current_hp(fighter, part_name)
+    initial_max_hp_sum = part_max_hp(fighter, part_name)
 
     fighter.apply_damage_to_part(part_name, 10, C.DamageType.SLASHING)
 
-    final_hp_sum = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    final_hp_sum = part_current_hp(fighter, part_name)
     assert final_hp_sum < initial_hp_sum
     assert final_hp_sum == initial_hp_sum - 10, f"Expected HP to be {initial_hp_sum - 10}, but got {final_hp_sum}"
+    assert part_max_hp(fighter, part_name) == initial_max_hp_sum
     assert fighter.pain == 10, f"Expected pain to be 10, but got {fighter.pain}"  # Basic pain check
 
 
@@ -29,12 +43,12 @@ def test_apply_damage_destroys_part(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_eye"  # A small part that's easy to destroy
 
-    total_eye_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_eye_hp = part_current_hp(fighter, part_name)
 
     fighter.apply_damage_to_part(part_name, total_eye_hp + 5, C.DamageType.PIERCING)  # Overkill
 
     assert fighter.parts[part_name].status == C.IS_DESTROYED
-    assert all(layer.max_hp <= 0 for layer in fighter.parts[part_name].layers)
+    assert all(layer.current_hp == 0 for layer in fighter.parts[part_name].layers)
     assert fighter.pain >= total_eye_hp
 
 
@@ -42,7 +56,7 @@ def test_apply_damage_severs_part(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_arm"
 
-    total_arm_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_arm_hp = part_current_hp(fighter, part_name)
 
     fighter.apply_damage_to_part(part_name, total_arm_hp + 10, C.DamageType.SLASHING)  # Overkill to ensure severing
 
@@ -55,17 +69,17 @@ def test_apply_damage_severs_part(humanoid_fighter: FighterState):
 def test_apply_damage_to_severed_part_no_layer_damage(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_arm"
-    total_arm_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_arm_hp = part_current_hp(fighter, part_name)
 
     fighter.apply_damage_to_part(part_name, total_arm_hp + 10, C.DamageType.SLASHING)
     assert fighter.parts[part_name].severed is True
 
-    hp_after_sever = [layer.max_hp for layer in fighter.parts[part_name].layers]
+    hp_after_sever = layer_current_hps(fighter, part_name)
     initial_pain_after_sever = fighter.pain
 
     fighter.apply_damage_to_part(part_name, 20, C.DamageType.SLASHING)
 
-    hp_after_second_hit = [layer.max_hp for layer in fighter.parts[part_name].layers]
+    hp_after_second_hit = layer_current_hps(fighter, part_name)
 
     assert hp_after_second_hit == hp_after_sever
     assert fighter.pain == initial_pain_after_sever + (20 // 2)
@@ -74,7 +88,7 @@ def test_apply_damage_to_severed_part_no_layer_damage(humanoid_fighter: FighterS
 def test_damage_to_severed_part_updates_death_invariants(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_arm"
-    total_arm_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_arm_hp = part_current_hp(fighter, part_name)
     fighter.apply_damage_to_part(part_name, total_arm_hp + 10, C.DamageType.SLASHING)
     fighter.pain = C.MAX_PAIN_BEFORE_DEATH - 5
 
@@ -86,7 +100,7 @@ def test_damage_to_severed_part_updates_death_invariants(humanoid_fighter: Fight
 def test_damage_to_destroyed_part_updates_death_invariants(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_eye"
-    total_eye_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_eye_hp = part_current_hp(fighter, part_name)
     fighter.apply_damage_to_part(part_name, total_eye_hp + 1, C.DamageType.PIERCING)
     fighter.status = C.FighterStatus.FIGHTING
     fighter.pain = C.MAX_PAIN_BEFORE_DEATH - 5
@@ -172,22 +186,24 @@ def test_apply_damage_to_non_existent_part(humanoid_fighter: FighterState):
 
 def test_apply_damage_ignores_non_positive_damage(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
-    initial_torso_hp = sum(layer.max_hp for layer in fighter.parts["torso"].layers)
+    initial_torso_hp = part_current_hp(fighter, "torso")
+    initial_torso_max_hp = part_max_hp(fighter, "torso")
 
     fighter.apply_damage_to_part("torso", -10, C.DamageType.GENERIC)
     fighter.apply_damage_to_part("torso", 0, C.DamageType.GENERIC)
 
     assert fighter.pain == 0
-    assert sum(layer.max_hp for layer in fighter.parts["torso"].layers) == initial_torso_hp
+    assert part_current_hp(fighter, "torso") == initial_torso_hp
+    assert part_max_hp(fighter, "torso") == initial_torso_max_hp
 
 
 def test_apply_delta_normalizes_body_part_aliases(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
-    initial_torso_hp = sum(layer.max_hp for layer in fighter.parts["torso"].layers)
+    initial_torso_hp = part_current_hp(fighter, "torso")
 
     fighter.apply_delta({C.WOUNDS: [{C.TARGETED_PART: "chest.", C.VALUE: 7, C.TYPE: "slash"}]})
 
-    assert sum(layer.max_hp for layer in fighter.parts["torso"].layers) == initial_torso_hp - 7
+    assert part_current_hp(fighter, "torso") == initial_torso_hp - 7
     assert fighter.pain == 7
 
 
@@ -200,17 +216,97 @@ def test_apply_delta_accepts_effect_magnitude_alias(humanoid_fighter: FighterSta
     assert fighter.debuffs[0].magnitude == 2.5
 
 
-def test_vital_part_destruction_leads_to_unconscious(humanoid_fighter: FighterState):
+def test_head_destruction_leads_to_death(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "head"  # Head is vital
     assert fighter.parts[part_name].is_vital
     assert fighter.status == C.FighterStatus.FIGHTING
 
-    total_head_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_head_hp = part_current_hp(fighter, part_name)
     fighter.apply_damage_to_part(part_name, total_head_hp + 5, C.DamageType.PIERCING)  # Destroy the head
 
     assert fighter.parts[part_name].status == C.IS_DESTROYED
+    assert fighter.status == C.FighterStatus.DEAD
+
+
+def test_damage_overkill_clamps_current_hp_and_serializes(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "left_eye"
+    initial_max_hp = part_max_hp(fighter, part_name)
+
+    fighter.apply_damage_to_part(part_name, initial_max_hp + 50, C.DamageType.PIERCING)
+    serialized_layer = fighter.to_json()["parts"][part_name]["layers"][0]
+
+    assert part_current_hp(fighter, part_name) == 0
+    assert part_max_hp(fighter, part_name) == initial_max_hp
+    assert serialized_layer[C.CURRENT_HP] == 0
+    assert serialized_layer[C.MAX_HP] == initial_max_hp
+
+
+def test_torso_destruction_leads_to_unconscious(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "torso"
+
+    fighter.apply_damage_to_part(part_name, part_current_hp(fighter, part_name) + 1, C.DamageType.PIERCING)
+
+    assert fighter.parts[part_name].status == C.IS_DESTROYED
     assert fighter.status == C.FighterStatus.UNCONSCIOUS
+
+
+def test_one_eye_destruction_adds_impaired_vision(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_damage_to_part("left_eye", part_current_hp(fighter, "left_eye"), C.DamageType.PIERCING)
+
+    impaired = next(eff for eff in fighter.debuffs if eff.name == C.EFFECT_IMPAIRED_VISION)
+    assert impaired.ttl == -1
+    assert impaired.metadata[C.TARGETED_PART] == "left_eye"
+    assert impaired.metadata[C.CONSEQUENCE_GROUP] == C.CONSEQUENCE_GROUP_VISION
+    assert C.EFFECT_TAG_ANATOMY_CONSEQUENCE in impaired.tags
+    assert C.EFFECT_TAG_VISION_IMPAIRED in impaired.tags
+    assert not any(eff.name == C.EFFECT_BLINDED for eff in fighter.debuffs)
+
+
+def test_both_eye_destruction_replaces_impaired_vision_with_blinded(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_damage_to_part("left_eye", part_current_hp(fighter, "left_eye"), C.DamageType.PIERCING)
+    fighter.apply_damage_to_part("right_eye", part_current_hp(fighter, "right_eye"), C.DamageType.PIERCING)
+
+    assert not any(eff.name == C.EFFECT_IMPAIRED_VISION for eff in fighter.debuffs)
+    blinded = [eff for eff in fighter.debuffs if eff.name == C.EFFECT_BLINDED]
+    assert len(blinded) == 1
+    assert blinded[0].ttl == -1
+    assert blinded[0].metadata[C.CONSEQUENCE_GROUP] == C.CONSEQUENCE_GROUP_VISION
+    assert blinded[0].metadata["affected_parts"] == ["left_eye", "right_eye"]
+
+
+def test_one_leg_severing_adds_impaired_mobility(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_damage_to_part("left_leg", part_current_hp(fighter, "left_leg"), C.DamageType.SLASHING)
+
+    impaired = next(eff for eff in fighter.debuffs if eff.name == C.EFFECT_IMPAIRED_MOBILITY)
+    assert impaired.ttl == -1
+    assert impaired.metadata[C.TARGETED_PART] == "left_leg"
+    assert impaired.metadata[C.CONSEQUENCE_GROUP] == C.CONSEQUENCE_GROUP_LEGS
+    assert C.EFFECT_TAG_ANATOMY_CONSEQUENCE in impaired.tags
+    assert C.EFFECT_TAG_MOBILITY_IMPAIRED in impaired.tags
+    assert not any(eff.name == C.EFFECT_GROUNDED for eff in fighter.debuffs)
+
+
+def test_both_leg_severing_replaces_impaired_mobility_with_grounded(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+
+    fighter.apply_damage_to_part("left_leg", part_current_hp(fighter, "left_leg"), C.DamageType.SLASHING)
+    fighter.apply_damage_to_part("right_leg", part_current_hp(fighter, "right_leg"), C.DamageType.SLASHING)
+
+    assert not any(eff.name == C.EFFECT_IMPAIRED_MOBILITY for eff in fighter.debuffs)
+    grounded = [eff for eff in fighter.debuffs if eff.name == C.EFFECT_GROUNDED]
+    assert len(grounded) == 1
+    assert grounded[0].ttl == -1
+    assert grounded[0].metadata[C.CONSEQUENCE_GROUP] == C.CONSEQUENCE_GROUP_LEGS
+    assert grounded[0].metadata["affected_parts"] == ["left_leg", "right_leg"]
 
 
 def test_vital_part_destruction_does_not_revive_dead_fighter(humanoid_fighter: FighterState):
@@ -218,7 +314,7 @@ def test_vital_part_destruction_does_not_revive_dead_fighter(humanoid_fighter: F
     part_name = "head"
     fighter.status = C.FighterStatus.DEAD
     fighter.pain = 0
-    total_head_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    total_head_hp = part_current_hp(fighter, part_name)
 
     fighter.apply_damage_to_part(part_name, total_head_hp + 1, C.DamageType.PIERCING)
 
@@ -262,12 +358,14 @@ def test_apply_delta_basic_stat_increases(humanoid_fighter: FighterState):
 def test_apply_delta_applies_wounds(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "torso"
-    initial_hp_sum = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    initial_hp_sum = part_current_hp(fighter, part_name)
+    initial_max_hp_sum = part_max_hp(fighter, part_name)
     damage_val = 15
     delta = {C.WOUNDS: [{C.TARGETED_PART: part_name, C.VALUE: damage_val, C.TYPE: C.DamageType.PIERCING}]}
     fighter.apply_delta(delta)
-    final_hp_sum = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    final_hp_sum = part_current_hp(fighter, part_name)
     assert final_hp_sum == initial_hp_sum - damage_val
+    assert part_max_hp(fighter, part_name) == initial_max_hp_sum
     assert fighter.pain == damage_val  # From apply_damage_to_part
 
 
@@ -374,19 +472,19 @@ def test_wound_created_burning_skips_current_tick(humanoid_fighter: FighterState
     fighter.apply_damage_to_part(part_name, 10, C.DamageType.FIRE)
     burning = next(eff for eff in fighter.debuffs if eff.name == C.EFFECT_BURNING)
     assert burning.fresh_turns == 1
-    hp_after_wound = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    hp_after_wound = part_current_hp(fighter, part_name)
 
     fighter.apply_effects()
 
     assert fighter.heat == initial_heat
-    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) == hp_after_wound
+    assert part_current_hp(fighter, part_name) == hp_after_wound
     assert burning.ttl == 3
     assert burning.fresh_turns == 0
 
     fighter.apply_effects()
 
     assert fighter.heat == initial_heat + int(burning.magnitude * 5)
-    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) < hp_after_wound
+    assert part_current_hp(fighter, part_name) < hp_after_wound
     assert burning.ttl == 2
 
 
@@ -402,18 +500,18 @@ def test_existing_targeted_burning_remains_eligible_when_part_takes_fire_damage(
     )
     fighter.debuffs.append(existing)
     initial_heat = fighter.heat
-    hp_before = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    hp_before = part_current_hp(fighter, part_name)
 
     fighter.apply_damage_to_part(part_name, 5, C.DamageType.FIRE)
     assert len([eff for eff in fighter.debuffs if eff.name == C.EFFECT_BURNING]) == 1
-    hp_after_wound = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    hp_after_wound = part_current_hp(fighter, part_name)
     assert hp_after_wound == hp_before - 5
 
     fighter.apply_effects()
 
     assert existing.ttl == 1
     assert fighter.heat == initial_heat + int(existing.magnitude * 5)
-    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) == hp_after_wound - int(existing.magnitude)
+    assert part_current_hp(fighter, part_name) == hp_after_wound - int(existing.magnitude)
 
 
 def test_wound_created_bleeding_skips_current_tick(humanoid_fighter: FighterState):
@@ -474,7 +572,7 @@ def test_apply_effects_removes_effect_with_invalid_ttl(humanoid_fighter: Fighter
     fighter = humanoid_fighter
     part_name = "torso"
     initial_heat = fighter.heat
-    initial_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    initial_hp = part_current_hp(fighter, part_name)
     fighter.debuffs.append(
         Effect(
             name=C.EFFECT_BURNING,
@@ -489,7 +587,7 @@ def test_apply_effects_removes_effect_with_invalid_ttl(humanoid_fighter: Fighter
 
     assert not fighter.debuffs
     assert fighter.heat == initial_heat
-    assert sum(layer.max_hp for layer in fighter.parts[part_name].layers) == initial_hp
+    assert part_current_hp(fighter, part_name) == initial_hp
 
 
 def test_apply_effects_removes_effect_with_invalid_magnitude(humanoid_fighter: FighterState):
@@ -566,7 +664,7 @@ def test_apply_effects_burning_damages_part_and_increases_stats(humanoid_fighter
 
     initial_pain = fighter.pain
     initial_heat = fighter.heat
-    initial_part_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    initial_part_hp = part_current_hp(fighter, part_name)
 
     fighter.apply_effects()
 
@@ -574,7 +672,7 @@ def test_apply_effects_burning_damages_part_and_increases_stats(humanoid_fighter
     assert fighter.pain == initial_pain + expected_burn_damage  # Corrected expected pain
     assert fighter.heat == initial_heat + int(burning_effect.magnitude * 5)
 
-    final_part_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    final_part_hp = part_current_hp(fighter, part_name)
     assert final_part_hp == initial_part_hp - expected_burn_damage
 
     assert not any(eff.name == C.EFFECT_BURNING for eff in fighter.debuffs)
@@ -622,7 +720,7 @@ def test_dynamic_stat_tick_effect_observes_fresh_turn_and_expires(humanoid_fight
 
 def test_dynamic_damage_tick_effect_targets_valid_custom_part(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
-    initial_hp = sum(layer.max_hp for layer in fighter.parts["torso"].layers)
+    initial_hp = part_current_hp(fighter, "torso")
     fighter.debuffs.append(
         Effect(
             name="corroded",
@@ -642,7 +740,7 @@ def test_dynamic_damage_tick_effect_targets_valid_custom_part(humanoid_fighter: 
 
     fighter.apply_effects()
 
-    assert sum(layer.max_hp for layer in fighter.parts["torso"].layers) == initial_hp - 3
+    assert part_current_hp(fighter, "torso") == initial_hp - 3
     assert fighter.debuffs == []
 
 
@@ -739,7 +837,7 @@ def test_apply_effects_burning_no_specific_target_part(humanoid_fighter: Fighter
 
     initial_pain = fighter.pain
     initial_heat = fighter.heat
-    initial_all_parts_hp = {p_name: sum(l.max_hp for l in p.layers) for p_name, p in fighter.parts.items()}
+    initial_all_parts_hp = {p_name: part_current_hp(fighter, p_name) for p_name in fighter.parts}
 
     fighter.apply_effects()
 
@@ -747,7 +845,7 @@ def test_apply_effects_burning_no_specific_target_part(humanoid_fighter: Fighter
     assert fighter.heat == initial_heat + int(burning_effect_generic.magnitude * 5)
 
     for p_name, p_hp in initial_all_parts_hp.items():
-        assert sum(l.max_hp for l in fighter.parts[p_name].layers) == p_hp, f"Part {p_name} HP changed unexpectedly"
+        assert part_current_hp(fighter, p_name) == p_hp, f"Part {p_name} HP changed unexpectedly"
 
     assert not any(eff.name == C.EFFECT_BURNING for eff in fighter.debuffs)  # Effect expired
 
@@ -832,13 +930,11 @@ def test_apply_delta_vital_part_destruction_in_wound(humanoid_fighter: FighterSt
     assert fighter.parts[part_name].is_vital
     assert fighter.status == C.FighterStatus.FIGHTING
 
-    heart_hp = sum(layer.max_hp for layer in fighter.parts[part_name].layers)
+    heart_hp = part_current_hp(fighter, part_name)
     delta = {C.WOUNDS: [{C.TARGETED_PART: part_name, C.VALUE: heart_hp + 5, C.TYPE: C.DamageType.PIERCING}]}
     fighter.apply_delta(delta)
     assert fighter.parts[part_name].status == C.IS_DESTROYED
-    assert (
-        fighter.status == C.FighterStatus.UNCONSCIOUS
-    )  # Or C.STATUS_DEAD depending on exact logic for single vital part
+    assert fighter.status == C.FighterStatus.DEAD
 
 
 def test_apply_effects_multiple_effects_simultaneously(humanoid_fighter: FighterState):
@@ -858,14 +954,14 @@ def test_apply_effects_multiple_effects_simultaneously(humanoid_fighter: Fighter
     initial_pain = fighter.pain
     initial_heat = fighter.heat
     initial_exhaustion = fighter.exhaustion
-    initial_torso_hp = sum(l.max_hp for l in fighter.parts[torso].layers)
+    initial_torso_hp = part_current_hp(fighter, torso)
 
     fighter.apply_effects()
 
     # Burning effects
     expected_burn_damage = max(1, int(burning_effect.magnitude))
     assert fighter.heat == initial_heat + int(burning_effect.magnitude * 5)
-    assert sum(l.max_hp for l in fighter.parts[torso].layers) == initial_torso_hp - expected_burn_damage
+    assert part_current_hp(fighter, torso) == initial_torso_hp - expected_burn_damage
 
     # Bleeding effects
     assert fighter.exhaustion == initial_exhaustion + int(bleeding_effect.magnitude * 0.5)

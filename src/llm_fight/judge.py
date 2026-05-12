@@ -78,7 +78,13 @@ def _damaged_parts(parts: dict[str, Any]) -> dict[str, Any]:
         status = part.get(C.STATUS, "intact")
         layers = part.get("layers", [])
         damaged_layers = [
-            {"name": layer.get(C.NAME), "hp": layer.get(C.MAX_HP)} for layer in layers if layer.get(C.MAX_HP, 0) <= 0
+            {
+                C.NAME: layer.get(C.NAME),
+                C.CURRENT_HP: layer.get(C.CURRENT_HP, layer.get(C.MAX_HP)),
+                C.MAX_HP: layer.get(C.MAX_HP),
+            }
+            for layer in layers
+            if layer.get(C.CURRENT_HP, layer.get(C.MAX_HP, 0)) < layer.get(C.MAX_HP, 0)
         ]
         if status != "intact" or part.get("severed") or damaged_layers:
             damaged[name] = {

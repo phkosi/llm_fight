@@ -72,6 +72,40 @@ def _bounded_non_bool_int(value: Any, *, field_name: str, minimum: int, maximum:
     return value
 
 
+def _consequence_group(value: Any, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    return _canonical_part_id(value, field_name=field_name)
+
+
+def _consequence_tags(value: Any, *, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise FighterProfileError(f"Profile field '{field_name}' must be a list.")
+    tags: list[str] = []
+    for tag in value:
+        normalized = _canonical_part_id(tag, field_name=f"{field_name}[]")
+        if normalized not in C.CONSEQUENCE_ALLOWED_TAGS:
+            raise FighterProfileError(f"Profile field '{field_name}' contains unknown consequence tag: {normalized}")
+        if normalized not in tags:
+            tags.append(normalized)
+    return tags
+
+
+def _validate_consequence_policy(part_id: str, tags: list[str], group: str | None) -> None:
+    required_groups = {
+        C.CONSEQUENCE_VISION_MEMBER: C.CONSEQUENCE_GROUP_VISION,
+        C.CONSEQUENCE_MOBILITY_MEMBER: C.CONSEQUENCE_GROUP_LEGS,
+        C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER: C.CONSEQUENCE_GROUP_LEGACY_VITALS,
+    }
+    for tag, required_group in required_groups.items():
+        if tag in tags and group != required_group:
+            raise FighterProfileError(
+                f"Body part '{part_id}' consequence tag '{tag}' requires consequence_group '{required_group}'."
+            )
+
+
 def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
     """Return a validated, normalized profile from raw JSON data."""
     if not isinstance(raw_profile, dict):
@@ -83,7 +117,10 @@ def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
 
     raw_parts = raw_profile.get(C.BODY_PARTS, raw_profile.get(C.ANATOMY, []))
     parts: dict[str, BodyPart] = {}
-    has_vital = False
+    has_survival_consequence = False
+    legacy_vital_count = sum(
+        1 for raw_part in raw_parts if bool(raw_part.get("is_vital", False)) and not raw_part.get(C.CONSEQUENCE_TAGS)
+    )
 
     for raw_part in raw_parts:
         part_id = _canonical_part_id(raw_part.get("id"), field_name="body_part.id")
@@ -115,7 +152,36 @@ def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
             )
 
         is_vital = bool(raw_part.get("is_vital", False))
-        has_vital = has_vital or is_vital
+        consequence_tags = _consequence_tags(
+            raw_part.get(C.CONSEQUENCE_TAGS),
+            field_name=f"{part_id}.{C.CONSEQUENCE_TAGS}",
+        )
+        consequence_group = _consequence_group(
+            raw_part.get(C.CONSEQUENCE_GROUP),
+            field_name=f"{part_id}.{C.CONSEQUENCE_GROUP}",
+        )
+        if is_vital and not consequence_tags:
+            if legacy_vital_count == 1:
+                consequence_tags = [C.CONSEQUENCE_FATAL_IF_DESTROYED]
+            else:
+                consequence_tags = [
+                    C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
+                    C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
+                ]
+                consequence_group = C.CONSEQUENCE_GROUP_LEGACY_VITALS
+
+        _validate_consequence_policy(part_id, consequence_tags, consequence_group)
+
+        if any(
+            tag
+            in {
+                C.CONSEQUENCE_FATAL_IF_DESTROYED,
+                C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
+                C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
+            }
+            for tag in consequence_tags
+        ):
+            has_survival_consequence = True
         parts[part_id] = BodyPart(
             name=display_name or part_id,
             layers=layers,
@@ -133,12 +199,14 @@ def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
                 minimum=0,
                 maximum=50,
             ),
+            consequence_tags=consequence_tags,
+            consequence_group=consequence_group,
         )
 
     if not parts:
         raise FighterProfileError("Fighter profile must contain at least one body part.")
-    if not has_vital:
-        raise FighterProfileError("Fighter profile must mark at least one body part as vital.")
+    if not has_survival_consequence:
+        raise FighterProfileError("Fighter profile must mark at least one body part as vital or terminal.")
 
     return FighterProfile(
         class_=_safe_text(raw_profile.get(C.CONFIG_FIGHTER_CLASS), field_name=C.CONFIG_FIGHTER_CLASS),
