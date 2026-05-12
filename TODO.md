@@ -1045,7 +1045,7 @@ Verification:
 
 Addresses: ISSUE-039
 
-- [ ] Split oversized agents and CLI test modules without production behavior changes.
+- [x] Split oversized agents and CLI test modules without production behavior changes.
 
 Implementation intent:
 
@@ -1060,10 +1060,18 @@ Acceptance goals:
 
 Required tests:
 
-- `uv run pytest -q tests\test_agents*.py tests\test_cli*.py`
+- `uv run pytest -q tests\test_agents.py tests\test_agents_endpoint.py tests\test_agents_transport.py tests\test_cli.py tests\test_cli_play.py tests\test_cli_simulate.py`
 - `uv run ruff format --check .`
 - `uv run ruff check .`
+- `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- No production source edits.
+- Split sizes: `tests\test_agents.py` -> 438 LOC; `tests\test_agents_endpoint.py` -> 219 LOC; `tests\test_agents_transport.py` -> 181 LOC; `tests\test_cli.py` -> 67 LOC; `tests\test_cli_play.py` -> 453 LOC; `tests\test_cli_simulate.py` -> 334 LOC.
+- Focused tests: `uv run pytest -q tests\test_agents.py tests\test_agents_endpoint.py tests\test_agents_transport.py tests\test_cli.py tests\test_cli_play.py tests\test_cli_simulate.py` -> 67 passed, 1 warning.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## ISSUE-039 Closure Measurement
 
