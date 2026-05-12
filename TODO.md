@@ -920,7 +920,7 @@ Verification:
 
 Addresses: ISSUE-034
 
-- [ ] Make package logging library-friendly by using a `NullHandler` by default, avoiding stdout handlers at import time, checking direct `logger.handlers` rather than `hasHandlers()`, and configuring CLI-owned handlers to stderr only when running CLI commands.
+- [x] Make package logging library-friendly by using a `NullHandler` by default, avoiding stdout handlers at import time, checking direct `logger.handlers` rather than `hasHandlers()`, and configuring CLI-owned handlers to stderr only when running CLI commands.
 
 Acceptance goals:
 
@@ -934,3 +934,11 @@ Required tests:
 - Logger reload tests for root-handler, direct-handler, propagation, and duplicate-handler cases.
 - CLI tests asserting logs use stderr.
 - Update developer docs only if logging behavior or troubleshooting changes.
+
+Verification:
+
+- `src\llm_fight\engine\logger.py` now installs only a direct `NullHandler` at import, keeps propagation enabled for host applications, and exposes `cli_logging()` to temporarily route CLI-owned logs to stderr while restoring previous handlers/level/propagation afterward.
+- `simulate` and `play` wrap command execution in `cli_logging()`, preserving existing quiet-mode level suppression without attaching stdout handlers.
+- Added logger reload/import/root-handler/CLI-stderr restoration tests and a CLI test proving verbose engine logs go to stderr, not stdout.
+- Focused tests: `uv run pytest -q tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py` -> 42 passed, 1 warning.
+- Focused gates: `uv run ruff format --check src\llm_fight\engine\logger.py src\llm_fight\cli.py tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py`; `uv run ruff check src\llm_fight\engine\logger.py src\llm_fight\cli.py tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py`; `uv run mypy src/llm_fight` -> passed.

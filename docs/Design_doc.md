@@ -158,6 +158,14 @@ max_turns = 2
 and enables it for remote endpoints. `disabled` always uses direct connections;
 `enabled` always honors environment proxies, including loopback.
 
+Package logging is library-friendly by default. Importing logger-using modules
+installs only a direct `NullHandler` on the package logger and leaves
+propagation enabled so host applications can route records through their own
+root handlers. Importing the top-level `llm_fight` package does not attach a
+visible console handler. CLI commands temporarily replace the logger-module
+default with a stderr handler for the command duration, then restore the
+previous logger handlers, level, and propagation state.
+
 Prompt budgeting is enforced before transport. Fighter actions, Judge Phase 1,
 Judge Phase 2, Judge Phase 2 repair, and generated profile calls reserve
 phase-specific completion tokens. Combat-log context is the only prompt content

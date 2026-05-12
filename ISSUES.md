@@ -440,14 +440,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-034: Logger setup is not library-friendly
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Library-Friendly Logger Setup
 - Source: codebase review
 - Area: Best practices
-- Evidence: Package logger attaches a stdout `StreamHandler` at import in `src/llm_fight/engine/logger.py:13`, checks `hasHandlers()`, and leaves propagation enabled.
+- Evidence: Package logger attached a stdout `StreamHandler` at import in `src/llm_fight/engine/logger.py:13`, checked `hasHandlers()`, and left propagation behavior implicit. Resolved by installing only a direct `NullHandler` at import, checking `logger.handlers` directly, keeping propagation enabled for host applications, and wrapping CLI commands in a temporary stderr handler that restores the previous logger state afterward.
 - Impact: Logs can mix with CLI stdout, be skipped under root handlers, or duplicate inside host applications.
 - Suggested fix: Use `NullHandler` by default; configure CLI handlers to stderr; check `logger.handlers` directly and set propagation deliberately.
-- Tests: Reload logger with a root handler and assert handler/propagation behavior; assert CLI logs go to stderr.
+- Tests: Added reload/import/root-handler/duplicate-handler coverage plus CLI stderr routing coverage. Verified `uv run pytest -q tests\test_logger.py tests\engine\test_logger_handlers.py tests\test_cli.py` -> 42 passed, 1 warning; focused Ruff and mypy gates passed.
 
 ### ISSUE-035: Test suite bypasses installed package behavior
 
