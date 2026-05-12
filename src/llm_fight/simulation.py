@@ -184,17 +184,128 @@ def _copy_without_source(entry: Dict[str, Any]) -> Dict[str, Any]:
     return sanitized
 
 
+def _phase2_validation_warning(
+    *,
+    code: str,
+    fighter_id: str,
+    field: str,
+    source: Any,
+    action: str,
+    reason: str | None = None,
+    canonical_part: str | None = None,
+) -> Dict[str, Any]:
+    warning = {
+        "code": code,
+        "phase": "judge_phase2",
+        "fighter_id": fighter_id,
+        "field": field,
+        "action": action,
+    }
+    if source in {C.FIGHTER_A, C.FIGHTER_B}:
+        warning[C.SOURCE] = source
+    if reason:
+        warning["reason"] = reason
+    if canonical_part:
+        warning["canonical_part"] = canonical_part
+    return warning
+
+
+def _sanitize_phase2_narration(sanitized: Dict[str, Any], warnings: list[Dict[str, Any]]) -> None:
+    if any(warning.get("code") == C.WARNING_CODE_INVALID_P2_WOUND_TARGET for warning in warnings):
+        sanitized[C.NARRATION] = (
+            "The judge referenced an invalid body-part target; only validated consequences are recorded."
+        )
+
+
+def _phase2_known_fields(p2: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        C.NARRATION: p2.get(C.NARRATION, ""),
+        C.DELTA: p2.get(C.DELTA, {}),
+        C.FIGHT_END: p2.get(C.FIGHT_END, False),
+        C.WINNER: p2.get(C.WINNER),
+    }
+
+
+def _resolve_phase2_wound_target(
+    wound: Dict[str, Any],
+    target_fighter: FighterState,
+    fighter_id: str,
+    index: int,
+) -> tuple[str | None, Dict[str, Any] | None]:
+    field = f"delta.{fighter_id}.{C.WOUNDS}[{index}].{C.TARGETED_PART}"
+    source = wound.get(C.SOURCE)
+    canonical_part = target_fighter.normalize_part_name(wound.get(C.TARGETED_PART))
+    if canonical_part is None:
+        logger.warning(
+            "Dropping Judge Phase 2 wound with invalid target for fighter %s.",
+            fighter_id,
+        )
+        return None, _phase2_validation_warning(
+            code=C.WARNING_CODE_INVALID_P2_WOUND_TARGET,
+            fighter_id=fighter_id,
+            field=field,
+            source=source,
+            action="dropped",
+            reason="unknown_target_part",
+        )
+    return canonical_part, None
+
+
+def _invalid_phase2_wound_target_warnings(
+    raw_delta: Any,
+    fighters: dict[str, FighterState],
+) -> list[Dict[str, Any]]:
+    if not isinstance(raw_delta, dict):
+        return []
+
+    warnings: list[Dict[str, Any]] = []
+    for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
+        delta = raw_delta.get(fighter_id, {})
+        if not isinstance(delta, dict):
+            continue
+        for index, wound in enumerate(delta.get(C.WOUNDS, [])):
+            if not isinstance(wound, dict):
+                continue
+            _, warning = _resolve_phase2_wound_target(wound, fighters[fighter_id], fighter_id, index)
+            if warning is not None:
+                warnings.append(warning)
+    return warnings
+
+
+def _warning_key(warning: Dict[str, Any]) -> tuple[Any, Any]:
+    return warning.get("code"), warning.get("field")
+
+
+def _merge_phase2_warnings(*warning_groups: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    merged: list[Dict[str, Any]] = []
+    seen = set()
+    for warnings in warning_groups:
+        for warning in warnings:
+            key = _warning_key(warning)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(warning)
+    return merged
+
+
 def _authorized_scalar_value(entry: Any, authorized_sources: set[str], field_name: str) -> Any:
     if not _is_authorized_consequence(entry, authorized_sources, field_name):
         return None
     return entry.get(C.VALUE)
 
 
-def _authorize_fighter_delta(delta: Any, authorized_sources: set[str]) -> Dict[str, Any]:
+def _authorize_fighter_delta(
+    delta: Any,
+    authorized_sources: set[str],
+    target_fighter: FighterState,
+    fighter_id: str,
+) -> tuple[Dict[str, Any], list[Dict[str, Any]]]:
     if not isinstance(delta, dict):
-        return {}
+        return {}, []
 
     authorized_delta: Dict[str, Any] = {}
+    warnings: list[Dict[str, Any]] = []
     for field_name in (C.PAIN_INCREASE, C.EXHAUSTION_INCREASE, C.HEAT_INCREASE, C.STATUS_CHANGE):
         if field_name not in delta:
             continue
@@ -203,9 +314,28 @@ def _authorize_fighter_delta(delta: Any, authorized_sources: set[str]) -> Dict[s
             authorized_delta[field_name] = value
 
     wounds = []
-    for wound in delta.get(C.WOUNDS, []):
+    for index, wound in enumerate(delta.get(C.WOUNDS, [])):
         if _is_authorized_consequence(wound, authorized_sources, C.WOUNDS):
-            wounds.append(_copy_without_source(wound))
+            source = wound.get(C.SOURCE)
+            canonical_part, warning = _resolve_phase2_wound_target(wound, target_fighter, fighter_id, index)
+            if warning is not None:
+                warnings.append(warning)
+                continue
+
+            sanitized_wound = _copy_without_source(wound)
+            if sanitized_wound.get(C.TARGETED_PART) != canonical_part:
+                warnings.append(
+                    _phase2_validation_warning(
+                        code=C.WARNING_CODE_CANONICALIZED_P2_WOUND_TARGET,
+                        fighter_id=fighter_id,
+                        field=f"delta.{fighter_id}.{C.WOUNDS}[{index}].{C.TARGETED_PART}",
+                        source=source,
+                        action="canonicalized",
+                        canonical_part=canonical_part,
+                    )
+                )
+            sanitized_wound[C.TARGETED_PART] = canonical_part
+            wounds.append(sanitized_wound)
     if wounds:
         authorized_delta[C.WOUNDS] = wounds
 
@@ -225,33 +355,60 @@ def _authorize_fighter_delta(delta: Any, authorized_sources: set[str]) -> Dict[s
     if effects_removed:
         authorized_delta[C.EFFECTS_REMOVED] = effects_removed
 
-    return authorized_delta
+    return authorized_delta, warnings
 
 
-def _authorize_phase2_result(p2: Dict[str, Any], p1: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
+def _authorize_phase2_result(
+    p2: Dict[str, Any],
+    p1: Dict[str, Any],
+    rolls: Dict[str, bool],
+    fighters: dict[str, FighterState],
+) -> Dict[str, Any]:
     authorized_sources = _authorized_phase2_sources(p1, rolls)
-    sanitized = dict(p2)
+    sanitized = _phase2_known_fields(p2)
+    raw_delta = p2.get(C.DELTA, {})
+    invalid_target_warnings = _invalid_phase2_wound_target_warnings(raw_delta, fighters)
 
     if not authorized_sources:
         if p2.get(C.DELTA) or p2.get(C.FIGHT_END) or p2.get(C.WINNER) is not None:
             logger.warning("Ignoring Judge Phase 2 damage/end result because no valid attempt succeeded.")
             if _attempts_both_invalid_and_failed(p1, rolls):
                 logger.warning("both attempts were invalid and failed.")
+        if invalid_target_warnings:
+            sanitized[C.VALIDATION_WARNINGS] = invalid_target_warnings
+            _sanitize_phase2_narration(sanitized, invalid_target_warnings)
         sanitized[C.DELTA] = {}
         sanitized[C.FIGHT_END] = False
         sanitized[C.WINNER] = None
         return sanitized
 
-    raw_delta = p2.get(C.DELTA, {})
     if not isinstance(raw_delta, dict):
         sanitized[C.DELTA] = {}
         return sanitized
 
-    sanitized[C.DELTA] = {
-        fighter_id: authorized_delta
-        for fighter_id in (C.FIGHTER_A, C.FIGHTER_B)
-        if (authorized_delta := _authorize_fighter_delta(raw_delta.get(fighter_id, {}), authorized_sources))
-    }
+    sanitized_delta: Dict[str, Any] = {}
+    warnings: list[Dict[str, Any]] = []
+    for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
+        authorized_delta, delta_warnings = _authorize_fighter_delta(
+            raw_delta.get(fighter_id, {}),
+            authorized_sources,
+            fighters[fighter_id],
+            fighter_id,
+        )
+        warnings.extend(delta_warnings)
+        if authorized_delta:
+            sanitized_delta[fighter_id] = authorized_delta
+
+    sanitized[C.DELTA] = sanitized_delta
+    warnings = _merge_phase2_warnings(warnings, invalid_target_warnings)
+    if warnings:
+        sanitized[C.VALIDATION_WARNINGS] = warnings
+        _sanitize_phase2_narration(sanitized, warnings)
+    if not sanitized_delta and any(
+        warning.get("code") == C.WARNING_CODE_INVALID_P2_WOUND_TARGET for warning in warnings
+    ):
+        sanitized[C.FIGHT_END] = False
+        sanitized[C.WINNER] = None
     return sanitized
 
 
@@ -564,7 +721,7 @@ async def _single_fight(
                 turn=turn,
             )
         p2 = await judge_phase2(p2_input_state, rolls, **p2_kwargs)
-        p2 = _authorize_phase2_result(p2, p1, rolls)
+        p2 = _authorize_phase2_result(p2, p1, rolls, {C.FIGHTER_A: A, C.FIGHTER_B: B})
         _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_END, turn=turn, data={"p2": p2}))
 
         turn_entry = CombatTurn(

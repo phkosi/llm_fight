@@ -161,14 +161,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-013: P2 target validity is prompt-only
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - P2 Target Validation Gate
 - Source: codebase review
 - Area: Validation, gameplay state
-- Evidence: `targeted_part` is any string in `src/llm_fight/validation.py:67`; valid target parts are only sent as prompt/input context in `src/llm_fight/simulation.py:150`; unknown parts are warned and ignored in `src/llm_fight/state.py:184`.
+- Evidence: `targeted_part` was any string in the static Phase 2 schema; valid target parts were only sent as prompt/input context; unknown parts were warned and ignored later in `apply_damage_to_part()`. Resolved by post-Phase-2 target validation in `simulation.py` that runs after source authorization and before combat-log storage/state application, using the target fighter's canonical anatomy.
 - Impact: Narration can describe decisive damage to `neck`, `shoulder`, or `wing` while Python applies no damage.
 - Suggested fix: Post-validate P2 deltas against each target fighter's canonical/alias-normalized valid parts before applying. Reject or sanitize invalid wounds.
-- Tests: P2 returns invalid `targeted_part` plus terminal result; assert invalid wound is rejected and no winner is accepted unless state becomes terminal.
+- Tests: Added simulation coverage for invalid humanoid targets plus terminal claims, alias canonicalization from `neck` to `head`, mixed valid/invalid wounds, invalid-target narration not reaching later prompt summaries, and custom-anatomy ownership where `wing` is valid only for a fighter that actually owns it.
 
 ### ISSUE-014: Fighter prompts omit opponent state, anatomy, and effect metadata
 

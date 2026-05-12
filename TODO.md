@@ -457,15 +457,17 @@ Verification:
 
 Addresses: ISSUE-013
 
-- [ ] Post-validate Judge Phase 2 wound targets against each fighter's canonical body parts before applying deltas.
+- [x] Post-validate Judge Phase 2 wound targets against each fighter's canonical body parts before applying deltas.
 
 Acceptance goals:
 
 - Unknown Phase 2 wound targets never reach `apply_damage_to_part()`.
-- Known aliases are accepted and rewritten to canonical part names.
-- A Phase 2 result with only invalid target damage cannot end the fight or award a winner.
+- Target validation runs after Phase 2 source authorization and before `CombatTurn` creation or `apply_delta()`, with access to the target fighter state for `delta["A"]` and `delta["B"]`.
+- Known aliases are resolved with the target fighter's existing `normalize_part_name()` helper and rewritten to canonical part keys only if that canonical key exists on that specific fighter.
+- A Phase 2 result with only invalid target damage cannot end the fight or award a winner; terminal outcomes come only from post-sanitized deltas/effect ticks. A remaining valid canonicalized wound can still end the fight if Python state becomes terminal.
 - Mixed valid/invalid wound lists apply only the valid canonicalized wounds.
-- Sanitization warnings can be surfaced later by render/transcript work without replaying unsafe raw text into prompts.
+- Sanitization warnings can be surfaced later by render/transcript work without replaying unsafe raw text into prompts. Warning metadata should use stable codes such as `invalid_p2_wound_target` or `canonicalized_p2_wound_target`, structural fields, source fighter id, target fighter id, action, and canonical part when relevant, but not the rejected raw target text.
+- Invalid target text in Judge Phase 2 narration must not be stored in the prompt-replayed combat-log summary. Either replace unsafe narration with a generic sanitized message or provide a sanitized prompt-summary path before later fighter/judge prompts see it.
 - Existing humanoid valid-target behavior remains unchanged.
 
 Required tests:
@@ -473,7 +475,13 @@ Required tests:
 - Phase 2 returns `targeted_part="wing"` for a humanoid plus `fight_end=true`; no damage, no terminal winner, and a warning marker result.
 - Phase 2 returns `targeted_part="neck"`; it canonicalizes to `head` and applies damage.
 - Mixed valid and invalid wounds apply only the valid wound.
-- Invalid target text does not appear in subsequent fighter/judge prompt payloads except as a redacted warning code if metadata is carried forward.
+- Invalid target text does not appear in sanitized `CombatTurn.judge_p2`, subsequent fighter prompt payloads, or subsequent P1/P2 judge payloads except as a stable redacted warning code if metadata is carried forward.
+- Custom-anatomy regression coverage proves a custom part such as `wing` is valid only for a fighter that actually owns that part, while the same target remains invalid for humanoids.
+
+Verification:
+
+- `uv run pytest -q tests/test_simulation.py tests/test_state.py tests/test_validation.py` -> 163 passed.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 376 passed, 6 skipped, 1 warning; `git diff --check` -> passed.
 
 ## P2 Fallback Visibility And Fail-Open Policy
 

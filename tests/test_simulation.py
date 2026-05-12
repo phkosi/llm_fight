@@ -1258,6 +1258,7 @@ async def test_valid_attempts_with_failed_rolls_cannot_apply_sourced_p2_damage_o
             },
             C.FIGHT_END: True,
             C.WINNER: C.FIGHTER_A,
+            "unsafe_extra": "wing",
         }
 
     original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
@@ -1342,6 +1343,477 @@ async def test_mixed_success_applies_only_authorized_source_consequences():
     assert fighters[0].pain == 0
     assert fighters[1].pain == 7
     assert fighters[1].parts["head"].status == "intact"
+
+
+@pytest.mark.asyncio
+async def test_phase2_invalid_wound_target_is_sanitized_before_apply_and_log():
+    fighters = []
+    original_from_preset = sim_module.FighterState.from_preset
+
+    def capture_from_preset(id_, preset, config_section=None):
+        fighter = original_from_preset(id_, preset, config_section=config_section)
+        fighters.append(fighter)
+        return fighter
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "A pierces B's impossible wing and wins.",
+            C.DELTA: {
+                C.FIGHTER_B: {
+                    C.WOUNDS: [
+                        {
+                            C.SOURCE: C.FIGHTER_A,
+                            C.TARGETED_PART: "wing",
+                            C.VALUE: 999,
+                            C.TYPE: C.DamageType.PIERCING,
+                        }
+                    ]
+                }
+            },
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    try:
+        with (
+            patch.object(sim_module.FighterState, "from_preset", side_effect=capture_from_preset),
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            result, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    turn_p2 = combat_log.turns[0].judge_p2
+    assert result[C.WINNER] == C.DRAW
+    assert fighters[1].pain == 0
+    assert turn_p2[C.DELTA] == {}
+    assert turn_p2[C.FIGHT_END] is False
+    assert turn_p2[C.WINNER] is None
+    assert turn_p2[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_INVALID_P2_WOUND_TARGET
+    assert "wing" not in json.dumps(turn_p2)
+
+
+@pytest.mark.asyncio
+async def test_phase2_wound_target_alias_canonicalizes_before_apply():
+    fighters = []
+    original_from_preset = sim_module.FighterState.from_preset
+
+    def capture_from_preset(id_, preset, config_section=None):
+        fighter = original_from_preset(id_, preset, config_section=config_section)
+        fighters.append(fighter)
+        return fighter
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "A clips B around the neck.",
+            C.DELTA: {
+                C.FIGHTER_B: {
+                    C.WOUNDS: [
+                        {
+                            C.SOURCE: C.FIGHTER_A,
+                            C.TARGETED_PART: "neck",
+                            C.VALUE: 5,
+                            C.TYPE: C.DamageType.BLUNT,
+                        }
+                    ]
+                }
+            },
+            C.FIGHT_END: False,
+            C.WINNER: None,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    try:
+        with (
+            patch.object(sim_module.FighterState, "from_preset", side_effect=capture_from_preset),
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            _, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    turn_p2 = combat_log.turns[0].judge_p2
+    wound = turn_p2[C.DELTA][C.FIGHTER_B][C.WOUNDS][0]
+    assert wound[C.TARGETED_PART] == "head"
+    assert fighters[1].pain == 5
+    assert turn_p2[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_CANONICALIZED_P2_WOUND_TARGET
+    assert turn_p2[C.VALIDATION_WARNINGS][0]["canonical_part"] == "head"
+
+
+@pytest.mark.asyncio
+async def test_phase2_mixed_valid_and_invalid_wounds_apply_only_valid_target():
+    fighters = []
+    original_from_preset = sim_module.FighterState.from_preset
+
+    def capture_from_preset(id_, preset, config_section=None):
+        fighter = original_from_preset(id_, preset, config_section=config_section)
+        fighters.append(fighter)
+        return fighter
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "A bruises B's torso, while the wing reference is impossible.",
+            C.DELTA: {
+                C.FIGHTER_B: {
+                    C.WOUNDS: [
+                        {
+                            C.SOURCE: C.FIGHTER_A,
+                            C.TARGETED_PART: "torso",
+                            C.VALUE: 5,
+                            C.TYPE: C.DamageType.BLUNT,
+                        },
+                        {
+                            C.SOURCE: C.FIGHTER_A,
+                            C.TARGETED_PART: "wing",
+                            C.VALUE: 999,
+                            C.TYPE: C.DamageType.PIERCING,
+                        },
+                    ]
+                }
+            },
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    try:
+        with (
+            patch.object(sim_module.FighterState, "from_preset", side_effect=capture_from_preset),
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            result, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    turn_p2 = combat_log.turns[0].judge_p2
+    wounds = turn_p2[C.DELTA][C.FIGHTER_B][C.WOUNDS]
+    assert result[C.WINNER] == C.DRAW
+    assert [wound[C.TARGETED_PART] for wound in wounds] == ["torso"]
+    assert fighters[1].pain == 5
+    assert turn_p2[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_INVALID_P2_WOUND_TARGET
+    assert "wing" not in json.dumps(turn_p2)
+
+
+@pytest.mark.asyncio
+async def test_phase2_invalid_target_text_does_not_reach_next_turn_prompts():
+    invalid_target = "obsidian_wing_needle"
+    fighter_recent_logs = []
+    p1_recent_logs = []
+    p2_recent_logs = []
+    p2_calls = 0
+
+    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0, **kwargs):
+        if combat_log is not None:
+            fighter_recent_logs.append(combat_log.to_summary(last_n=turn_window))
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        p1_recent_logs.append(kwargs.get("recent_log", ""))
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(p2_input_state, *args, **kwargs):
+        nonlocal p2_calls
+        p2_calls += 1
+        p2_recent_logs.append(p2_input_state.get("recent_combat_log", ""))
+        if p2_calls == 1:
+            return {
+                C.NARRATION: f"A strikes the invalid {invalid_target}.",
+                C.DELTA: {
+                    C.FIGHTER_B: {
+                        C.WOUNDS: [
+                            {
+                                C.SOURCE: C.FIGHTER_A,
+                                C.TARGETED_PART: invalid_target,
+                                C.VALUE: 999,
+                                C.TYPE: C.DamageType.PIERCING,
+                            }
+                        ]
+                    }
+                },
+                C.FIGHT_END: True,
+                C.WINNER: C.FIGHTER_A,
+                "unsafe_extra": invalid_target,
+            }
+        return {C.NARRATION: "Both fighters reset.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            _, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert invalid_target not in json.dumps(combat_log.turns[0].judge_p2)
+    assert invalid_target not in "\n".join(fighter_recent_logs[2:])
+    assert invalid_target not in "\n".join(p1_recent_logs[1:])
+    assert invalid_target not in "\n".join(p2_recent_logs[1:])
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_phase2_invalid_target_text_does_not_reach_prompts():
+    invalid_target = "failed_roll_wing"
+    fighter_recent_logs = []
+    p1_recent_logs = []
+    p2_recent_logs = []
+    p1_calls = 0
+    p2_calls = 0
+
+    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0, **kwargs):
+        if combat_log is not None:
+            fighter_recent_logs.append(combat_log.to_summary(last_n=turn_window))
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        nonlocal p1_calls
+        p1_calls += 1
+        p1_recent_logs.append(kwargs.get("recent_log", ""))
+        if p1_calls == 1:
+            return {
+                f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": False,
+                f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+                f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+                f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+                "judgement_text": "Both attempts fail.",
+                "explanation": "",
+            }
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(p2_input_state, *args, **kwargs):
+        nonlocal p2_calls
+        p2_calls += 1
+        p2_recent_logs.append(p2_input_state.get("recent_combat_log", ""))
+        if p2_calls == 1:
+            return {
+                C.NARRATION: f"A's failed action somehow destroys B's {invalid_target}.",
+                C.DELTA: {
+                    C.FIGHTER_B: {
+                        C.WOUNDS: [
+                            {
+                                C.SOURCE: C.FIGHTER_A,
+                                C.TARGETED_PART: invalid_target,
+                                C.VALUE: 999,
+                                C.TYPE: C.DamageType.PIERCING,
+                            }
+                        ]
+                    }
+                },
+                C.FIGHT_END: True,
+                C.WINNER: C.FIGHTER_A,
+            }
+        return {C.NARRATION: "Both fighters reset.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            _, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert invalid_target not in json.dumps(combat_log.turns[0].judge_p2)
+    assert combat_log.turns[0].judge_p2[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_INVALID_P2_WOUND_TARGET
+    assert invalid_target not in "\n".join(fighter_recent_logs[2:])
+    assert invalid_target not in "\n".join(p1_recent_logs[1:])
+    assert invalid_target not in "\n".join(p2_recent_logs[1:])
+
+
+@pytest.mark.asyncio
+async def test_partially_authorized_invalid_target_text_does_not_reach_prompts():
+    invalid_target = "failed_counter_wing"
+    fighter_recent_logs = []
+    p1_recent_logs = []
+    p2_recent_logs = []
+    p2_calls = 0
+
+    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0, **kwargs):
+        if combat_log is not None:
+            fighter_recent_logs.append(combat_log.to_summary(last_n=turn_window))
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        p1_recent_logs.append(kwargs.get("recent_log", ""))
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds while B fails.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(p2_input_state, *args, **kwargs):
+        nonlocal p2_calls
+        p2_calls += 1
+        p2_recent_logs.append(p2_input_state.get("recent_combat_log", ""))
+        if p2_calls == 1:
+            return {
+                C.NARRATION: f"B's failed counter somehow destroys A's {invalid_target}.",
+                C.DELTA: {
+                    C.FIGHTER_A: {
+                        C.WOUNDS: [
+                            {
+                                C.SOURCE: C.FIGHTER_B,
+                                C.TARGETED_PART: invalid_target,
+                                C.VALUE: 999,
+                                C.TYPE: C.DamageType.PIERCING,
+                            }
+                        ]
+                    }
+                },
+                C.FIGHT_END: True,
+                C.WINNER: C.FIGHTER_B,
+            }
+        return {C.NARRATION: "Both fighters reset.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+            patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        ):
+            _, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    turn_p2 = combat_log.turns[0].judge_p2
+    assert turn_p2[C.DELTA] == {}
+    assert turn_p2[C.FIGHT_END] is False
+    assert turn_p2[C.WINNER] is None
+    assert turn_p2[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_INVALID_P2_WOUND_TARGET
+    assert invalid_target not in json.dumps(turn_p2)
+    assert invalid_target not in "\n".join(fighter_recent_logs[2:])
+    assert invalid_target not in "\n".join(p1_recent_logs[1:])
+    assert invalid_target not in "\n".join(p2_recent_logs[1:])
+
+
+def test_phase2_target_validation_is_scoped_to_target_fighter_anatomy():
+    humanoid = FighterState.from_preset(C.FIGHTER_A, "humanoid")
+    winged = FighterState.from_profile(
+        C.FIGHTER_B,
+        build_fighter_profile(_custom_profile("wing")),
+        allow_config_overrides=False,
+    )
+    p1 = {
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+    }
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {
+        C.NARRATION: "A tests both wing targets.",
+        C.DELTA: {
+            C.FIGHTER_A: {
+                C.WOUNDS: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.TARGETED_PART: "wing",
+                        C.VALUE: 5,
+                        C.TYPE: C.DamageType.PIERCING,
+                    }
+                ]
+            },
+            C.FIGHTER_B: {
+                C.WOUNDS: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.TARGETED_PART: "wing",
+                        C.VALUE: 5,
+                        C.TYPE: C.DamageType.PIERCING,
+                    }
+                ]
+            },
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        {C.FIGHTER_A: humanoid, C.FIGHTER_B: winged},
+    )
+
+    assert C.FIGHTER_A not in sanitized[C.DELTA]
+    assert sanitized[C.DELTA][C.FIGHTER_B][C.WOUNDS][0][C.TARGETED_PART] == "wing"
+    assert sanitized[C.VALIDATION_WARNINGS][0]["fighter_id"] == C.FIGHTER_A
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_INVALID_P2_WOUND_TARGET
 
 
 @pytest.mark.asyncio
