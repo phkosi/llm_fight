@@ -580,6 +580,34 @@ def test_apply_effects_burning_damages_part_and_increases_stats(humanoid_fighter
     assert not any(eff.name == C.EFFECT_BURNING for eff in fighter.debuffs)
 
 
+def test_apply_effects_uses_provided_rng_for_burn_layer_selection(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "torso"
+    fighter.debuffs.append(
+        Effect(
+            name=C.EFFECT_BURNING,
+            magnitude=1.0,
+            ttl=1,
+            on_apply="Torso is burning!",
+            metadata={C.TARGETED_PART: part_name},
+        )
+    )
+
+    class FakeRng:
+        def __init__(self):
+            self.choice_calls = 0
+
+        def choice(self, seq):
+            self.choice_calls += 1
+            return seq[-1]
+
+    fake_rng = FakeRng()
+
+    fighter.apply_effects(rng=fake_rng)
+
+    assert fake_rng.choice_calls == 1
+
+
 def test_apply_effects_burning_no_specific_target_part(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     # Add a burning effect without a specific targeted part in metadata

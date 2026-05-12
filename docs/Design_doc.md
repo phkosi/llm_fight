@@ -128,6 +128,12 @@ concurrent_runs = 1
 max_turns = 2
 ```
 
+Batch runs derive an isolated per-fight RNG stream from `[SIMULATION].seed`
+and the run index, so concurrent scheduling or model latency does not change a
+run's dice rolls or random effect-layer choices. Batch CSV output stays ordered
+by run index and still flushes incrementally whenever the next ordered result is
+available.
+
 ## 8. Developer Workflow
 
 ```bash

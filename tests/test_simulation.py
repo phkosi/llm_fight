@@ -17,6 +17,21 @@ def _source_value(source=C.FIGHTER_A, value=1):
     return {C.SOURCE: source, C.VALUE: value}
 
 
+def _patch_batch_config(runs: int, concurrency: int, seed_value: int = 42):
+    orig_get = sim_module.config_mod.CONFIG.get
+
+    def fake_get(section, key, cast=str, fallback=None):
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+            return runs
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+            return concurrency
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_SEED:
+            return seed_value
+        return orig_get(section, key, cast, fallback)
+
+    return patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get)
+
+
 @pytest.mark.asyncio
 @patch("llm_fight.simulation.get_fighter_attempt", new_callable=AsyncMock)
 @patch("llm_fight.simulation.judge_phase1", new_callable=AsyncMock)
@@ -98,6 +113,45 @@ async def test_single_fight_runs_to_completion(
     fighter_b_mock.apply_delta.assert_called_with({C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS})
     assert fighter_b_mock.status == C.FighterStatus.UNCONSCIOUS
     assert fighter_a_mock.status == C.FighterStatus.FIGHTING  # A should be unchanged
+
+
+@pytest.mark.asyncio
+async def test_single_fight_uses_fight_rng_for_success_rolls():
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds and B fails.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "A wins.",
+            C.DELTA: {C.FIGHTER_B: {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)}},
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    fight_rng = MagicMock()
+    fight_rng.random.side_effect = [0.0, 0.99]
+
+    with (
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", side_effect=AssertionError("global rand should not be used")) as mock_rand,
+    ):
+        result = await sim_module._single_fight(fight_rng=fight_rng)
+
+    assert result[C.WINNER] == C.FIGHTER_A
+    assert fight_rng.random.call_count == 2
+    mock_rand.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -305,6 +359,92 @@ async def test_run_batch_flushes_each_completed_result(tmp_path):
         {C.WINNER: "A", C.LOG_TURN: "1"},
         {C.WINNER: "B", C.LOG_TURN: "2"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_batch_writes_rows_in_run_index_order_with_out_of_order_completion(tmp_path):
+    call_index = 0
+    delays = [0.03, 0, 0.01]
+    progress_calls = []
+    first_progress_rows = []
+    out_file = tmp_path / "ordered.csv"
+
+    async def fake_fight(*args, fight_rng=None, **kwargs):
+        nonlocal call_index
+        run_index = call_index
+        call_index += 1
+        await asyncio.sleep(delays[run_index])
+        return {C.WINNER: str(run_index), C.LOG_TURN: str(run_index + 1)}
+
+    def progress(done, total):
+        progress_calls.append((done, total))
+        if done == 1:
+            with open(out_file, newline="") as fp:
+                first_progress_rows.extend(csv.DictReader(fp))
+
+    with (
+        patch.object(sim_module, "_single_fight", side_effect=fake_fight),
+        _patch_batch_config(runs=3, concurrency=3, seed_value=99),
+    ):
+        path = await sim_module.run_batch(out_file, progress=progress)
+
+    assert path == out_file
+    assert first_progress_rows == []
+    assert progress_calls == [(1, 3), (2, 3), (3, 3)]
+    with open(out_file, newline="") as fp:
+        rows = list(csv.DictReader(fp))
+    assert rows == [
+        {C.WINNER: "0", C.LOG_TURN: "1"},
+        {C.WINNER: "1", C.LOG_TURN: "2"},
+        {C.WINNER: "2", C.LOG_TURN: "3"},
+    ]
+
+
+async def _run_seeded_fake_batch(tmp_path, seed_value, delays, filename):
+    call_index = 0
+
+    async def fake_fight(*args, fight_rng=None, **kwargs):
+        nonlocal call_index
+        run_index = call_index
+        call_index += 1
+        first = fight_rng.random()
+        second = fight_rng.random()
+        await asyncio.sleep(delays[run_index])
+        return {
+            C.WINNER: C.FIGHTER_A if first < 0.5 else C.FIGHTER_B,
+            C.LOG_TURN: str(int(second * 1000)),
+        }
+
+    out_file = tmp_path / filename
+    with (
+        patch.object(sim_module, "_single_fight", side_effect=fake_fight),
+        _patch_batch_config(runs=len(delays), concurrency=len(delays), seed_value=seed_value),
+    ):
+        await sim_module.run_batch(out_file)
+
+    with open(out_file, newline="") as fp:
+        return list(csv.DictReader(fp))
+
+
+@pytest.mark.asyncio
+async def test_run_batch_is_deterministic_across_varied_completion_order(tmp_path):
+    delays_a = [0.03, 0, 0.01, 0.02]
+    delays_b = [0, 0.03, 0.02, 0.01]
+
+    rows_a = await _run_seeded_fake_batch(tmp_path, 1234, delays_a, "seeded_a.csv")
+    rows_b = await _run_seeded_fake_batch(tmp_path, 1234, delays_b, "seeded_b.csv")
+
+    assert rows_a == rows_b
+
+
+@pytest.mark.asyncio
+async def test_run_batch_base_seed_changes_per_fight_rng_streams(tmp_path):
+    delays = [0, 0, 0, 0]
+
+    rows_a = await _run_seeded_fake_batch(tmp_path, 1234, delays, "seeded_a.csv")
+    rows_b = await _run_seeded_fake_batch(tmp_path, 4321, delays, "seeded_b.csv")
+
+    assert rows_a != rows_b
 
 
 @pytest.mark.asyncio

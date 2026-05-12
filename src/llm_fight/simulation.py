@@ -3,11 +3,13 @@
 import asyncio
 import csv
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
+import random
 from typing import Any, Dict, Callable
 
 from .state import FighterState
-from .rng import rand, seed
+from .rng import rand
 from .judge import judge_phase1, judge_phase2
 from . import config as config_mod
 from .engine.fighter import get_fighter_attempt
@@ -62,6 +64,12 @@ def summarize_batch_csv(output_csv: str | Path, total_runs: int | None = None) -
         completed_rows=completed_rows,
         error_rows=error_rows,
     )
+
+
+def _derive_fight_seed(batch_seed: int, run_index: int) -> int:
+    """Derive a stable per-run seed without using process-randomized hashes."""
+    digest = hashlib.sha256(f"{int(batch_seed)}:{int(run_index)}".encode("ascii")).digest()
+    return int.from_bytes(digest[:8], "big")
 
 
 def _status_outcome(A: FighterState, B: FighterState) -> str | None:
@@ -205,6 +213,7 @@ async def _single_fight(
     fighter_a_section: str | None = None,
     fighter_b_section: str | None = None,
     return_log: bool = False,
+    fight_rng: random.Random | None = None,
 ) -> Dict[str, str] | tuple[Dict[str, str], CombatLog]:
     """
     Simulates a single fight between two AI fighters (A and B).
@@ -253,7 +262,7 @@ async def _single_fight(
             prob_a_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_prob", "0.0")
             prob_a = float(prob_a_str) if prob_a_str else 0.0
             if p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_valid", False):
-                rolls["A"] = rand() < prob_a
+                rolls["A"] = (fight_rng.random() if fight_rng is not None else rand()) < prob_a
         except ValueError:
             logger.warning(
                 f"Could not parse probability string for Fighter A: '{prob_a_str}'. Defaulting to 0.0 probability."
@@ -264,7 +273,7 @@ async def _single_fight(
             prob_b_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_prob", "0.0")
             prob_b = float(prob_b_str) if prob_b_str else 0.0
             if p1.get(f"{C.ATTEMPT}_{C.FIGHTER_B}_valid", False):
-                rolls["B"] = rand() < prob_b
+                rolls["B"] = (fight_rng.random() if fight_rng is not None else rand()) < prob_b
         except ValueError:
             logger.warning(
                 f"Could not parse probability string for Fighter B: '{prob_b_str}'. Defaulting to 0.0 probability."
@@ -308,8 +317,8 @@ async def _single_fight(
             B.apply_delta(p2["delta"].get("B", {}))
 
         # Tick effects for both fighters AFTER deltas are applied for the turn
-        A.apply_effects()
-        B.apply_effects()
+        A.apply_effects(rng=fight_rng)
+        B.apply_effects(rng=fight_rng)
 
         turn_entry.state_A_after = A.to_json()
         turn_entry.state_B_after = B.to_json()
@@ -379,20 +388,22 @@ async def run_batch(
         Path object for the created CSV file.
     """
     runs, concurrency = validate_batch_settings()
-    seed(config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
+    batch_seed = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int)
 
     sem = asyncio.Semaphore(concurrency)
 
-    async def sem_fight():
+    async def sem_fight(run_index: int):
         async with sem:
             try:
-                return await _single_fight(
+                result = await _single_fight(
                     fighter_a_section=fighter_a_section,
                     fighter_b_section=fighter_b_section,
+                    fight_rng=random.Random(_derive_fight_seed(batch_seed, run_index)),
                 )
+                return run_index, result
             except Exception:
                 logger.exception("_single_fight failed")
-                return {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"}
+                return run_index, {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"}
 
     csv_path = Path(output_csv)
     with csv_path.open("w", newline="") as fp:
@@ -400,10 +411,16 @@ async def run_batch(
         writer.writeheader()
         fp.flush()
 
-        tasks = [asyncio.create_task(sem_fight()) for _ in range(runs)]
+        tasks = [asyncio.create_task(sem_fight(run_index)) for run_index in range(runs)]
+        buffered_results: dict[int, dict[str, str]] = {}
+        next_to_write = 0
         for idx, coro in enumerate(asyncio.as_completed(tasks), start=1):
-            writer.writerow(await coro)
-            fp.flush()
+            run_index, result = await coro
+            buffered_results[run_index] = result
+            while next_to_write in buffered_results:
+                writer.writerow(buffered_results.pop(next_to_write))
+                fp.flush()
+                next_to_write += 1
             if progress:
                 progress(idx, runs)
 

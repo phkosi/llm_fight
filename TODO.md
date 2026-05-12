@@ -227,22 +227,27 @@ Required tests:
 
 Addresses: ISSUE-009
 
-- [ ] Replace batch use of module-global RNG with an isolated per-fight RNG derived from `(batch_seed, run_index)`, and pass that RNG through roll resolution and effect ticking.
+- [x] Replace batch use of module-global RNG with an isolated per-fight RNG derived from `(batch_seed, run_index)`, and pass that RNG through roll resolution and effect ticking.
 
 Acceptance goals:
 
+- Preserve `run_batch()`'s public API: keep `run_batch(output_csv="sim_results.csv", fighter_a_section=None, fighter_b_section=None, progress=None) -> Path` unchanged.
+- Add fight-local RNG narrowly, not via a runtime-context refactor: `_single_fight(..., return_log: bool = False, fight_rng: random.Random | None = None)`. Use `fight_rng.random()` for success rolls, falling back to existing module-global `rand()` only when `fight_rng is None`.
 - `_single_fight()` accepts an optional fight-local RNG and uses it for success rolls.
-- `FighterState.apply_effects()` and random effect-layer selection use the fight-local RNG instead of global `choice()`.
-- `run_batch()` derives stable per-run seeds before scheduling concurrent tasks.
-- CSV rows are written in stable run order while still flushing rows incrementally when the next ordered result is available.
+- Add `FighterState.apply_effects(rng: random.Random | None = None)` and use `rng.choice(...)` for burn/effect layer selection when provided, falling back to existing `llm_fight.rng.choice(...)` for compatibility.
+- `run_batch()` derives stable per-run seeds before scheduling concurrent tasks using a deterministic helper such as `_derive_fight_seed(batch_seed: int, run_index: int) -> int`; do not use Python's process-randomized `hash()`.
+- `run_batch()` creates indexed tasks and passes each task its own RNG.
+- CSV rows are written in stable run-index order while still flushing incrementally when the next ordered result is available. Later completed rows may wait in memory until preceding runs finish.
+- Progress callback semantics remain completion-based: call `progress(completed_count, runs)` whenever a fight task completes, not only when an ordered row flushes.
 - Existing public `rng.py` helpers remain for compatibility unless all callers are migrated.
+- Update README or `docs/Design_doc.md` to state that batch seeds produce stable per-run RNG streams under concurrency, and CSV output remains ordered by run index while still flushing incrementally.
 
 Required tests:
 
 - Run the same concurrent batch twice with the same seed and varied fake async delays; ordered CSV rows are identical.
 - Changing the base seed changes deterministic roll outcomes.
 - Per-fight RNG prevents one slow fight from changing another fight's roll sequence.
-- Existing zero-run, error-row, progress-callback, and incremental-flush tests are preserved or intentionally updated.
+- Existing zero-run, error-row, progress-callback, and incremental-flush tests are preserved or intentionally updated, including explicit completion-based progress callback ordering.
 
 ## Prompt Budget Guardrails And Context Trimming
 

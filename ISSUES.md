@@ -115,14 +115,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-009: Global RNG makes concurrent batch runs non-reproducible
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Per-Fight RNG For Concurrent Batch Runs
 - Source: codebase review
 - Area: Simulation correctness, reproducibility
 - Evidence: `run_batch()` seeds one module-global RNG in `src/llm_fight/simulation.py:243`, then starts concurrent `_single_fight()` tasks at `src/llm_fight/simulation.py:267`; rolls consume global `rand()` after async waits.
 - Impact: Same seed can produce different per-run outcomes depending on async scheduling and model latency.
 - Suggested fix: Give each fight an isolated RNG derived from `(batch_seed, run_index)` and pass it through dice resolution and effect ticking.
-- Tests: Run a deterministic concurrent batch twice with varied fake async delays and assert identical ordered CSV rows.
+- Tests: Run a deterministic concurrent batch twice with varied fake async delays and assert identical ordered CSV rows. Verified with `uv run pytest -q tests/test_state.py tests/test_simulation.py tests/test_simulation_integration.py tests/test_simulation_failures.py tests/test_rng.py`.
 
 ### ISSUE-010: Invalid batch concurrency can hang forever
 

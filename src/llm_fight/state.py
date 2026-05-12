@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict, fields, is_dataclass
+import random
 from typing import Dict, List, Any
 import copy
 import math
@@ -534,7 +535,7 @@ class FighterState:
 
         return self  # Allow chaining or inspection
 
-    def apply_effects(self):
+    def apply_effects(self, rng: random.Random | None = None):
         """Applies the actual consequences of active effects each tick."""
         for eff_list_name in [C.BUFFS, C.DEBUFFS]:
             eff_list = getattr(self, eff_list_name)
@@ -557,7 +558,9 @@ class FighterState:
                         if target_part.status not in [C.IS_DESTROYED, C.STATUS_SEVERED] and target_part.layers:
                             active_layers = [layer for layer in target_part.layers if layer.max_hp > 0]
                             if active_layers:
-                                random_layer_to_burn = choice(active_layers)
+                                random_layer_to_burn = (
+                                    rng.choice(active_layers) if rng is not None else choice(active_layers)
+                                )
                                 burn_damage = max(1, int(effect_magnitude))
                                 logger.debug(
                                     f"{self.id} takes {burn_damage} burn damage to {affected_part_name}.{random_layer_to_burn.name} from '{C.EFFECT_BURNING}' effect."
