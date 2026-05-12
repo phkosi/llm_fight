@@ -13,6 +13,10 @@ from llm_fight.engine import constants as C
 from llm_fight.config import CONFIG
 
 
+def _source_value(source=C.FIGHTER_A, value=1):
+    return {C.SOURCE: source, C.VALUE: value}
+
+
 @pytest.mark.asyncio
 @patch("llm_fight.simulation.get_fighter_attempt", new_callable=AsyncMock)
 @patch("llm_fight.simulation.judge_phase1", new_callable=AsyncMock)
@@ -71,7 +75,7 @@ async def test_single_fight_runs_to_completion(
         # This delta will be passed to fighter_b_mock.apply_delta
         return {
             "narration": "A lands a decisive blow! B is knocked out!",
-            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS}},
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.FighterStatus.UNCONSCIOUS)}},
             "fight_end": True,
             "winner": "A",  # Winner is determined by ID string
         }
@@ -451,7 +455,7 @@ async def test_turn_logging_respects_setting():
     async def fake_judge_p2(*args, **kwargs):
         return {
             "narration": "A wins",
-            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)}},
             "fight_end": True,
             "winner": "A",
         }
@@ -521,3 +525,159 @@ async def test_invalid_failed_attempts_cannot_apply_p2_damage_or_winner():
     assert result[C.WINNER] == C.DRAW
     assert fighters[1].status == C.FighterStatus.FIGHTING
     assert any("both attempts were invalid and failed" in call.args[0] for call in mock_warning.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_valid_attempts_with_failed_rolls_cannot_apply_sourced_p2_damage_or_winner():
+    fighters = []
+    original_from_preset = sim_module.FighterState.from_preset
+
+    def capture_from_preset(id_, preset, config_section=None):
+        fighter = original_from_preset(id_, preset, config_section=config_section)
+        fighters.append(fighter)
+        return fighter
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "Both attempts are possible but fail.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "The judge wrongly invents damage after failed rolls.",
+            C.DELTA: {
+                C.FIGHTER_A: {C.PAIN_INCREASE: _source_value(C.FIGHTER_B, 30)},
+                C.FIGHTER_B: {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)},
+            },
+            C.FIGHT_END: True,
+            C.WINNER: C.FIGHTER_A,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    with (
+        patch.object(sim_module.FighterState, "from_preset", side_effect=capture_from_preset),
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=1.0), create=True),
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert fighters[0].pain == 0
+    assert fighters[1].status == C.FighterStatus.FIGHTING
+
+
+@pytest.mark.asyncio
+async def test_mixed_success_applies_only_authorized_source_consequences():
+    fighters = []
+    original_from_preset = sim_module.FighterState.from_preset
+
+    def capture_from_preset(id_, preset, config_section=None):
+        fighter = original_from_preset(id_, preset, config_section=config_section)
+        fighters.append(fighter)
+        return fighter
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds while B fails.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "A lands a hit while overextending; B's failed counter should not matter.",
+            C.DELTA: {
+                C.FIGHTER_A: {
+                    C.HEAT_INCREASE: _source_value(C.FIGHTER_A, 3),
+                    C.PAIN_INCREASE: _source_value(C.FIGHTER_B, 99),
+                },
+                C.FIGHTER_B: {
+                    C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 7),
+                    C.WOUNDS: [
+                        {
+                            C.SOURCE: C.FIGHTER_B,
+                            C.TARGETED_PART: "head",
+                            C.VALUE: 100,
+                            C.TYPE: C.DamageType.PIERCING,
+                        }
+                    ],
+                },
+            },
+            C.FIGHT_END: False,
+            C.WINNER: None,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+
+    with (
+        patch.object(sim_module.FighterState, "from_preset", side_effect=capture_from_preset),
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert fighters[0].heat == 3
+    assert fighters[0].pain == 0
+    assert fighters[1].pain == 7
+    assert fighters[1].parts["head"].status == "intact"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("winner", [C.FIGHTER_A, None])
+async def test_judge_only_fight_end_continues_when_state_is_not_terminal(winner):
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "A succeeds without a terminal effect.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {
+            C.NARRATION: "The judge declares an unsupported ending.",
+            C.DELTA: {},
+            C.FIGHT_END: True,
+            C.WINNER: winner,
+        }
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+
+    judge_p2 = AsyncMock(side_effect=fake_judge_p2)
+    with (
+        patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(return_value="attack")),
+        patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+        patch.object(sim_module, "judge_phase2", new=judge_p2),
+        patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
+        patch.object(sim_module.logger, "warning") as mock_warning,
+    ):
+        result = await sim_module._single_fight()
+
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    assert result[C.WINNER] == C.DRAW
+    assert judge_p2.await_count == 2
+    assert any("Ignoring judge-only outcome" in call.args[0] for call in mock_warning.call_args_list)

@@ -55,8 +55,9 @@ src/llm_fight/
 3. Phase 1 returns strict JSON with validity and probability for each attempt.
 4. Python rolls success using the central PRNG.
 5. Judge Phase 2 receives attempts, full P1 result, `successful_rolls`, combat log context, valid body parts, and current fighter states.
-6. Phase 2 returns strict JSON containing narration, delta, `fight_end`, and `winner`.
-7. Python applies deltas, normalizes body-part and damage aliases, ticks effects, re-checks status invariants, and resolves winner consistency from final state.
+6. Phase 2 returns strict JSON containing narration, delta, `fight_end`, and `winner`. Every state-changing delta entry must include `source: "A" | "B"` for the fighter whose valid current action succeeded.
+7. Python drops delta consequences with missing, unknown, invalid, or failed sources before state mutation. Authorized consequences may target either fighter, including self-costs.
+8. Python applies authorized deltas, normalizes body-part and damage aliases, ticks effects, re-checks status invariants, and resolves winner consistency from final state. Judge-only `fight_end` or `winner` values are ignored unless the resulting Python state is terminal.
 
 ## 5. Anatomy And State
 

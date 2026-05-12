@@ -7,6 +7,10 @@ from llm_fight.engine import constants as C
 from llm_fight.config import CONFIG
 
 
+def _source_value(source=C.FIGHTER_A, value=1):
+    return {C.SOURCE: source, C.VALUE: value}
+
+
 @pytest.mark.asyncio
 async def test_short_single_fight_integration():
     fighters = []
@@ -33,7 +37,7 @@ async def test_short_single_fight_integration():
     async def fake_judge_p2(*args, **kwargs):
         return {
             "narration": "A knocks out B",
-            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)}},
             "fight_end": True,
             "winner": "A",
         }
@@ -76,7 +80,7 @@ async def test_run_batch_short_simulation(tmp_path):
     async def fake_judge_p2(*args, **kwargs):
         return {
             "narration": "A knocks out B",
-            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)}},
             "fight_end": True,
             "winner": "A",
         }
@@ -133,13 +137,13 @@ async def test_two_turn_single_fight_integration():
     p2_responses = [
         {
             "narration": "A wounds B",
-            "delta": {"A": {}, "B": {C.PAIN_INCREASE: 5}},
+            "delta": {"A": {}, "B": {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 5)}},
             "fight_end": False,
             "winner": None,
         },
         {
             "narration": "A knocks out B",
-            "delta": {"A": {}, "B": {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "delta": {"A": {}, "B": {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)}},
             "fight_end": True,
             "winner": "A",
         },
@@ -228,7 +232,10 @@ async def test_post_delta_state_outcome_overrides_inconsistent_judge_winner():
     async def fake_judge_p2(*args, **kwargs):
         return {
             "narration": "B is knocked out, but the judge reports B as winner.",
-            "delta": {C.FIGHTER_A: {}, C.FIGHTER_B: {C.STATUS_CHANGE: C.STATUS_UNCONSCIOUS}},
+            "delta": {
+                C.FIGHTER_A: {},
+                C.FIGHTER_B: {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.STATUS_UNCONSCIOUS)},
+            },
             "fight_end": True,
             "winner": C.FIGHTER_B,
         }

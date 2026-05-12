@@ -97,7 +97,7 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
         json.dumps(
             {
                 "narration": "Fighter A lands a solid punch!",
-                "delta": {"A": {}, "B": {"pain_increase": 10}},
+                "delta": {"A": {}, "B": {"pain_increase": {C.SOURCE: C.FIGHTER_A, C.VALUE: 10}}},
                 "fight_end": False,
                 "winner": None,
             }

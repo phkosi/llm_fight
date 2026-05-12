@@ -2,6 +2,7 @@
 
 import json
 import asyncio
+from copy import deepcopy
 from typing import Any, Callable, Dict
 from jsonschema import validate, ValidationError
 
@@ -111,34 +112,78 @@ EffectSchema = {
     C.SCHEMA_ADDITIONAL_PROPERTIES: False,
 }
 
-DeltaSchema = {
+SourceSchema = {C.SCHEMA_TYPE: C.SCHEMA_STRING, C.SCHEMA_ENUM: [C.FIGHTER_A, C.FIGHTER_B]}
+
+SourceIntChangeSchema = {
     C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
     C.SCHEMA_PROPERTIES: {
-        C.PAIN_INCREASE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
-        C.EXHAUSTION_INCREASE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
-        C.HEAT_INCREASE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
-        C.WOUNDS: {
-            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
-            C.SCHEMA_ITEMS: {
-                C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
-                C.SCHEMA_PROPERTIES: {
-                    C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
-                    C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 1},
-                    C.TYPE: {
-                        C.SCHEMA_TYPE: C.SCHEMA_STRING,
-                        C.SCHEMA_ENUM: [dt.value for dt in C.DamageType] + ["burning"],
-                    },
-                },
-                C.SCHEMA_REQUIRED: [C.TARGETED_PART, C.VALUE],
-                C.SCHEMA_ADDITIONAL_PROPERTIES: False,
-            },
-        },
-        C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: EffectSchema},
-        C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
-        C.STATUS_CHANGE: {
+        C.SOURCE: SourceSchema,
+        C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 0},
+    },
+    C.SCHEMA_REQUIRED: [C.SOURCE, C.VALUE],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
+SourceStatusChangeSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        C.SOURCE: SourceSchema,
+        C.VALUE: {
             C.SCHEMA_TYPE: C.SCHEMA_STRING,
             C.SCHEMA_ENUM: [status.value for status in C.FighterStatus],
         },
+    },
+    C.SCHEMA_REQUIRED: [C.SOURCE, C.VALUE],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
+SourceWoundSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        C.SOURCE: SourceSchema,
+        C.TARGETED_PART: {C.SCHEMA_TYPE: C.SCHEMA_STRING},
+        C.VALUE: {C.SCHEMA_TYPE: C.SCHEMA_INTEGER, C.SCHEMA_MINIMUM: 1},
+        C.TYPE: {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_ENUM: [dt.value for dt in C.DamageType] + ["burning"],
+        },
+    },
+    C.SCHEMA_REQUIRED: [C.SOURCE, C.TARGETED_PART, C.VALUE],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
+SourceEffectSchema = deepcopy(EffectSchema)
+SourceEffectSchema[C.SCHEMA_PROPERTIES] = {
+    C.SOURCE: SourceSchema,
+    **SourceEffectSchema[C.SCHEMA_PROPERTIES],
+}
+SourceEffectSchema[C.SCHEMA_REQUIRED] = [C.SOURCE, *SourceEffectSchema[C.SCHEMA_REQUIRED]]
+
+SourceEffectRemovalSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        C.SOURCE: SourceSchema,
+        C.NAME: {
+            C.SCHEMA_TYPE: C.SCHEMA_STRING,
+            C.SCHEMA_MIN_LENGTH: 1,
+            C.SCHEMA_MAX_LENGTH: C.EFFECT_NAME_MAX_LENGTH,
+            C.SCHEMA_PATTERN: C.EFFECT_SAFE_NAME_PATTERN,
+        },
+    },
+    C.SCHEMA_REQUIRED: [C.SOURCE, C.NAME],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
+DeltaSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        C.PAIN_INCREASE: SourceIntChangeSchema,
+        C.EXHAUSTION_INCREASE: SourceIntChangeSchema,
+        C.HEAT_INCREASE: SourceIntChangeSchema,
+        C.WOUNDS: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: SourceWoundSchema},
+        C.EFFECTS_ADDED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: SourceEffectSchema},
+        C.EFFECTS_REMOVED: {C.SCHEMA_TYPE: C.SCHEMA_ARRAY, C.SCHEMA_ITEMS: SourceEffectRemovalSchema},
+        C.STATUS_CHANGE: SourceStatusChangeSchema,
     },
     C.SCHEMA_ADDITIONAL_PROPERTIES: False,
 }

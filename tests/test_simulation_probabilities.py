@@ -28,7 +28,7 @@ async def test_single_fight_logs_invalid_probabilities(tmp_path):
 
     # Prepare config for short fight
     original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
-    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "2")
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
 
     p1_response = {
         f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
@@ -38,7 +38,7 @@ async def test_single_fight_logs_invalid_probabilities(tmp_path):
         "judgement_text": "",  # minimal
         "explanation": "",
     }
-    p2_response = {"narration": "", "delta": {}, "fight_end": True, "winner": None}
+    p2_response = {"narration": "", "delta": {}, "fight_end": False, "winner": None}
 
     with (
         patch.object(sim_module.FighterState, "from_preset", side_effect=[fighter_a, fighter_b]),

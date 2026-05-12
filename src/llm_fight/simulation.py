@@ -101,17 +101,103 @@ def _attempts_both_invalid_and_failed(p1: Dict[str, Any], rolls: Dict[str, bool]
     )
 
 
-def _clear_invalid_turn_result(p2: Dict[str, Any], p1: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
-    if not _attempts_both_invalid_and_failed(p1, rolls):
-        return p2
+def _authorized_phase2_sources(p1: Dict[str, Any], rolls: Dict[str, bool]) -> set[str]:
+    return {
+        fighter_id
+        for fighter_id in (C.FIGHTER_A, C.FIGHTER_B)
+        if rolls.get(fighter_id, False) and p1.get(f"{C.ATTEMPT}_{fighter_id}_valid", False)
+    }
 
-    if p2.get(C.DELTA) or p2.get(C.FIGHT_END) or p2.get(C.WINNER) is not None:
-        logger.warning("Ignoring Judge Phase 2 damage/end result because both attempts were invalid and failed.")
 
+def _is_authorized_consequence(entry: Any, authorized_sources: set[str], field_name: str) -> bool:
+    if not isinstance(entry, dict):
+        logger.warning("Dropping Judge Phase 2 %s consequence without source object.", field_name)
+        return False
+    source = entry.get(C.SOURCE)
+    if source not in authorized_sources:
+        logger.warning(
+            "Dropping Judge Phase 2 %s consequence from unauthorized source %r.",
+            field_name,
+            source,
+        )
+        return False
+    return True
+
+
+def _copy_without_source(entry: Dict[str, Any]) -> Dict[str, Any]:
+    sanitized = dict(entry)
+    sanitized.pop(C.SOURCE, None)
+    return sanitized
+
+
+def _authorized_scalar_value(entry: Any, authorized_sources: set[str], field_name: str) -> Any:
+    if not _is_authorized_consequence(entry, authorized_sources, field_name):
+        return None
+    return entry.get(C.VALUE)
+
+
+def _authorize_fighter_delta(delta: Any, authorized_sources: set[str]) -> Dict[str, Any]:
+    if not isinstance(delta, dict):
+        return {}
+
+    authorized_delta: Dict[str, Any] = {}
+    for field_name in (C.PAIN_INCREASE, C.EXHAUSTION_INCREASE, C.HEAT_INCREASE, C.STATUS_CHANGE):
+        if field_name not in delta:
+            continue
+        value = _authorized_scalar_value(delta[field_name], authorized_sources, field_name)
+        if value is not None:
+            authorized_delta[field_name] = value
+
+    wounds = []
+    for wound in delta.get(C.WOUNDS, []):
+        if _is_authorized_consequence(wound, authorized_sources, C.WOUNDS):
+            wounds.append(_copy_without_source(wound))
+    if wounds:
+        authorized_delta[C.WOUNDS] = wounds
+
+    effects_added = []
+    for effect in delta.get(C.EFFECTS_ADDED, []):
+        if _is_authorized_consequence(effect, authorized_sources, C.EFFECTS_ADDED):
+            effects_added.append(_copy_without_source(effect))
+    if effects_added:
+        authorized_delta[C.EFFECTS_ADDED] = effects_added
+
+    effects_removed = []
+    for effect_removal in delta.get(C.EFFECTS_REMOVED, []):
+        if _is_authorized_consequence(effect_removal, authorized_sources, C.EFFECTS_REMOVED):
+            name = effect_removal.get(C.NAME)
+            if name:
+                effects_removed.append(name)
+    if effects_removed:
+        authorized_delta[C.EFFECTS_REMOVED] = effects_removed
+
+    return authorized_delta
+
+
+def _authorize_phase2_result(p2: Dict[str, Any], p1: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
+    authorized_sources = _authorized_phase2_sources(p1, rolls)
     sanitized = dict(p2)
-    sanitized[C.DELTA] = {}
-    sanitized[C.FIGHT_END] = False
-    sanitized[C.WINNER] = None
+
+    if not authorized_sources:
+        if p2.get(C.DELTA) or p2.get(C.FIGHT_END) or p2.get(C.WINNER) is not None:
+            logger.warning("Ignoring Judge Phase 2 damage/end result because no valid attempt succeeded.")
+            if _attempts_both_invalid_and_failed(p1, rolls):
+                logger.warning("both attempts were invalid and failed.")
+        sanitized[C.DELTA] = {}
+        sanitized[C.FIGHT_END] = False
+        sanitized[C.WINNER] = None
+        return sanitized
+
+    raw_delta = p2.get(C.DELTA, {})
+    if not isinstance(raw_delta, dict):
+        sanitized[C.DELTA] = {}
+        return sanitized
+
+    sanitized[C.DELTA] = {
+        fighter_id: authorized_delta
+        for fighter_id in (C.FIGHTER_A, C.FIGHTER_B)
+        if (authorized_delta := _authorize_fighter_delta(raw_delta.get(fighter_id, {}), authorized_sources))
+    }
     return sanitized
 
 
@@ -204,7 +290,7 @@ async def _single_fight(
             "recent_combat_log": judge_recent_log,
         }
         p2 = await judge_phase2(p2_input_state, rolls)
-        p2 = _clear_invalid_turn_result(p2, p1, rolls)
+        p2 = _authorize_phase2_result(p2, p1, rolls)
 
         turn_entry = CombatTurn(
             turn=turn,
@@ -244,8 +330,11 @@ async def _single_fight(
                 )
             outcome = status_outcome
         elif judge_outcome:
-            outcome = judge_outcome
-        elif turn >= config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100):
+            logger.warning(
+                "Ignoring judge-only outcome %s because post-delta state outcome is not terminal.",
+                judge_outcome,
+            )
+        if not outcome and turn >= config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100):
             outcome = C.DRAW
         # else: outcome remains None, loop continues
 

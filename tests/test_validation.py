@@ -258,17 +258,32 @@ def test_judge_p1_schema_invalid_probability():
 
 
 # --- DeltaSchema Tests ---
+def _source_value(source=C.FIGHTER_A, value=1):
+    return {C.SOURCE: source, C.VALUE: value}
+
+
+def _source_wound(source=C.FIGHTER_A, **overrides):
+    wound = {C.SOURCE: source, C.TARGETED_PART: "torso", C.VALUE: 10, C.TYPE: "piercing"}
+    wound.update(overrides)
+    return wound
+
+
+def _source_effect_removal(source=C.FIGHTER_A, name="stunned"):
+    return {C.SOURCE: source, C.NAME: name}
+
+
 def test_delta_schema_valid_full():
     valid_data = {
-        C.PAIN_INCREASE: 10,
-        C.EXHAUSTION_INCREASE: 5,
-        C.HEAT_INCREASE: 3,
+        C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 10),
+        C.EXHAUSTION_INCREASE: _source_value(C.FIGHTER_A, 5),
+        C.HEAT_INCREASE: _source_value(C.FIGHTER_A, 3),
         C.WOUNDS: [
-            {C.TARGETED_PART: "torso", C.VALUE: 15, C.TYPE: "piercing"},
-            {C.TARGETED_PART: "left_arm", C.VALUE: 8, C.TYPE: "slashing"},
+            _source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "torso", C.VALUE: 15, C.TYPE: "piercing"}),
+            _source_wound(C.FIGHTER_B, **{C.TARGETED_PART: "left_arm", C.VALUE: 8, C.TYPE: "slashing"}),
         ],
         C.EFFECTS_ADDED: [
             {
+                C.SOURCE: C.FIGHTER_A,
                 C.NAME: "burning",
                 C.VALUE: 1.0,
                 C.EFFECT_TTL: 3,
@@ -277,51 +292,61 @@ def test_delta_schema_valid_full():
                 C.TYPE: C.DEBUFFS,  # For determining which list in FighterState
             }
         ],
-        C.EFFECTS_REMOVED: ["stunned"],
-        C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS,
+        C.EFFECTS_REMOVED: [_source_effect_removal(C.FIGHTER_B, "stunned")],
+        C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.FighterStatus.UNCONSCIOUS),
     }
     _validate_against_schema(valid_data, DeltaSchema, True)
 
 
 def test_delta_schema_valid_minimal():
-    valid_data = {C.PAIN_INCREASE: 1}  # Only one field
+    valid_data = {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 1)}  # Only one field
     _validate_against_schema(valid_data, DeltaSchema, True)
     valid_data_empty = {}  # Empty delta is also valid
     _validate_against_schema(valid_data_empty, DeltaSchema, True)
 
 
 def test_delta_schema_invalid_blank_status_change():
-    valid_data = {C.STATUS_CHANGE: ""}
+    valid_data = {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, "")}
     _validate_against_schema(valid_data, DeltaSchema, False)
 
 
 def test_delta_schema_invalid_pain_type():
-    invalid_data = {C.PAIN_INCREASE: "high"}  # Should be integer
+    invalid_data = {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, "high")}  # Should be integer
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
 def test_delta_schema_invalid_pain_value():
-    invalid_data = {C.PAIN_INCREASE: -5}  # Should be non-negative
+    invalid_data = {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, -5)}  # Should be non-negative
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+def test_delta_schema_rejects_missing_source_for_scalar_consequence():
+    invalid_data = {C.PAIN_INCREASE: {C.VALUE: 5}}
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+def test_delta_schema_rejects_unknown_source_for_scalar_consequence():
+    invalid_data = {C.PAIN_INCREASE: _source_value("C", 5)}
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
 def test_delta_schema_invalid_wound_missing_field():
-    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.TYPE: C.DamageType.PIERCING}]}  # Missing value
+    invalid_data = {C.WOUNDS: [_source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "head", C.VALUE: None})]}
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
 def test_delta_schema_invalid_negative_wound_value():
-    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.VALUE: -1, C.TYPE: C.DamageType.PIERCING}]}
+    invalid_data = {C.WOUNDS: [_source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "head", C.VALUE: -1})]}
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
 def test_delta_schema_invalid_zero_wound_value():
-    invalid_data = {C.WOUNDS: [{C.TARGETED_PART: "head", C.VALUE: 0, C.TYPE: C.DamageType.PIERCING}]}
+    invalid_data = {C.WOUNDS: [_source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "head", C.VALUE: 0})]}
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
 def test_delta_schema_rejects_unknown_status_change():
-    unknown_status = {C.STATUS_CHANGE: "confused"}
+    unknown_status = {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, "confused")}
     _validate_against_schema(unknown_status, DeltaSchema, False)
 
 
@@ -335,7 +360,7 @@ def test_judge_p2_schema_rejects_misplaced_result_fields_inside_delta():
         C.NARRATION: "A strange nested result appears.",
         C.DELTA: {
             C.FIGHTER_A: {
-                C.PAIN_INCREASE: 1,
+                C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 1),
                 C.FIGHT_END: True,
                 C.WINNER: C.FIGHTER_A,
             }
@@ -405,7 +430,20 @@ def test_effect_schema_rejects_invalid_payloads(effect):
 
 
 def test_delta_schema_rejects_invalid_effect_payload():
-    invalid_data = {C.EFFECTS_ADDED: [_valid_effect(**{C.EFFECT_TTL: None})]}
+    invalid_effect = _valid_effect(**{C.SOURCE: C.FIGHTER_A, C.EFFECT_TTL: None})
+    invalid_data = {C.EFFECTS_ADDED: [invalid_effect]}
+
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+def test_delta_schema_requires_source_for_effect_payload():
+    invalid_data = {C.EFFECTS_ADDED: [_valid_effect()]}
+
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+def test_delta_schema_requires_source_for_effect_removal():
+    invalid_data = {C.EFFECTS_REMOVED: ["stunned"]}
 
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
@@ -415,8 +453,12 @@ def test_judge_p2_schema_valid():
     valid_data = {
         C.NARRATION: "The fighters trade blows, A lands a solid hit!",
         C.DELTA: {
-            C.FIGHTER_A: {C.PAIN_INCREASE: 5},
-            C.FIGHTER_B: {C.WOUNDS: [{C.TARGETED_PART: "leg", C.VALUE: 10, C.TYPE: C.DamageType.SLASHING}]},
+            C.FIGHTER_A: {C.PAIN_INCREASE: _source_value(C.FIGHTER_B, 5)},
+            C.FIGHTER_B: {
+                C.WOUNDS: [
+                    _source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "leg", C.VALUE: 10, C.TYPE: C.DamageType.SLASHING})
+                ]
+            },
         },
         C.FIGHT_END: False,
         C.WINNER: None,
@@ -427,7 +469,7 @@ def test_judge_p2_schema_valid():
 def test_judge_p2_schema_valid_fight_ends():
     valid_data = {
         C.NARRATION: "B collapses, A is victorious!",
-        C.DELTA: {C.FIGHTER_B: {C.STATUS_CHANGE: C.FighterStatus.UNCONSCIOUS}},
+        C.DELTA: {C.FIGHTER_B: {C.STATUS_CHANGE: _source_value(C.FIGHTER_A, C.FighterStatus.UNCONSCIOUS)}},
         C.FIGHT_END: True,
         C.WINNER: C.FIGHTER_A,
     }
@@ -457,7 +499,7 @@ def test_judge_p2_schema_invalid_winner_enum():
 def test_judge_p2_schema_invalid_delta_fighter_key():
     invalid_data = {
         C.NARRATION: "A attacks.",
-        C.DELTA: {"FighterC": {C.PAIN_INCREASE: 1}},  # Invalid fighter key
+        C.DELTA: {"FighterC": {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 1)}},  # Invalid fighter key
         C.FIGHT_END: False,
         C.WINNER: None,
     }

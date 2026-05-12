@@ -99,6 +99,7 @@ WINNER = "winner"
 BATCH_ERROR_WINNER = "error"
 FIGHTER_A = "A"
 FIGHTER_B = "B"
+SOURCE = "source"
 
 # Delta Keys (for Judge P2)
 PAIN_INCREASE = "pain_increase"

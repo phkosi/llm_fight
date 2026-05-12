@@ -49,25 +49,25 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-003: Judge P2 deltas can bypass validity and dice rolls
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - P2 Authorization And Terminal Outcome Gate
 - Source: codebase review
 - Area: Security, simulation correctness
 - Evidence: P2 receives `successful_rolls` in `src/llm_fight/simulation.py:157`, but returned deltas are applied directly at `src/llm_fight/simulation.py:171`. `_clear_invalid_turn_result()` only clears the narrow case where both attempts are invalid and both rolls failed in `src/llm_fight/simulation.py:55`.
 - Impact: A failed roll, invalid single action, or prompt-injected fighter action can still produce wounds, effects, status changes, `fight_end`, and `winner` if the judge ignores prompt instructions.
 - Suggested fix: Add deterministic post-P2 authorization before `apply_delta()`. At minimum, make no successful rolls mean no delta/end/winner. For mixed success, add source attribution to deltas and drop consequences from invalid/failed actions.
-- Tests: Stub both attempts as valid with rolls false, return P2 damage/status/winner, and assert no state mutation and no fight end. Add mixed success/failure coverage once source attribution exists.
+- Tests: Stub both attempts as valid with rolls false, return P2 damage/status/winner, and assert no state mutation and no fight end. Mixed success/failure coverage verifies only authorized sourced consequences apply. Verified with `uv run pytest -q tests/test_validation.py tests/test_simulation.py tests/test_simulation_integration.py tests/test_simulation_probabilities.py tests/engine/test_judge.py tests/engine/test_prompts.py` and `uv run pytest -q`.
 
 ### ISSUE-004: Judge-only winners can end fights without terminal state
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - P2 Authorization And Terminal Outcome Gate
 - Source: codebase review
 - Area: Simulation correctness
 - Evidence: `_judge_outcome()` accepts `fight_end=true, winner="A"` in `src/llm_fight/simulation.py:30`; `_single_fight()` accepts judge outcome when `_status_outcome()` is `None` in `src/llm_fight/simulation.py:197`.
 - Impact: A malformed or overconfident judge result can award a winner while both fighters remain `fighting`.
 - Suggested fix: Treat post-delta state as authoritative for combat outcomes. Only accept judge-only endings with a structured, Python-verifiable terminal reason.
-- Tests: P2 returns empty delta, both fighters remain fighting, `fight_end=true`, `winner=A`; assert the fight continues or is rejected.
+- Tests: P2 returns empty delta, both fighters remain fighting, `fight_end=true`, `winner=A` or `winner=null`; the fight continues until normal max-turn resolution. Verified with `uv run pytest -q tests/test_validation.py tests/test_simulation.py tests/test_simulation_integration.py tests/test_simulation_probabilities.py tests/engine/test_judge.py tests/engine/test_prompts.py` and `uv run pytest -q`.
 
 ### ISSUE-005: Unvalidated effect payloads can crash, inject prompts, or become permanent junk state
 

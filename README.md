@@ -190,7 +190,9 @@ The installable package lives under `src/llm_fight/`. The core flow is:
 2. Judge Phase 1 returns validity and success probabilities.
 3. Python rolls against those probabilities.
 4. Judge Phase 2 receives attempts, the full P1 result, successful rolls, combat log, valid body parts, and fighter state.
-5. Python validates and applies deltas, ticks effects, and resolves winner consistency from the resulting state.
+5. Judge Phase 2 deltas must mark each mechanical consequence with the source fighter whose valid action succeeded.
+6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, then ticks effects and resolves the winner from resulting state.
+7. Judge-only `fight_end` or `winner` values are ignored unless Python state becomes terminal.
 
 For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
 

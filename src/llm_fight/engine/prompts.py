@@ -60,18 +60,20 @@ Output JSON ONLY, adhering to the following schema:
 }
 
 The DeltaSchema for each fighter includes fields like:
-- "pain_increase": integer (non-negative)
-- "exhaustion_increase": integer (non-negative)
-- "heat_increase": integer (non-negative)
-- "wounds": array of objects, each with "targeted_part": string, "value": positive integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
-- "effects_added": array of Effect objects (e.g., {"name": "burning", "value": 1.0, "ttl": 3, "on_apply": "Starts burning", "on_tick": "Takes fire damage", "metadata": {"targeted_part": "torso"}})
-- "effects_removed": array of strings (names of effects to remove)
- - "status_change": string (one of "fighting", "unconscious", "dead")
+- "pain_increase": object with {"source": "A"|"B", "value": integer non-negative}
+- "exhaustion_increase": object with {"source": "A"|"B", "value": integer non-negative}
+- "heat_increase": object with {"source": "A"|"B", "value": integer non-negative}
+- "wounds": array of objects, each with "source": "A"|"B", "targeted_part": string, "value": positive integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
+- "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "burning", "value": 1.0, "ttl": 3, "on_apply": "Starts burning", "on_tick": "Takes fire damage", "metadata": {"targeted_part": "torso"}})
+- "effects_removed": array of objects, each with {"source": "A"|"B", "name": string}
+ - "status_change": object with {"source": "A"|"B", "value": one of "fighting", "unconscious", "dead"}
    - omit if the fighter's status does not change
 
 Your narration should be consistent with the deltas you provide.
+Every state-changing consequence must include the source fighter whose valid, successful current action caused it. A successful source may affect either fighter, including self-costs or opponent damage. Do not infer source from the target fighter.
 Only create wounds, effects, major pain/exhaustion/heat increases, fight_end, or a winner from actions that are both valid in p1_result and successful in successful_rolls.
 If both attempts are invalid and both successful_rolls are false, return an empty delta, fight_end false, and winner null.
+If neither fighter becomes dead or unconscious in the resulting Python state, judge-only fight_end or winner values will be ignored, including winner null draws.
 If an action was successful (based on `successful_rolls`), describe its impact. If an action failed, describe that too.
 Be creative and fair.
 """

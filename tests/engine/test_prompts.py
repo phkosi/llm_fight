@@ -11,6 +11,13 @@ def test_judge_p2_prompt_describes_wounds_as_positive():
     assert '"value": positive integer' in JUDGE_P2_SYSTEM_PROMPT
 
 
+def test_judge_p2_prompt_requires_source_attribution():
+    assert '"source": "A"|"B"' in JUDGE_P2_SYSTEM_PROMPT
+    assert "Every state-changing consequence must include the source fighter" in JUDGE_P2_SYSTEM_PROMPT
+    assert "Do not infer source from the target fighter" in JUDGE_P2_SYSTEM_PROMPT
+    assert "judge-only fight_end or winner values will be ignored" in JUDGE_P2_SYSTEM_PROMPT
+
+
 def test_fighter_prompt_does_not_add_article_before_environment():
     rendered = FIGHTER_SYSTEM_PROMPT.format(
         name="A",

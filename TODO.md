@@ -155,20 +155,25 @@ Required tests:
 
 Addresses: ISSUE-003, ISSUE-004
 
-- [ ] Add a deterministic post-Phase-2 authorization gate before `FighterState.apply_delta()` and before accepting `fight_end` or `winner`. Python state remains authoritative: judge-declared endings are ignored unless authorized deltas and effect ticks produce terminal fighter state.
+- [x] Add a deterministic post-Phase-2 authorization gate before `FighterState.apply_delta()` and before accepting `fight_end` or `winner`. Python state remains authoritative: judge-declared endings are ignored unless authorized deltas and effect ticks produce terminal fighter state.
 
 Acceptance goals:
 
+- Extend `DeltaSchema`/`JudgeP2Schema` so every mechanically meaningful Phase 2 consequence carries `source: "A" | "B"`. Consequences missing `source`, with an unknown source, or sourced to a fighter without both a valid Phase 1 attempt and a successful roll are dropped before `apply_delta()`.
+- Attribution is required for all state-changing entries: scalar stat increases, wounds, effects added, effects removed, and status changes. If scalar fields remain scalar in legacy input, wrap them in source-bearing consequence objects before implementation; do not infer source from target fighter id.
+- A valid successful source may produce authorized consequences against either fighter, including self-costs or opponent damage. Authorization is based on consequence `source`, not on the target fighter whose delta contains it.
 - If no fighter has both a valid Phase 1 attempt and a successful roll, all Phase 2 deltas, `fight_end`, and `winner` are stripped before state mutation.
 - Mixed-success turns require source attribution for Phase 2 consequences; consequences from invalid or failed actions are dropped.
-- If both fighters remain `fighting` after authorized deltas and effect ticks, judge-only `fight_end=true` and `winner` are logged and ignored.
+- If both fighters remain `fighting` after authorized deltas and effect ticks, judge-only `fight_end=true` and `winner` are logged and ignored. This includes `fight_end=true, winner=null`, which should continue rather than become a judge-only draw.
 - Existing state-terminal outcomes still override contradictory judge winners.
+- Update `JUDGE_P2_SYSTEM_PROMPT`, `JudgeP2Schema`, validation tests, and README/docs Phase 2 contract text to document source attribution and Python-authoritative terminal outcomes.
 
 Required tests:
 
+- Validation/schema tests cover source-bearing consequences for scalar stat changes, wounds, effects added, effects removed, and status changes, plus rejection or sanitization of missing/unknown sources.
 - Valid attempts with both rolls false plus Phase 2 wounds/status/winner cause no mutation and no fight end.
 - One successful fighter plus one failed or invalid fighter drops failed-source consequences while applying successful-source consequences.
-- Empty delta plus `fight_end=true, winner=A` continues when both fighters remain `fighting`.
+- Empty delta plus `fight_end=true, winner=A` and `fight_end=true, winner=null` both continue when both fighters remain `fighting`.
 - Existing inconsistent-judge-winner coverage still proves post-delta state outcome wins.
 
 ## Effect Creation Turn Boundary
