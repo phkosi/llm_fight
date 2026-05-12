@@ -67,7 +67,8 @@ The DeltaSchema for each fighter includes fields like:
 - "heat_increase": object with {"source": "A"|"B", "value": integer non-negative}
 - "wounds": array of objects, each with "source": "A"|"B", "targeted_part": string, "value": positive integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
 - "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "poisoned", "value": 2.0, "ttl": 3, "on_apply": "Poison takes hold", "on_tick": "Poison weakens the body", "metadata": {"targeted_part": "torso"}, "mechanics": [{"kind": "stat_tick", "stat": "pain", "value": 2}], "tags": ["poison"]})
-- "effects_removed": array of objects, each with {"source": "A"|"B", "name": string}
+- "effects_removed": array of objects, each with {"source": "A"|"B", "name": string, "type": "buffs"|"debuffs" optional, "targeted_part": string optional}
+  - include "targeted_part" when treating or extinguishing one localized effect; omit it only for intentional remove-all by name/type
  - "status_change": object with {"source": "A"|"B", "value": one of "fighting", "unconscious", "dead"}
    - omit if the fighter's status does not change
 

@@ -272,6 +272,72 @@ class FighterState:
                 tags.append(normalized)
         return tags
 
+    def _safe_effect_removal_selector(self, raw_selector: Any) -> Dict[str, Any] | None:
+        if isinstance(raw_selector, str):
+            effect_name = raw_selector.strip()
+            selector: Dict[str, Any] = {C.NAME: effect_name}
+        elif isinstance(raw_selector, dict):
+            raw_name = raw_selector.get(C.NAME)
+            if not isinstance(raw_name, str):
+                logger.warning("Rejected effect removal for %s with missing/non-string name.", self.id)
+                return None
+            effect_name = raw_name.strip()
+            selector = {C.NAME: effect_name}
+            effect_type = raw_selector.get(C.TYPE)
+            if effect_type not in (None, ""):
+                if effect_type not in {C.BUFFS, C.DEBUFFS}:
+                    logger.warning("Rejected effect removal for %s with invalid type: %r", self.id, effect_type)
+                    return None
+                selector[C.TYPE] = effect_type
+            targeted_part = raw_selector.get(C.TARGETED_PART)
+            if targeted_part not in (None, ""):
+                if not isinstance(targeted_part, str) or not _SAFE_EFFECT_NAME_RE.fullmatch(targeted_part):
+                    logger.warning(
+                        "Rejected effect removal for %s with unsafe targeted part: %r",
+                        self.id,
+                        targeted_part,
+                    )
+                    return None
+                resolved_part = self.normalize_part_name(targeted_part)
+                if resolved_part is None:
+                    logger.warning(
+                        "Rejected effect removal for %s with unknown targeted part: %r",
+                        self.id,
+                        targeted_part,
+                    )
+                    return None
+                selector[C.TARGETED_PART] = resolved_part
+        else:
+            logger.warning("Rejected non-string/non-object effect removal for fighter %s: %r", self.id, raw_selector)
+            return None
+
+        if not _SAFE_EFFECT_NAME_RE.fullmatch(effect_name) or self._contains_forbidden_effect_text(effect_name):
+            logger.warning("Rejected unsafe effect removal name for fighter %s: %r", self.id, effect_name)
+            return None
+        return selector
+
+    def _effect_matches_removal_selector(self, eff: Effect, selector: Dict[str, Any], list_name: str) -> bool:
+        if eff.name != selector[C.NAME]:
+            return False
+        if selector.get(C.TYPE) not in (None, list_name):
+            return False
+        targeted_part = selector.get(C.TARGETED_PART)
+        if targeted_part is not None:
+            return eff.metadata.get(C.TARGETED_PART) == targeted_part
+        return True
+
+    def _apply_effect_removal_selector(self, selector: Dict[str, Any]) -> None:
+        for list_name in (C.BUFFS, C.DEBUFFS):
+            if selector.get(C.TYPE) not in (None, list_name):
+                continue
+            effect_list = getattr(self, list_name)
+            setattr(
+                self,
+                list_name,
+                [eff for eff in effect_list if not self._effect_matches_removal_selector(eff, selector, list_name)],
+            )
+        logger.debug("Effect removal selector applied to %s: %r", self.id, selector)
+
     def _safe_effect_mechanics(self, raw_mechanics: Any) -> list[Dict[str, Any]] | None:
         if raw_mechanics is None:
             return []
@@ -801,11 +867,11 @@ class FighterState:
                 )
 
         if C.EFFECTS_REMOVED in delta:
-            names_to_remove = set(delta[C.EFFECTS_REMOVED])
-            self.buffs = [eff for eff in self.buffs if eff.name not in names_to_remove]
-            self.debuffs = [eff for eff in self.debuffs if eff.name not in names_to_remove]
-            for name_removed in names_to_remove:
-                logger.debug(f"Effect '{name_removed}' removed from {self.id} via delta.")
+            for removal_data in delta[C.EFFECTS_REMOVED]:
+                selector = self._safe_effect_removal_selector(removal_data)
+                if selector is None:
+                    continue
+                self._apply_effect_removal_selector(selector)
 
         if C.STATUS_CHANGE in delta:
             self._apply_status_change(delta[C.STATUS_CHANGE])

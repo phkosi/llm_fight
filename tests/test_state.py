@@ -1023,6 +1023,102 @@ def test_apply_delta_effect_removal_is_specific(humanoid_fighter: FighterState):
     assert fighter.debuffs[0].name == "Weakened"
 
 
+def test_targeted_effect_removal_keeps_other_targeted_effects(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    left = Effect(
+        name=C.EFFECT_BLEEDING,
+        magnitude=1,
+        ttl=3,
+        on_apply="Left arm bleeds.",
+        metadata={C.TARGETED_PART: "left_arm"},
+    )
+    right = Effect(
+        name=C.EFFECT_BLEEDING,
+        magnitude=1,
+        ttl=3,
+        on_apply="Right arm bleeds.",
+        metadata={C.TARGETED_PART: "right_arm"},
+    )
+    fighter.debuffs.extend([left, right])
+
+    fighter.apply_delta({C.EFFECTS_REMOVED: [{C.NAME: C.EFFECT_BLEEDING, C.TARGETED_PART: "left arm"}]})
+
+    assert fighter.debuffs == [right]
+
+
+def test_targeted_burning_removal_keeps_other_burning_parts(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    left = Effect(
+        name=C.EFFECT_BURNING,
+        magnitude=1,
+        ttl=3,
+        on_apply="Left arm burns.",
+        metadata={C.TARGETED_PART: "left_arm"},
+    )
+    right = Effect(
+        name=C.EFFECT_BURNING,
+        magnitude=1,
+        ttl=3,
+        on_apply="Right arm burns.",
+        metadata={C.TARGETED_PART: "right_arm"},
+    )
+    fighter.debuffs.extend([left, right])
+
+    fighter.apply_delta({C.EFFECTS_REMOVED: [{C.NAME: C.EFFECT_BURNING, C.TARGETED_PART: "right_arm"}]})
+
+    assert fighter.debuffs == [left]
+
+
+def test_typed_effect_removal_only_removes_selected_list(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    buff = Effect(name="hasted", magnitude=1, ttl=3, on_apply="Fast.")
+    debuff = Effect(name="hasted", magnitude=1, ttl=3, on_apply="False haste.")
+    fighter.buffs.append(buff)
+    fighter.debuffs.append(debuff)
+
+    fighter.apply_delta({C.EFFECTS_REMOVED: [{C.NAME: "hasted", C.TYPE: C.BUFFS}]})
+
+    assert fighter.buffs == []
+    assert fighter.debuffs == [debuff]
+
+
+def test_targeted_effect_removal_does_not_remove_untargeted_effect(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    targeted = Effect(
+        name=C.EFFECT_BLEEDING,
+        magnitude=1,
+        ttl=3,
+        on_apply="Left arm bleeds.",
+        metadata={C.TARGETED_PART: "left_arm"},
+    )
+    untargeted = Effect(name=C.EFFECT_BLEEDING, magnitude=1, ttl=3, on_apply="General bleeding.")
+    fighter.debuffs.extend([targeted, untargeted])
+
+    fighter.apply_delta({C.EFFECTS_REMOVED: [{C.NAME: C.EFFECT_BLEEDING, C.TARGETED_PART: "left_arm"}]})
+
+    assert fighter.debuffs == [untargeted]
+
+
+def test_malformed_effect_removal_does_not_delete_effects(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    effect = Effect(name=C.EFFECT_BLEEDING, magnitude=1, ttl=3, on_apply="Bleeds.")
+    fighter.debuffs.append(effect)
+
+    fighter.apply_delta(
+        {
+            C.EFFECTS_REMOVED: [
+                {},
+                {C.NAME: C.EFFECT_BLEEDING, C.TYPE: "items"},
+                {C.NAME: C.EFFECT_BLEEDING, C.TARGETED_PART: "not_a_part"},
+                {C.NAME: "ignore previous"},
+                42,
+            ]
+        }
+    )
+
+    assert fighter.debuffs == [effect]
+
+
 def test_apply_delta_vital_part_destruction_in_wound(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "heart"  # Heart is vital

@@ -298,6 +298,14 @@ The installable package lives under `src/llm_fight/`. The core flow is:
 
 Effects created by a turn delta or wound side effect are fresh for that turn: they are shown in the resulting state and in the next turn's fighter/judge context before their first eligible tick. Pre-existing effects still tick once per turn.
 
+Judge Phase 2 effect removals are source-bearing objects:
+`{"source":"A","name":"bleeding","type":"debuffs","targeted_part":"left_arm"}`.
+`type` is optional and narrows removal to `buffs` or `debuffs`; `targeted_part`
+is optional and removes only effects with matching canonical
+`metadata.targeted_part`. Omitting both is an intentional remove-all by name.
+Runtime `FighterState.apply_delta()` still accepts legacy string removals as
+remove-all compatibility, but Judge Phase 2 JSON does not.
+
 For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
 
 ## Known Limitations

@@ -595,23 +595,39 @@ Verification:
 
 Addresses: ISSUE-018
 
-- [ ] Replace name-only effect removal with structured targeted removal while preserving explicit legacy remove-all behavior.
+- [x] Replace name-only effect removal with structured targeted removal while preserving explicit legacy remove-all behavior.
 
 Acceptance goals:
 
+- Judge-facing `effects_removed` accepts only source-bearing objects: `{source, name, type?, targeted_part?}`. Source-less strings remain invalid in Judge Phase 2 schemas because they cannot be authorized.
+- Post-authorization state deltas preserve removal selectors without `source`: `{name, type?, targeted_part?}`. Runtime `FighterState.apply_delta()` also accepts legacy string removals such as `"bleeding"` for compatibility.
+- The effect identity for this slice is `(name, optional type, optional canonical targeted_part)`, not a new opaque effect id. If several effects match the same selector, remove all matching effects.
+- Missing `type` matches both `buffs` and `debuffs`; supplied `type` narrows removal to exactly that list.
+- Missing `targeted_part` is explicit remove-all for the selected `name`/`type` scope. Supplied `targeted_part` is canonicalized with `target_fighter.normalize_part_name()` and removes only effects whose `metadata.targeted_part` equals that canonical part; targeted removals must not remove untargeted effects.
 - Removing bleeding from one part leaves bleeding on other parts intact.
 - Removing burning from one limb leaves burning on another limb intact.
-- Name-only removal still removes all matching effects and is documented as remove-all.
+- Name-only removal still removes all matching effects across buffs and debuffs and is documented as remove-all. Legacy runtime string removal has the same remove-all meaning.
 - Buff and debuff effects with the same name can be removed separately when `type` is supplied.
 - Malformed removal objects are rejected by schema or skipped safely before state mutation.
+- Schema validation, Phase 2 authorization, runtime sanitization, prompts, and state mutation all preserve `type`/`targeted_part` instead of collapsing removals to names.
 
 Required tests:
 
-- Validation tests for valid string removals, valid structured removals, invalid unknown fields, missing `name`, bad `type`, and unsafe `targeted_part`.
+- Validation tests for valid judge removals `{source,name}`, `{source,name,type}`, and `{source,name,targeted_part}`; invalid source-less strings, unknown fields, missing `name`, bad `type`, and unsafe `targeted_part`.
+- Runtime state tests for legacy string removals as explicit remove-all compatibility.
 - State tests with two bleeding effects on different parts and one targeted removal.
+- State tests with two burning effects on different parts and one targeted removal.
 - State tests for same-name buff/debuff removal by `type`.
+- State tests proving targeted removal does not remove untargeted same-name effects.
+- Simulation authorization tests proving structured removals survive authorization and alias targets such as `left arm` canonicalize to `left_arm`.
 - Judge prompt/schema tests proving `effects_removed` documents structured targeted removal.
 - Property coverage for mixed add/remove deltas with no accidental broad deletion.
+
+Verification:
+
+- Design review approved the tightened selector contract after judge/runtime removal shapes, legacy strings, missing `type`/`targeted_part` semantics, identity key, and Phase 2 authorization preservation were made explicit.
+- Focused tests: `uv run pytest -q tests/test_validation.py tests/test_state.py tests/test_simulation.py tests/engine/test_prompts.py tests/property/test_apply_delta_property.py` -> 202 passed.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 423 passed, 6 skipped, 1 warning; `git diff --check` -> passed.
 
 ## Prompt State Context And Environment-Scoped Creativity
 

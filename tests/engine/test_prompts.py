@@ -18,6 +18,14 @@ def test_judge_p2_prompt_requires_source_attribution():
     assert "judge-only fight_end or winner values will be ignored" in JUDGE_P2_SYSTEM_PROMPT
 
 
+def test_judge_p2_prompt_documents_structured_targeted_effect_removal():
+    assert '"effects_removed": array of objects' in JUDGE_P2_SYSTEM_PROMPT
+    assert '"type": "buffs"|"debuffs" optional' in JUDGE_P2_SYSTEM_PROMPT
+    assert '"targeted_part": string optional' in JUDGE_P2_SYSTEM_PROMPT
+    assert 'include "targeted_part" when treating or extinguishing one localized effect' in JUDGE_P2_SYSTEM_PROMPT
+    assert "omit it only for intentional remove-all by name/type" in JUDGE_P2_SYSTEM_PROMPT
+
+
 def test_fighter_prompt_does_not_add_article_before_environment():
     rendered = FIGHTER_SYSTEM_PROMPT.format(
         name="A",

@@ -217,7 +217,11 @@ def _phase2_validation_warning(
 
 
 def _sanitize_phase2_narration(sanitized: Dict[str, Any], warnings: list[Dict[str, Any]]) -> None:
-    if any(warning.get("code") == C.WARNING_CODE_INVALID_P2_WOUND_TARGET for warning in warnings):
+    invalid_target_warning_codes = {
+        C.WARNING_CODE_INVALID_P2_WOUND_TARGET,
+        C.WARNING_CODE_INVALID_EFFECT_REMOVAL_TARGET,
+    }
+    if any(warning.get("code") in invalid_target_warning_codes for warning in warnings):
         sanitized[C.NARRATION] = (
             "The judge referenced an invalid body-part target; only validated consequences are recorded."
         )
@@ -272,6 +276,34 @@ def _resolve_phase2_wound_target(
     return canonical_part, None
 
 
+def _resolve_phase2_effect_removal_target(
+    effect_removal: Dict[str, Any],
+    target_fighter: FighterState,
+    fighter_id: str,
+    index: int,
+) -> tuple[str | None, Dict[str, Any] | None]:
+    raw_part = effect_removal.get(C.TARGETED_PART)
+    if raw_part in (None, ""):
+        return None, None
+    field = f"delta.{fighter_id}.{C.EFFECTS_REMOVED}[{index}].{C.TARGETED_PART}"
+    source = effect_removal.get(C.SOURCE)
+    canonical_part = target_fighter.normalize_part_name(raw_part)
+    if canonical_part is None:
+        logger.warning(
+            "Dropping Judge Phase 2 effect removal with invalid target for fighter %s.",
+            fighter_id,
+        )
+        return None, _phase2_validation_warning(
+            code=C.WARNING_CODE_INVALID_EFFECT_REMOVAL_TARGET,
+            fighter_id=fighter_id,
+            field=field,
+            source=source,
+            action="dropped",
+            reason="unknown_target_part",
+        )
+    return canonical_part, None
+
+
 def _invalid_phase2_wound_target_warnings(
     raw_delta: Any,
     fighters: dict[str, FighterState],
@@ -288,6 +320,32 @@ def _invalid_phase2_wound_target_warnings(
             if not isinstance(wound, dict):
                 continue
             _, warning = _resolve_phase2_wound_target(wound, fighters[fighter_id], fighter_id, index)
+            if warning is not None:
+                warnings.append(warning)
+    return warnings
+
+
+def _invalid_phase2_effect_removal_target_warnings(
+    raw_delta: Any,
+    fighters: dict[str, FighterState],
+) -> list[Dict[str, Any]]:
+    if not isinstance(raw_delta, dict):
+        return []
+
+    warnings: list[Dict[str, Any]] = []
+    for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
+        delta = raw_delta.get(fighter_id, {})
+        if not isinstance(delta, dict):
+            continue
+        for index, effect_removal in enumerate(delta.get(C.EFFECTS_REMOVED, [])):
+            if not isinstance(effect_removal, dict):
+                continue
+            _, warning = _resolve_phase2_effect_removal_target(
+                effect_removal,
+                fighters[fighter_id],
+                fighter_id,
+                index,
+            )
             if warning is not None:
                 warnings.append(warning)
     return warnings
@@ -368,11 +426,32 @@ def _authorize_fighter_delta(
         authorized_delta[C.EFFECTS_ADDED] = effects_added
 
     effects_removed = []
-    for effect_removal in delta.get(C.EFFECTS_REMOVED, []):
+    for index, effect_removal in enumerate(delta.get(C.EFFECTS_REMOVED, [])):
         if _is_authorized_consequence(effect_removal, authorized_sources, C.EFFECTS_REMOVED):
-            name = effect_removal.get(C.NAME)
-            if name:
-                effects_removed.append(name)
+            sanitized_removal = _copy_without_source(effect_removal)
+            canonical_part, warning = _resolve_phase2_effect_removal_target(
+                effect_removal,
+                target_fighter,
+                fighter_id,
+                index,
+            )
+            if warning is not None:
+                warnings.append(warning)
+                continue
+            if canonical_part is not None:
+                if sanitized_removal.get(C.TARGETED_PART) != canonical_part:
+                    warnings.append(
+                        _phase2_validation_warning(
+                            code=C.WARNING_CODE_CANONICALIZED_EFFECT_REMOVAL_TARGET,
+                            fighter_id=fighter_id,
+                            field=f"delta.{fighter_id}.{C.EFFECTS_REMOVED}[{index}].{C.TARGETED_PART}",
+                            source=effect_removal.get(C.SOURCE),
+                            action="canonicalized",
+                            canonical_part=canonical_part,
+                        )
+                    )
+                sanitized_removal[C.TARGETED_PART] = canonical_part
+            effects_removed.append(sanitized_removal)
     if effects_removed:
         authorized_delta[C.EFFECTS_REMOVED] = effects_removed
 
@@ -388,7 +467,10 @@ def _authorize_phase2_result(
     authorized_sources = _authorized_phase2_sources(p1, rolls)
     sanitized = _phase2_known_fields(p2)
     raw_delta = p2.get(C.DELTA, {})
-    invalid_target_warnings = _invalid_phase2_wound_target_warnings(raw_delta, fighters)
+    invalid_target_warnings = _merge_phase2_warnings(
+        _invalid_phase2_wound_target_warnings(raw_delta, fighters),
+        _invalid_phase2_effect_removal_target_warnings(raw_delta, fighters),
+    )
 
     if not authorized_sources:
         if p2.get(C.DELTA) or p2.get(C.FIGHT_END) or p2.get(C.WINNER) is not None:
@@ -425,9 +507,11 @@ def _authorize_phase2_result(
     if warnings:
         sanitized[C.VALIDATION_WARNINGS] = warnings
         _sanitize_phase2_narration(sanitized, warnings)
-    if not sanitized_delta and any(
-        warning.get("code") == C.WARNING_CODE_INVALID_P2_WOUND_TARGET for warning in warnings
-    ):
+    terminal_suppression_warning_codes = {
+        C.WARNING_CODE_INVALID_P2_WOUND_TARGET,
+        C.WARNING_CODE_INVALID_EFFECT_REMOVAL_TARGET,
+    }
+    if not sanitized_delta and any(warning.get("code") in terminal_suppression_warning_codes for warning in warnings):
         sanitized[C.FIGHT_END] = False
         sanitized[C.WINNER] = None
     return sanitized

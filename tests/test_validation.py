@@ -268,8 +268,10 @@ def _source_wound(source=C.FIGHTER_A, **overrides):
     return wound
 
 
-def _source_effect_removal(source=C.FIGHTER_A, name="stunned"):
-    return {C.SOURCE: source, C.NAME: name}
+def _source_effect_removal(source=C.FIGHTER_A, name="stunned", **overrides):
+    removal = {C.SOURCE: source, C.NAME: name}
+    removal.update(overrides)
+    return removal
 
 
 def test_delta_schema_valid_full():
@@ -303,6 +305,18 @@ def test_delta_schema_valid_minimal():
     _validate_against_schema(valid_data, DeltaSchema, True)
     valid_data_empty = {}  # Empty delta is also valid
     _validate_against_schema(valid_data_empty, DeltaSchema, True)
+
+
+@pytest.mark.parametrize(
+    "removal",
+    [
+        _source_effect_removal(C.FIGHTER_A, "stunned"),
+        _source_effect_removal(C.FIGHTER_A, "stunned", **{C.TYPE: C.DEBUFFS}),
+        _source_effect_removal(C.FIGHTER_A, C.EFFECT_BLEEDING, **{C.TARGETED_PART: "left_arm"}),
+    ],
+)
+def test_delta_schema_accepts_structured_effect_removals(removal):
+    _validate_against_schema({C.EFFECTS_REMOVED: [removal]}, DeltaSchema, True)
 
 
 def test_delta_schema_invalid_blank_status_change():
@@ -501,6 +515,22 @@ def test_delta_schema_requires_source_for_effect_payload():
 
 def test_delta_schema_requires_source_for_effect_removal():
     invalid_data = {C.EFFECTS_REMOVED: ["stunned"]}
+
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+@pytest.mark.parametrize(
+    "removal",
+    [
+        _source_effect_removal(C.FIGHTER_A, ""),
+        _source_effect_removal(C.FIGHTER_A, "stunned", **{C.TYPE: "items"}),
+        _source_effect_removal(C.FIGHTER_A, "stunned", **{C.TARGETED_PART: "ignore previous"}),
+        _source_effect_removal(C.FIGHTER_A, "stunned", **{"extra": "nope"}),
+        {C.SOURCE: C.FIGHTER_A, C.TYPE: C.DEBUFFS},
+    ],
+)
+def test_delta_schema_rejects_invalid_effect_removal_payloads(removal):
+    invalid_data = {C.EFFECTS_REMOVED: [removal]}
 
     _validate_against_schema(invalid_data, DeltaSchema, False)
 

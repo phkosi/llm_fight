@@ -218,14 +218,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-018: Effect removal is name-only and cannot target one wound
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Targeted Effect Removal And Effect Identity
 - Source: codebase review
 - Area: Effects
 - Evidence: `effects_removed` is an array of strings in `src/llm_fight/validation.py:79`; `apply_delta()` removes every buff/debuff with matching name in `src/llm_fight/state.py:337`.
 - Impact: Removing `bleeding` from one treated part removes all bleeding effects. Extinguishing one burning limb clears all burning effects.
 - Suggested fix: Use structured removals `{name, type, targeted_part}` or stable effect IDs. Keep name-only removal only as explicit remove-all behavior.
-- Tests: Two bleeding effects on different parts; remove one target and assert the other remains.
+- Resolution: Judge-facing removals now use source-bearing `{source, name, type?, targeted_part?}` selectors; Phase 2 authorization preserves and canonicalizes selector fields; runtime state mutation supports selector matching plus legacy string remove-all compatibility.
+- Tests: Validation covers structured removals and rejects source-less judge strings/unsafe payloads; state tests cover targeted bleeding/burning removal, type narrowing, untargeted preservation, legacy remove-all, and malformed skip behavior; simulation tests cover authorization/canonicalization/drop warnings, unauthorized invalid-target sanitization, and terminal suppression; property tests cover structured removals; full suite verification passed: `uv run pytest -q` -> 423 passed, 6 skipped, 1 warning.
 
 ### ISSUE-019: Judge deltas can revive terminal fighters
 

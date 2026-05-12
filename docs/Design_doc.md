@@ -76,6 +76,7 @@ Critical invariants:
 - Burning and bleeding ticks can cause KO/death after effect application.
 - Effects created by a delta or wound side effect are visible in state and in the next turn's fighter/judge context before their first eligible tick.
 - Effects that existed before the current delta remain eligible and tick once per turn.
+- Judge-facing effect removals are structured source-bearing selectors `{source, name, type?, targeted_part?}`. Missing `type` matches both buffs and debuffs; missing `targeted_part` is intentional remove-all for that name/type scope; supplied targets are canonicalized before state mutation.
 - Tissue layers keep stable `max_hp`; damage lowers `current_hp` and clamps at zero.
 - Humanoid blood-bearing parts define preset `bleed_rate` values; piercing/slashing wounds can create targeted bleeding effects from those rates.
 - Burning effects use target-part `burn_rate` for tick damage and mutate the selected active tissue layer directly, so debug logs name the layer that actually lost `current_hp`.
