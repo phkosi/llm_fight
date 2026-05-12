@@ -1012,7 +1012,7 @@ Verification:
 
 Addresses: ISSUE-039, ISSUE-040
 
-- [ ] Extract helper units from `_single_fight()` without changing fight-loop behavior.
+- [x] Extract helper units from `_single_fight()` without changing fight-loop behavior.
 
 Implementation intent:
 
@@ -1033,6 +1033,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Added `src\llm_fight\fight_loop.py` for single-fight orchestration helpers and kept `src\llm_fight\simulation.py::_single_fight()` as the compatibility entry point that passes current monkeypatchable dependencies through hooks.
+- Size impact: `_single_fight()` -> 35 LOC; `src\llm_fight\simulation.py` -> 410 LOC; `src\llm_fight\fight_loop.py` -> 460 LOC. New fight-loop helpers are below the 100 LOC function issue threshold (`run_single_fight()` 83 LOC, `_run_turn()` 75 LOC).
+- Focused tests: `uv run pytest -q tests\test_simulation.py tests\test_simulation_trace.py tests\test_simulation_turns.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_cli.py` -> 67 passed, 1 warning.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## Agents And CLI Test Shard Split
 
