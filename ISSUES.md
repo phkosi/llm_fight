@@ -25,19 +25,19 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-001: Custom anatomy is not reachable at runtime
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Structured Custom Fighter Anatomy Profiles; Match-Start LLM Fighter Profile Creation; Creativity Gate For Dynamic Anatomy And Effects
 - Source: codebase review
 - Area: Gameplay systems, dynamic anatomy
-- Evidence: Original review found `_single_fight()` always created both fighters with the `humanoid` preset, `PRESETS` only registered `humanoid`, and fighter config only loaded class/loadout/environment. Progress: configured custom anatomy profiles and opt-in match-start generated fighter profiles are implemented and verified; the remaining linked work is the creativity gate proving the dynamic path does not regress back to fixed humanoid assumptions.
+- Evidence: Original review found `_single_fight()` always created both fighters with the `humanoid` preset, `PRESETS` only registered `humanoid`, and fighter config only loaded class/loadout/environment. Resolved by configured custom anatomy profiles, opt-in match-start generated fighter profiles, and deterministic creativity-gate tests proving non-humanoid parts survive into state, prompts, judge payloads, and combat-log snapshots.
 - Impact: Dragons, winged fighters, tentacles, extra heads, non-humanoid organs, and asymmetric bodies can only exist as prose. Judge deltas targeting those parts are ignored as nonexistent.
 - Suggested fix: Add a structured fighter profile/anatomy source, pass fighter-specific anatomy into state creation, and serialize that anatomy into fighter/judge prompts as authoritative valid parts.
-- Tests: Add config/profile tests for custom body parts, simulation tests proving fighter-specific anatomy is used, and state tests proving damage to configured custom parts applies.
+- Tests: Added config/profile tests for custom body parts, simulation tests proving fighter-specific anatomy is used, state tests proving damage to configured custom parts applies, generated-profile tests, and creativity-gate tests for non-humanoid anatomy persistence.
 
 ### ISSUE-002: Creative/custom effects have no general mechanics
 
 - Status: resolved
-- Task: TODO.md - Declarative Dynamic Effect Mechanics; Creativity Gate For Dynamic Anatomy And Effects
+- Task: TODO.md - Declarative Dynamic Effect Mechanics
 - Source: codebase review
 - Area: Gameplay systems, dynamic effects
 - Evidence: `apply_effects()` only handles `burning` and `bleeding` in `src/llm_fight/state.py:360`; `EFFECT_STUNNED` exists but has no handler in `src/llm_fight/engine/constants.py:57`; poison is normalized to generic damage in `src/llm_fight/state.py:58`.

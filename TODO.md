@@ -194,9 +194,9 @@ Verification: `uv run pytest -q tests/test_config.py tests/test_agents.py tests/
 
 ## Creativity Gate For Dynamic Anatomy And Effects
 
-Addresses: ISSUE-001, ISSUE-002
+Addresses: ISSUE-001
 
-- [ ] Add creativity-focused tests and an opt-in Codex-agent/manual review gate proving the dynamic systems allow genuinely non-humanoid body plans and non-hard-coded effects instead of collapsing back to fixed humanoid anatomy or pure narration.
+- [x] Add creativity-focused tests and an opt-in Codex-agent/manual review gate proving the dynamic systems allow genuinely non-humanoid body plans and non-hard-coded effects instead of collapsing back to fixed humanoid anatomy or pure narration.
 
 Acceptance goals:
 
@@ -210,6 +210,8 @@ Required tests:
 - Deterministic offline test proving a non-humanoid body part absent from `PRESETS["humanoid"]` survives into `FighterState.to_json()`, fighter prompts, Judge Phase 1, Judge Phase 2, and combat-log state snapshots.
 - Deterministic offline test proving a non-hard-coded declarative effect enters state, appears in prompts with mechanics/tags, ticks once after the fresh-turn delay, and expires.
 - Documentation or command test proving the Codex/manual creativity gate is opt-in and excluded from default `pytest`.
+
+Verification: `uv run pytest -q tests/test_creativity_gate.py tests/test_state.py tests/test_simulation.py tests/engine/test_fighter.py tests/engine/test_judge.py` -> 150 passed; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 336 passed, 6 skipped, 1 warning; `git diff --check`.
 
 ## Terminal Fight Startup And Progress Feedback
 
