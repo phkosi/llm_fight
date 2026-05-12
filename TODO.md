@@ -1077,7 +1077,7 @@ Verification:
 
 Addresses: ISSUE-039
 
-- [ ] Re-run code-size measurements and close ISSUE-039 once production and test file thresholds are satisfied.
+- [x] Re-run code-size measurements and close ISSUE-039 once production and test file thresholds are satisfied.
 
 Acceptance goals:
 
@@ -1093,6 +1093,13 @@ Required tests:
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
 - `git diff --check`
+
+Verification:
+
+- `ISSUES.md` now marks ISSUE-039 `Status: resolved`.
+- Final production measurements: `state.py` 597 LOC; `effects.py` 400 LOC; `simulation.py` 410 LOC; `fight_loop.py` 460 LOC; `phase2_authorization.py` 375 LOC; `batch.py` 171 LOC; `_single_fight()` 35 LOC.
+- Final relevant test measurements: `tests\test_state.py` 669 LOC; `tests\test_state_effect_ticks.py` 366 LOC; `tests\test_state_effect_removal.py` 225 LOC; `tests\test_simulation.py` 545 LOC; `tests\test_simulation_trace.py` 415 LOC; `tests\test_simulation_turns.py` 621 LOC; `tests\test_batch.py` 700 LOC; `tests\test_simulation_failures.py` 40 LOC; `tests\test_phase2_authorization.py` 498 LOC; `tests\test_phase2_authorization_prompt_safety.py` 338 LOC; `tests\test_agents.py` 438 LOC; `tests\test_agents_endpoint.py` 219 LOC; `tests\test_agents_transport.py` 181 LOC; `tests\test_cli.py` 67 LOC; `tests\test_cli_play.py` 453 LOC; `tests\test_cli_simulate.py` 334 LOC.
+- Required checks: `uv run ruff format --check .` -> 75 files already formatted; `uv run ruff check .` -> all checks passed; `uv run mypy src/llm_fight` -> success; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings; `git diff --check` -> no whitespace errors (line-ending normalization warnings only).
 
 ## Fighter Attempt Prompt Pipeline
 
