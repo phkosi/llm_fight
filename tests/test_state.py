@@ -128,12 +128,13 @@ def test_apply_fire_damage_adds_burning_effect(humanoid_fighter: FighterState):
     assert burning_effects[0].magnitude == 1.5  # 15 / 10
     assert burning_effects[0].ttl == 3
     assert burning_effects[0].fresh_turns == 1
+    assert burning_effects[0].metadata == {C.TARGETED_PART: part_name}
+    assert fighter.to_json()[C.DEBUFFS][0][C.METADATA] == {C.TARGETED_PART: part_name}
 
 
-def test_apply_piercing_damage_adds_bleeding_effect(humanoid_fighter: FighterState):
+def test_default_humanoid_piercing_damage_adds_bleeding_effect(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "left_leg"
-    fighter.parts[part_name].bleed_rate = 1
 
     assert not any(
         eff.name == C.EFFECT_BLEEDING and eff.metadata.get(C.TARGETED_PART) == part_name for eff in fighter.debuffs
@@ -149,12 +150,13 @@ def test_apply_piercing_damage_adds_bleeding_effect(humanoid_fighter: FighterSta
     assert bleeding_effects[0].magnitude == 1.0  # bleed_rate * (10/10) = 1 * 1
     assert bleeding_effects[0].ttl == 5
     assert bleeding_effects[0].fresh_turns == 1
+    assert bleeding_effects[0].metadata == {C.TARGETED_PART: part_name}
+    assert fighter.to_json()[C.DEBUFFS][0][C.METADATA] == {C.TARGETED_PART: part_name}
 
 
-def test_apply_slashing_damage_adds_bleeding_effect(humanoid_fighter: FighterState):
+def test_default_humanoid_slashing_damage_adds_bleeding_effect(humanoid_fighter: FighterState):
     fighter = humanoid_fighter
     part_name = "right_arm"
-    fighter.parts[part_name].bleed_rate = 2  # Ensure bleed_rate is set for test
 
     assert not any(
         eff.name == C.EFFECT_BLEEDING and eff.metadata.get(C.TARGETED_PART) == part_name for eff in fighter.debuffs
@@ -170,6 +172,18 @@ def test_apply_slashing_damage_adds_bleeding_effect(humanoid_fighter: FighterSta
     assert bleeding_effects[0].magnitude == fighter.parts[part_name].bleed_rate * (12 / 10)  # 2 * 1.2 = 2.4
     assert bleeding_effects[0].ttl == 5
     assert bleeding_effects[0].fresh_turns == 1
+
+
+def test_zero_bleed_rate_part_does_not_auto_bleed(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "left_eye"
+    assert fighter.parts[part_name].bleed_rate == 0
+
+    fighter.apply_damage_to_part(part_name, 1, C.DamageType.PIERCING)
+
+    assert not any(
+        eff.name == C.EFFECT_BLEEDING and eff.metadata.get(C.TARGETED_PART) == part_name for eff in fighter.debuffs
+    )
 
 
 def test_apply_damage_to_non_existent_part(humanoid_fighter: FighterState):
@@ -486,6 +500,7 @@ def test_wound_created_burning_skips_current_tick(humanoid_fighter: FighterState
     assert fighter.heat == initial_heat + int(burning.magnitude * 5)
     assert part_current_hp(fighter, part_name) < hp_after_wound
     assert burning.ttl == 2
+    assert len([eff for eff in fighter.debuffs if eff.name == C.EFFECT_BURNING]) == 1
 
 
 def test_existing_targeted_burning_remains_eligible_when_part_takes_fire_damage(humanoid_fighter: FighterState):
@@ -512,6 +527,7 @@ def test_existing_targeted_burning_remains_eligible_when_part_takes_fire_damage(
     assert existing.ttl == 1
     assert fighter.heat == initial_heat + int(existing.magnitude * 5)
     assert part_current_hp(fighter, part_name) == hp_after_wound - int(existing.magnitude)
+    assert len([eff for eff in fighter.debuffs if eff.name == C.EFFECT_BURNING]) == 1
 
 
 def test_wound_created_bleeding_skips_current_tick(humanoid_fighter: FighterState):
@@ -676,6 +692,89 @@ def test_apply_effects_burning_damages_part_and_increases_stats(humanoid_fighter
     assert final_part_hp == initial_part_hp - expected_burn_damage
 
     assert not any(eff.name == C.EFFECT_BURNING for eff in fighter.debuffs)
+
+
+def test_burn_tick_uses_burn_rate_for_damage(humanoid_fighter: FighterState):
+    normal = FighterState.from_preset("normal", "humanoid")
+    hot = FighterState.from_preset("hot", "humanoid")
+    part_name = "torso"
+    hot.parts[part_name].burn_rate = 3
+    for fighter in (normal, hot):
+        fighter.debuffs.append(
+            Effect(
+                name=C.EFFECT_BURNING,
+                magnitude=2.0,
+                ttl=1,
+                on_apply="Torso burns.",
+                metadata={C.TARGETED_PART: part_name},
+            )
+        )
+    normal_start = part_current_hp(normal, part_name)
+    hot_start = part_current_hp(hot, part_name)
+
+    class FakeRng:
+        def choice(self, seq):
+            return seq[0]
+
+    normal.apply_effects(rng=FakeRng())
+    hot.apply_effects(rng=FakeRng())
+
+    assert normal_start - part_current_hp(normal, part_name) == 2
+    assert hot_start - part_current_hp(hot, part_name) == 6
+
+
+def test_burn_rate_zero_preserves_baseline_burn_damage(humanoid_fighter: FighterState):
+    fighter = humanoid_fighter
+    part_name = "left_arm"
+    fighter.parts[part_name].burn_rate = 0
+    fighter.debuffs.append(
+        Effect(
+            name=C.EFFECT_BURNING,
+            magnitude=2.0,
+            ttl=1,
+            on_apply="Arm burns.",
+            metadata={C.TARGETED_PART: part_name},
+        )
+    )
+    start_hp = part_current_hp(fighter, part_name)
+
+    fighter.apply_effects()
+
+    assert start_hp - part_current_hp(fighter, part_name) == 2
+
+
+def test_burn_tick_mutates_selected_layer_and_logs_it(humanoid_fighter: FighterState, caplog):
+    fighter = humanoid_fighter
+    part_name = "torso"
+    target_part = fighter.parts[part_name]
+    fighter.debuffs.append(
+        Effect(
+            name=C.EFFECT_BURNING,
+            magnitude=3.0,
+            ttl=1,
+            on_apply="Torso burns.",
+            metadata={C.TARGETED_PART: part_name},
+        )
+    )
+
+    class FakeRng:
+        def choice(self, seq):
+            return seq[-1]
+
+    before_current = [layer.current_hp for layer in target_part.layers]
+    before_max = [layer.max_hp for layer in target_part.layers]
+
+    with caplog.at_level("DEBUG", logger="llm_fight_engine"):
+        fighter.apply_effects(rng=FakeRng())
+
+    after_current = [layer.current_hp for layer in target_part.layers]
+    after_max = [layer.max_hp for layer in target_part.layers]
+    changed = [idx for idx, (before, after) in enumerate(zip(before_current, after_current)) if before != after]
+    assert changed == [len(target_part.layers) - 1]
+    assert after_current[-1] == before_current[-1] - 3
+    assert after_max == before_max
+    assert f"{part_name}.{target_part.layers[-1].name}" in caplog.text
+    assert f"HP {after_current[-1]}/{after_max[-1]}" in caplog.text
 
 
 def test_dynamic_stat_tick_effect_observes_fresh_turn_and_expires(humanoid_fighter: FighterState):

@@ -194,14 +194,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-016: Default humanoid bleed/burn anatomy is mostly inert
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Anatomy-Driven Bleeding, Burning, And Layer Accuracy
 - Source: codebase review
 - Area: Gameplay mechanics
 - Evidence: `BodyPart.bleed_rate` and `burn_rate` default to `0` in `src/llm_fight/anatomy.py:24`; `compose_humanoid()` never sets them; bleeding only auto-creates when `part.bleed_rate > 0` in `src/llm_fight/state.py:268`; burn ticking ignores `burn_rate`.
 - Impact: Piercing/slashing default humanoid parts do not automatically bleed, despite README claims. Burn susceptibility cannot be tuned by anatomy.
 - Suggested fix: Set intentional preset bleed/burn values or remove the fields and rely on judge-created effects. If retained, use them in creation/ticking.
-- Tests: Default piercing/slashing creates bleeding on appropriate parts; custom high-burn-rate part burns harder.
+- Resolution: Humanoid presets now define explicit blood-bearing `bleed_rate` values and baseline `burn_rate=1`; burn ticks scale by `max(1, int(effect_magnitude * max(1, burn_rate)))` while preserving baseline behavior for omitted/custom `burn_rate=0`.
+- Tests: Default piercing/slashing creates targeted bleeding without fixture mutation; zero-bleed eye does not auto-bleed; high-burn-rate parts burn harder; full suite verification passed: `uv run pytest -q` -> 405 passed, 6 skipped, 1 warning.
 
 ### ISSUE-017: Vital-part consequences are too coarse
 
@@ -341,14 +342,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-029: Burn tick logs a random layer but damages the normal outer layer
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Anatomy-Driven Bleeding, Burning, And Layer Accuracy
 - Source: codebase review
 - Area: Gameplay logging
 - Evidence: `apply_effects()` chooses `random_layer_to_burn` for logging in `src/llm_fight/state.py:371`, then calls `apply_damage_to_part()`, whose loop starts at the first positive layer in `src/llm_fight/state.py:201`.
 - Impact: Logs can say one tissue layer burned while another actually lost HP.
 - Suggested fix: Remove random-layer logging or add targeted layer damage.
-- Tests: Seed RNG, burn a multilayer part, and assert the logged/selected layer matches the mutated layer.
+- Resolution: Burning ticks now mutate the selected active tissue layer directly, keep `max_hp` stable, preserve heat/pain/status side effects, and log the layer and HP that actually changed without creating duplicate burning effects.
+- Tests: Fake-RNG multilayer burn asserts the selected last active layer is the mutated layer; caplog asserts the logged layer and HP match the mutation; duplicate-burning regression passed; full suite verification passed: `uv run pytest -q` -> 405 passed, 6 skipped, 1 warning.
 
 ### ISSUE-030: Environment guardrail can suppress explicit environment/equipment creativity
 

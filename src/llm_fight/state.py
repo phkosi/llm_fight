@@ -446,12 +446,44 @@ class FighterState:
             layer.current_hp = current_hp
         return int(current_hp)
 
+    def _apply_damage_to_layer(self, layer, damage_amount: int) -> int:
+        current_hp = self._layer_current_hp(layer)
+        dealt_to_layer = min(damage_amount, current_hp)
+        layer.current_hp = current_hp - dealt_to_layer
+        return dealt_to_layer
+
     def _part_is_lost(self, part: BodyPart) -> bool:
         return (
             part.severed
             or part.status in {C.IS_DESTROYED, C.STATUS_SEVERED}
             or all(self._layer_current_hp(layer) <= 0 for layer in part.layers)
         )
+
+    def _mark_part_lost_if_depleted(self, part_name: str, part: BodyPart) -> None:
+        if not part.layers or not all(self._layer_current_hp(layer) <= 0 for layer in part.layers):
+            return
+        if part.status in {C.IS_DESTROYED, C.STATUS_SEVERED} or part.severed:
+            return
+        if part.can_be_severed:
+            part.status = C.STATUS_SEVERED
+            part.severed = True
+            logger.info(f"{self.id}:{part_name} has been severed!")
+            self.debuffs.append(
+                self._mark_effect_fresh(
+                    Effect(
+                        name=f"{part_name} {C.STATUS_SEVERED}",
+                        magnitude=1,
+                        ttl=-1,
+                        on_apply=f"{part_name} was severed from the body.",
+                        on_tick=None,
+                        metadata={C.TARGETED_PART: part_name},
+                    )
+                )
+            )
+            self.pain += 20
+        else:
+            part.status = C.IS_DESTROYED
+        logger.info(f"{self.id}:{part_name} has been {part.status}.")
 
     def _remove_debuffs_by_name(self, names: set[str]) -> None:
         if not names:
@@ -657,9 +689,7 @@ class FighterState:
         for layer in part.layers:
             if remaining_damage <= 0:
                 break
-            current_hp = self._layer_current_hp(layer)
-            dealt_to_layer = min(remaining_damage, current_hp)
-            layer.current_hp = current_hp - dealt_to_layer
+            dealt_to_layer = self._apply_damage_to_layer(layer, remaining_damage)
             remaining_damage -= dealt_to_layer
             logger.debug(
                 f"Dealt {dealt_to_layer} {dt} to {self.id}:{part_name}.{layer.name}, "
@@ -670,28 +700,7 @@ class FighterState:
         self.pain += damage_amount
 
         # Check for part destruction or severing
-        if all(self._layer_current_hp(layer) <= 0 for layer in part.layers):
-            if part.can_be_severed:
-                part.status = C.STATUS_SEVERED
-                part.severed = True
-                logger.info(f"{self.id}:{part_name} has been severed!")
-                # Add a generic "SeveredPart" effect or similar if desired
-                self.debuffs.append(
-                    self._mark_effect_fresh(
-                        Effect(
-                            name=f"{part_name} {C.STATUS_SEVERED}",
-                            magnitude=1,
-                            ttl=-1,
-                            on_apply=f"{part_name} was severed from the body.",
-                            on_tick=None,
-                            metadata={C.TARGETED_PART: part_name},
-                        )
-                    )
-                )
-                self.pain += 20  # Extra pain for severing
-            else:
-                part.status = C.IS_DESTROYED
-            logger.info(f"{self.id}:{part_name} has been {part.status}.")
+        self._mark_part_lost_if_depleted(part_name, part)
 
         # Apply bleeding or burning effects based on damage type
         if dt == C.DamageType.FIRE.value:
@@ -833,11 +842,16 @@ class FighterState:
                                 random_layer_to_burn = (
                                     rng.choice(active_layers) if rng is not None else choice(active_layers)
                                 )
-                                burn_damage = max(1, int(effect_magnitude))
+                                burn_damage = max(1, int(effect_magnitude * max(1, target_part.burn_rate)))
+                                dealt_to_layer = self._apply_damage_to_layer(random_layer_to_burn, burn_damage)
+                                self.pain += burn_damage
+                                self._mark_part_lost_if_depleted(affected_part_name, target_part)
                                 logger.debug(
-                                    f"{self.id} takes {burn_damage} burn damage to {affected_part_name}.{random_layer_to_burn.name} from '{C.EFFECT_BURNING}' effect."
+                                    f"{self.id} takes {dealt_to_layer} burn damage to "
+                                    f"{affected_part_name}.{random_layer_to_burn.name} "
+                                    f"(HP {random_layer_to_burn.current_hp}/{random_layer_to_burn.max_hp}) "
+                                    f"from '{C.EFFECT_BURNING}' effect."
                                 )
-                                self.apply_damage_to_part(affected_part_name, burn_damage, C.EFFECT_FIRE_FROM_EFFECT)
                     else:
                         logger.debug(
                             f"'{eff.name}' effect on {self.id} has no specific target part ('{affected_part_name}') or target is gone."

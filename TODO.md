@@ -562,23 +562,34 @@ Verification:
 
 Addresses: ISSUE-016, ISSUE-029
 
-- [ ] Make humanoid bleed/burn anatomy meaningful and make burn tick logging match the layer that actually takes damage.
+- [x] Make humanoid bleed/burn anatomy meaningful and make burn tick logging match the layer that actually takes damage.
 
 Acceptance goals:
 
-- Default piercing/slashing damage creates targeted bleeding on appropriate humanoid parts.
+- Default piercing/slashing damage creates targeted bleeding on humanoid blood-bearing parts without manually changing test fixtures. Use explicit humanoid preset `bleed_rate` values: `head=1`, `torso=2`, `left_arm=1`, `right_arm=1`, `left_leg=1`, `right_leg=1`, `heart=3`, and both eyes remain `0`.
 - Parts with `bleed_rate = 0` do not auto-create bleeding.
-- A custom high-`burn_rate` part takes more burn tick damage than a normal part under the same effect.
-- Burn logs/debug reports identify the exact layer whose HP changed.
-- Burning/bleeding effects keep stable targeted metadata for later prompt and removal work.
+- Burn tick damage uses `max(1, int(effect_magnitude * max(1, target_part.burn_rate)))`, so omitted/custom `burn_rate=0` preserves the old baseline burn behavior while `burn_rate > 1` increases damage.
+- Default humanoid parts should have explicit baseline `burn_rate=1`; custom high-`burn_rate` parts take more burn tick damage than a normal part under the same effect.
+- Burn ticks select exactly one active tissue layer, mutate that selected layer's `current_hp` directly without changing `max_hp`, and preserve existing heat, pain, destruction/severing, and status-invariant side effects.
+- Burn logs/debug reports identify the exact selected layer whose `current_hp` changed and include enough HP detail to verify the mutation.
+- Burn tick damage must not call the normal fire-wound path in a way that creates a duplicate `burning` effect for the same `metadata.targeted_part`.
+- Engine-created burning/bleeding effects keep canonical `metadata.targeted_part`, that metadata survives `to_json()`, and this slice does not add transient layer/log metadata to effect payloads.
 
 Required tests:
 
 - Default humanoid bleeding from piercing and slashing without manually setting `bleed_rate`.
 - No bleeding on a zero-bleed part.
 - Burn tick tests comparing normal and high-burn-rate parts.
-- Multilayer burn test proving the logged or returned layer is the mutated layer.
+- Multilayer burn test with fake RNG proving the selected last active layer is the mutated layer, not the first live layer, and `max_hp` remains stable.
+- Caplog/debug test proving the logged burn layer is the same layer whose `current_hp` changed.
 - Regression test that a burning tick does not create duplicate burning effects for the same part.
+- Serialization tests for canonical targeted metadata on engine-created burning and bleeding effects.
+
+Verification:
+
+- Design review approved the tightened task contract after burn math, humanoid rate defaults, selected-layer burn mutation, and metadata stability were made explicit.
+- Focused tests: `uv run pytest -q tests/test_anatomy.py tests/test_state.py tests/test_profiles.py tests/property/test_apply_damage_property.py tests/property/test_apply_delta_property.py tests/engine/test_judge.py` -> 101 passed.
+- Full suite: `uv run pytest -q` -> 405 passed, 6 skipped, 1 warning.
 
 ## Targeted Effect Removal And Effect Identity
 

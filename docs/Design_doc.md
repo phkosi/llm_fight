@@ -77,6 +77,8 @@ Critical invariants:
 - Effects created by a delta or wound side effect are visible in state and in the next turn's fighter/judge context before their first eligible tick.
 - Effects that existed before the current delta remain eligible and tick once per turn.
 - Tissue layers keep stable `max_hp`; damage lowers `current_hp` and clamps at zero.
+- Humanoid blood-bearing parts define preset `bleed_rate` values; piercing/slashing wounds can create targeted bleeding effects from those rates.
+- Burning effects use target-part `burn_rate` for tick damage and mutate the selected active tissue layer directly, so debug logs name the layer that actually lost `current_hp`.
 - Destroyed or severed parts apply explicit anatomy consequence tags. Default humanoid heart/head destruction is fatal, torso destruction is incapacitating, and eye/leg loss creates persistent visible consequence debuffs.
 - Legacy custom-profile `is_vital` fields are translated to explicit terminal policies at load time.
 - Pain thresholds still update status immediately.

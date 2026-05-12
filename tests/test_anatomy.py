@@ -16,10 +16,17 @@ def test_compose_humanoid_has_expected_vitals():
     assert preset.parts["heart"].consequence_tags == [C.CONSEQUENCE_FATAL_IF_DESTROYED]
     assert preset.parts["head"].consequence_tags == [C.CONSEQUENCE_FATAL_IF_DESTROYED]
     assert preset.parts["torso"].consequence_tags == [C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED]
+    assert preset.parts["torso"].bleed_rate == 2
+    assert preset.parts["torso"].burn_rate == 1
+    assert preset.parts["head"].bleed_rate == 1
+    assert preset.parts["heart"].bleed_rate == 3
     assert preset.parts["left_eye"].consequence_tags == [C.CONSEQUENCE_VISION_MEMBER]
     assert preset.parts["left_eye"].consequence_group == C.CONSEQUENCE_GROUP_VISION
+    assert preset.parts["left_eye"].bleed_rate == 0
     assert preset.parts["right_leg"].consequence_tags == [C.CONSEQUENCE_MOBILITY_MEMBER]
     assert preset.parts["right_leg"].consequence_group == C.CONSEQUENCE_GROUP_LEGS
+    assert preset.parts["right_leg"].bleed_rate == 1
+    assert preset.parts["right_leg"].burn_rate == 1
 
 
 def test_presets_humanoid_matches_compose():

@@ -171,8 +171,9 @@ Profile files use canonical part ids:
 ```
 
 Layers define stable `max_hp`; runtime damage lowers `current_hp` in state and
-serialization. Body parts can also define explicit consequence policy fields:
-`consequence_tags` and `consequence_group`. Supported tags are
+serialization. Body parts can also define `bleed_rate` and `burn_rate` for
+targeted bleeding and burn susceptibility. Body parts can also define explicit
+consequence policy fields: `consequence_tags` and `consequence_group`. Supported tags are
 `fatal_if_destroyed`, `incapacitating_if_destroyed`, `vision_member`,
 `mobility_member`, and `legacy_vital_group_member`. Legacy `is_vital: true`
 profiles still load: one legacy vital part becomes fatal when destroyed, while
@@ -292,7 +293,7 @@ The installable package lives under `src/llm_fight/`. The core flow is:
 3. Python rolls against those probabilities.
 4. Judge Phase 2 receives attempts, the full P1 result, successful rolls, combat log, valid body parts, and fighter state.
 5. Judge Phase 2 deltas must mark each mechanical consequence with the source fighter whose valid action succeeded.
-6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, applies anatomy consequence policies, then ticks eligible effects and resolves the winner from resulting state.
+6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, applies anatomy consequence policies, then ticks eligible effects and resolves the winner from resulting state. Burning ticks damage the selected active tissue layer directly and preserve stable targeted effect metadata.
 7. Judge-only `fight_end` or `winner` values are ignored unless Python state becomes terminal.
 
 Effects created by a turn delta or wound side effect are fresh for that turn: they are shown in the resulting state and in the next turn's fighter/judge context before their first eligible tick. Pre-existing effects still tick once per turn.
