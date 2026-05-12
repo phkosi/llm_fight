@@ -29,7 +29,7 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 - Task: TODO.md - Structured Custom Fighter Anatomy Profiles; Match-Start LLM Fighter Profile Creation; Creativity Gate For Dynamic Anatomy And Effects
 - Source: codebase review
 - Area: Gameplay systems, dynamic anatomy
-- Evidence: `_single_fight()` always creates both fighters with the `humanoid` preset in `src/llm_fight/simulation.py:95`; `PRESETS` only registers `humanoid` in `src/llm_fight/anatomy.py:64`; fighter config only loads class/loadout/environment in `src/llm_fight/config.py:161`.
+- Evidence: Original review found `_single_fight()` always created both fighters with the `humanoid` preset, `PRESETS` only registered `humanoid`, and fighter config only loaded class/loadout/environment. Progress: configured custom anatomy profiles and opt-in match-start generated fighter profiles are implemented and verified; the remaining linked work is the creativity gate proving the dynamic path does not regress back to fixed humanoid assumptions.
 - Impact: Dragons, winged fighters, tentacles, extra heads, non-humanoid organs, and asymmetric bodies can only exist as prose. Judge deltas targeting those parts are ignored as nonexistent.
 - Suggested fix: Add a structured fighter profile/anatomy source, pass fighter-specific anatomy into state creation, and serialize that anatomy into fighter/judge prompts as authoritative valid parts.
 - Tests: Add config/profile tests for custom body parts, simulation tests proving fighter-specific anatomy is used, and state tests proving damage to configured custom parts applies.

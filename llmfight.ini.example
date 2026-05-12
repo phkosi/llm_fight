@@ -17,6 +17,9 @@ fighter_sentence_limit = 1
 fighter_word_limit = 30
 fighter_A = A
 fighter_B = B
+# configured = use fighter sections/anatomy profiles only.
+# generated = ask the LLM to create structured fighter profiles before turn 1.
+fighter_creation_mode = configured
 
 [CONTEXT]
 fighter_log_window = 10

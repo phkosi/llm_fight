@@ -139,6 +139,7 @@ class FighterState:
     theme: str = ""
     loadout: str = "their bare fists and wits"
     environment: str = "an open arena"
+    profile_generation: Dict[str, Any] | None = None
 
     @classmethod
     def from_preset(
@@ -177,6 +178,8 @@ class FighterState:
         profile: FighterProfile,
         config_section: str | None = None,
         config=None,
+        allow_config_overrides: bool = True,
+        profile_generation: dict[str, Any] | None = None,
     ) -> FighterState:
         """Create fighter state from a validated custom profile."""
         section = config_section or id_
@@ -187,7 +190,20 @@ class FighterState:
             "loadout": profile.loadout,
             "environment": profile.environment,
         }
-        settings = cfg.get_fighter_settings(section, profile_defaults=profile_defaults)
+        if allow_config_overrides:
+            settings = cfg.get_fighter_settings(section, profile_defaults=profile_defaults)
+        else:
+            settings = {
+                "class_": profile.class_ or cfg.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str),
+                C.THEME: profile.theme or "",
+                "loadout": profile.loadout or cfg.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str),
+                "environment": profile.environment
+                or cfg.get(
+                    C.CONFIG_DEFAULTS,
+                    C.CONFIG_FIGHTER_ENVIRONMENT,
+                    str,
+                ),
+            }
         return cls(
             id=id_,
             parts=copy.deepcopy(profile.parts),
@@ -195,6 +211,7 @@ class FighterState:
             theme=settings.get(C.THEME, ""),
             loadout=settings["loadout"],
             environment=settings["environment"],
+            profile_generation=copy.deepcopy(profile_generation),
         )
 
     @classmethod

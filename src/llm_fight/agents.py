@@ -178,6 +178,7 @@ async def chat(
     schema: Optional[Dict[str, Any]] = None,
     session: aiohttp.ClientSession | None = None,
     retries: int = 0,
+    log_transcript: bool = True,
 ) -> List[str]:
     """Return ``best_of`` completions from Ollama.
 
@@ -231,7 +232,8 @@ async def chat(
     else:
         responses = await _collect(session)
 
-    log_exchange(messages, responses)
+    if log_transcript:
+        log_exchange(messages, responses)
     return responses
 
 

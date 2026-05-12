@@ -161,13 +161,23 @@ Verification: `uv run pytest -q tests/test_validation.py tests/test_state.py tes
 
 Addresses: ISSUE-001
 
-- [ ] Add an optional match-start fighter creation mode where the LLM creates structured fighter profiles before turn 1, using bounded random nudges such as warrior, mage, monster, trickster, hybrid, or fully original/creative.
+- [x] Add an optional match-start fighter creation mode where the LLM creates structured fighter profiles before turn 1, using bounded random nudges such as warrior, mage, monster, trickster, hybrid, or fully original/creative.
+
+Clarified implementation contract:
+
+- Add `[General] fighter_creation_mode = configured | generated`; default `configured`. In `configured` mode, `_single_fight()` must keep using the existing `FighterState.from_config()` path and must make no profile-generation LLM calls.
+- In `generated` mode, generate one profile per resolved fighter section before turn 1 using `chat(..., schema=FighterProfileSchema)`, then validate with `guarded_call()` and `build_fighter_profile()`.
+- Generated profile class/theme/loadout/environment/anatomy are authoritative in `generated` mode. Configured fighter values are prompt seed/fallback context only. If generation fails, fall back to the existing configured/preset `FighterState.from_config()` behavior.
+- Starting effects are out of scope for this task; starting traits are represented only through generated class/theme/loadout/environment. Add starting effects later with an explicit `EffectSchema`-backed contract.
+- Define a fixed `FIGHTER_CREATION_NUDGES = ("warrior", "mage", "monster", "trickster", "hybrid", "original")` list and select exactly one nudge per fighter through a helper that accepts `random.Random | None`; batch runs inherit deterministic nudges from `_derive_fight_seed()`.
+- Profile-generation LLM calls must suppress raw transcript logging or write only sanitized generation metadata; rejected generated profile text must never be written to transcript files, prompts, state, or combat logs.
+- Add a concrete serialized metadata contract: `FighterState.profile_generation: dict | None`, included by `FighterState.to_json()`, with shape `{"mode": "generated" | "fallback", "nudge": "<fixed-nudge>", "error": null | "invalid_generated_profile" | "generation_failed"}`. In fallback cases, also copy this sanitized metadata into `CombatLog.profile_generation` or an equivalent top-level combat-log metadata field. Do not store raw rejected LLM text in either place.
 
 Acceptance goals:
 
 - Add an opt-in config mode for generated fighter profiles; the default remains config/preset-backed humanoid behavior.
 - Reuse the same profile schema and sanitizer as configured custom anatomy.
-- Generate class/theme, loadout, environment-compatible flavor, anatomy/body parts, and optional starting traits/effects before the first combat turn.
+- Generate class/theme, loadout, environment-compatible flavor, and anatomy/body parts before the first combat turn.
 - Use the fight-local RNG or simulation seed for deterministic nudge selection in tests and batch runs.
 - On invalid LLM-created profiles, retry a small bounded number of times, then fall back to the configured/preset profile with a visible warning and transcript/state marker.
 - Do not let generated profile text inject prompt instructions or bypass anatomy/effect validation.
@@ -177,7 +187,10 @@ Required tests:
 - Mocked LLM profile creation produces a non-humanoid fighter before turn 1 and the resulting custom parts enter state and judge payloads.
 - Random nudges are deterministic under a fixed seed/fight RNG.
 - Invalid generated profiles fall back safely without crashing or leaking unsafe body/effect text into prompts.
+- With `save_transcripts = true`, invalid generated profile text is not written to transcript files.
 - Existing non-generated play/simulate paths do not make an extra profile-generation LLM call.
+
+Verification: `uv run pytest -q tests/test_config.py tests/test_agents.py tests/test_profiles.py tests/test_simulation.py` -> 73 passed; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 333 passed, 6 skipped, 1 warning; `git diff --check`.
 
 ## Creativity Gate For Dynamic Anatomy And Effects
 

@@ -269,6 +269,33 @@ async def test_chat_native_payload_keeps_num_ctx_separate_from_generation_limit(
 
 
 @pytest.mark.asyncio
+async def test_chat_can_suppress_transcript_logging():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "unsafe raw text"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    with (
+        patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}),
+        patch("llm_fight.agents.log_exchange") as mock_log_exchange,
+    ):
+        responses = await chat(messages=messages, max_tokens=12, session=session, log_transcript=False)
+
+    assert responses == ["unsafe raw text"]
+    mock_log_exchange.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_chat_reads_model_api_and_retry_config_at_call_time(tmp_path, monkeypatch):
     cfg_path = tmp_path / "llmfight.ini"
     cfg_path.write_text(

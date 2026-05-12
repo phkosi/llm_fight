@@ -25,6 +25,7 @@ DEFAULTS = {
         C.CONFIG_FIGHTER_WORD_LIMIT: "30",
         C.CONFIG_FIGHTER_A_SECTION: "A",
         C.CONFIG_FIGHTER_B_SECTION: "B",
+        C.CONFIG_FIGHTER_CREATION_MODE: C.FIGHTER_CREATION_MODE_CONFIGURED,
     },
     C.CONFIG_CONTEXT: {
         C.CONFIG_FIGHTER_LOG_WINDOW: "10",
@@ -184,6 +185,22 @@ class Config:
                 f"Fighter section '{fighter_id}' defines both anatomy_profile and profile with different values."
             )
         return anatomy_value or alias_value or None
+
+    def get_fighter_creation_mode(self) -> str:
+        """Return the configured match-start fighter profile creation mode."""
+        mode = self.get(
+            C.CONFIG_GENERAL,
+            C.CONFIG_FIGHTER_CREATION_MODE,
+            str,
+            fallback=C.FIGHTER_CREATION_MODE_CONFIGURED,
+        )
+        mode = str(mode).strip().lower()
+        if mode not in {C.FIGHTER_CREATION_MODE_CONFIGURED, C.FIGHTER_CREATION_MODE_GENERATED}:
+            raise ValueError(
+                f"[{C.CONFIG_GENERAL}] {C.CONFIG_FIGHTER_CREATION_MODE} must be "
+                f"'{C.FIGHTER_CREATION_MODE_CONFIGURED}' or '{C.FIGHTER_CREATION_MODE_GENERATED}'."
+            )
+        return mode
 
     def _fighter_setting(self, fighter_id: str, key: str, *, profile_default: str | None, fallback: str) -> str:
         explicit_value = self._explicit_section_value(fighter_id, key)

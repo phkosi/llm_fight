@@ -116,6 +116,7 @@ best_of_judge = 1
 max_retries = 1
 fighter_A = A
 fighter_B = B
+fighter_creation_mode = configured
 
 [CONTEXT]
 fighter_log_window = 10
@@ -133,6 +134,13 @@ and the run index, so concurrent scheduling or model latency does not change a
 run's dice rolls or random effect-layer choices. Batch CSV output stays ordered
 by run index and still flushes incrementally whenever the next ordered result is
 available.
+
+`fighter_creation_mode = generated` is opt-in. It asks the LLM for structured
+fighter profiles before turn 1, validates them with the same custom anatomy
+schema used for configured JSON profiles, and suppresses raw rejected generated
+profile text from transcripts. Invalid generated profiles fall back to the
+configured profile or humanoid preset with sanitized `profile_generation`
+metadata.
 
 ## 8. Developer Workflow
 

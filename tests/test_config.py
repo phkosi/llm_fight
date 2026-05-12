@@ -182,6 +182,18 @@ def test_default_ollama_num_ctx_loaded(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 32768
 
 
+def test_default_fighter_creation_mode_loaded(temp_config_instance):
+    assert temp_config_instance.get_fighter_creation_mode() == C.FIGHTER_CREATION_MODE_CONFIGURED
+
+
+def test_invalid_fighter_creation_mode_raises(tmp_path):
+    file_path = tmp_path / "bad_mode.ini"
+    file_path.write_text("[General]\nfighter_creation_mode = surprise\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fighter_creation_mode"):
+        Config(file_path).get_fighter_creation_mode()
+
+
 def test_fighter_section_names(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_A_SECTION, str) == "FighterA"
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str) == "FighterB"

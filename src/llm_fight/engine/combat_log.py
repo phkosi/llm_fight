@@ -127,6 +127,7 @@ class CombatLog:
 
     def __init__(self) -> None:
         self.turns: List[CombatTurn] = []
+        self.profile_generation: Dict[str, Any] = {}
 
     def append(self, turn: CombatTurn) -> None:
         self.turns.append(turn)

@@ -35,6 +35,7 @@ ANATOMY = "anatomy"
 ANATOMY_PROFILE = "anatomy_profile"
 PROFILE = "profile"
 THEME = "theme"
+PROFILE_GENERATION = "profile_generation"
 
 # Statuses
 
@@ -211,6 +212,12 @@ CONFIG_FIGHTER_ENVIRONMENT = "environment"  # Fighting environment
 CONFIG_FIGHTER_ANATOMY_PROFILE = ANATOMY_PROFILE  # Optional per-fighter anatomy profile JSON path
 CONFIG_FIGHTER_PROFILE = PROFILE  # Legacy/alias per-fighter anatomy profile JSON path
 CONFIG_FIGHTER_THEME = THEME  # Optional per-fighter generated/profile theme
+CONFIG_FIGHTER_CREATION_MODE = "fighter_creation_mode"
+FIGHTER_CREATION_MODE_CONFIGURED = "configured"
+FIGHTER_CREATION_MODE_GENERATED = "generated"
+FIGHTER_CREATION_NUDGES = ("warrior", "mage", "monster", "trickster", "hybrid", "original")
+PROFILE_GENERATION_ERROR_INVALID = "invalid_generated_profile"
+PROFILE_GENERATION_ERROR_FAILED = "generation_failed"
 CONFIG_FIGHTER_SENTENCE_LIMIT = "fighter_sentence_limit"
 CONFIG_FIGHTER_WORD_LIMIT = "fighter_word_limit"
 CONFIG_FIGHTER_A_SECTION = "fighter_A"  # Config section for fighter A settings

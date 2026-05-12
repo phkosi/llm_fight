@@ -16,6 +16,12 @@ from .engine.fighter import get_fighter_attempt
 from .engine import constants as C
 from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
+from .profile_generation import (
+    ProfileGenerationError,
+    choose_fighter_creation_nudge,
+    generate_fighter_profile,
+    profile_generation_metadata,
+)
 
 
 @dataclass(frozen=True)
@@ -271,6 +277,68 @@ def _apply_effect_roll_modifiers(p1: Dict[str, Any], fighters: dict[str, Fighter
     return modified
 
 
+async def _build_match_fighter(
+    fighter_id: str,
+    section: str,
+    opponent_section: str,
+    fight_rng: random.Random | None,
+) -> FighterState:
+    """Create one fighter from config or the opt-in generated-profile flow."""
+    mode = config_mod.CONFIG.get_fighter_creation_mode()
+    if mode == C.FIGHTER_CREATION_MODE_CONFIGURED:
+        return FighterState.from_config(fighter_id, config_section=section)
+
+    nudge = choose_fighter_creation_nudge(fight_rng)
+    try:
+        profile = await generate_fighter_profile(
+            fighter_id,
+            section,
+            opponent_section,
+            nudge,
+            config=config_mod.CONFIG,
+        )
+        metadata = profile_generation_metadata(nudge, mode=C.FIGHTER_CREATION_MODE_GENERATED)
+        return FighterState.from_profile(
+            fighter_id,
+            profile,
+            config_section=section,
+            config=config_mod.CONFIG,
+            allow_config_overrides=False,
+            profile_generation=metadata,
+        )
+    except ProfileGenerationError as exc:
+        metadata = profile_generation_metadata(
+            nudge,
+            mode="fallback",
+            error=exc.code,
+        )
+        logger.warning(
+            "Fighter %s profile generation failed with %s; falling back to configured profile.",
+            fighter_id,
+            exc.code,
+        )
+        fighter = FighterState.from_config(fighter_id, config_section=section)
+        fighter.profile_generation = metadata
+        return fighter
+
+
+async def _build_match_fighters(
+    fighter_a_section: str,
+    fighter_b_section: str,
+    combat_log: CombatLog,
+    fight_rng: random.Random | None,
+) -> tuple[FighterState, FighterState]:
+    """Create both match fighters before turn 1."""
+    A = await _build_match_fighter(C.FIGHTER_A, fighter_a_section, fighter_b_section, fight_rng)
+    B = await _build_match_fighter(C.FIGHTER_B, fighter_b_section, fighter_a_section, fight_rng)
+    if A.profile_generation or B.profile_generation:
+        combat_log.profile_generation = {
+            C.FIGHTER_A: A.profile_generation,
+            C.FIGHTER_B: B.profile_generation,
+        }
+    return A, B
+
+
 async def _single_fight(
     fighter_a_section: str | None = None,
     fighter_b_section: str | None = None,
@@ -298,11 +366,10 @@ async def _single_fight(
     if fighter_b_section is None:
         fighter_b_section = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str, fallback="B")
 
-    A = FighterState.from_config("A", config_section=fighter_a_section)
-    B = FighterState.from_config("B", config_section=fighter_b_section)
     turn = 0
     outcome = None
     combat_log = CombatLog()
+    A, B = await _build_match_fighters(fighter_a_section, fighter_b_section, combat_log, fight_rng)
     fighter_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
     judge_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)
 

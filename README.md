@@ -120,6 +120,7 @@ max_tokens_judge = 4096
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
+fighter_creation_mode = configured
 
 [SIMULATION]
 runs = 1
@@ -162,6 +163,15 @@ Profile files use canonical part ids:
   ]
 }
 ```
+
+Set `fighter_creation_mode = generated` to opt into match-start profile
+generation. In generated mode, the model creates structured fighter profiles
+before turn 1 using the same profile schema and anatomy validation. Generated
+profile class, theme, loadout, environment, and anatomy are authoritative for
+that fight; if generation fails validation, the game falls back to the
+configured profile or default humanoid fighter and records sanitized
+`profile_generation` metadata in state/logs. Raw rejected generated profile
+text is not written to transcripts.
 
 The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endpoints are also supported:
 
