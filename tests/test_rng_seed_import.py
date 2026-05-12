@@ -3,8 +3,7 @@ import random
 
 from llm_fight import config as config_mod
 from llm_fight import rng
-from llm_fight.config import Config
-from llm_fight.config import CONFIG
+from llm_fight.config import CONFIG, Config
 from llm_fight.engine import constants as C
 
 

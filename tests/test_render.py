@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
-from llm_fight.engine.combat_log import CombatTurn
 from llm_fight.engine import constants as C
 from llm_fight.engine import render
+from llm_fight.engine.combat_log import CombatTurn
 from llm_fight.simulation import FightEvent
 
 

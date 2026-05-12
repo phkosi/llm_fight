@@ -269,8 +269,9 @@ $env:API_URL = "http://localhost:11434/api/chat"
 Run the standard local checks:
 
 ```bash
-uv run black --check .
-uv run flake8
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src/llm_fight
 uv run pytest -q
 ```
 
@@ -278,6 +279,13 @@ Run the CI-equivalent test command:
 
 ```bash
 uv run pytest -q --cov=llm_fight
+```
+
+Pre-commit uses the locked `uv` environment for project tooling:
+
+```bash
+uv run pre-commit run --all-files
+uv run pre-commit run --hook-stage pre-push --all-files
 ```
 
 Live Ollama tests are skipped by default. To opt in, set `API_URL` and run only the live tests:

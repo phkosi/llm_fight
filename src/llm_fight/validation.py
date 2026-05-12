@@ -1,10 +1,12 @@
 """Schema validation and retry helpers using jsonschema."""
 
-import json
 import asyncio
+import json
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Any, Callable, Dict
-from jsonschema import validate, ValidationError
+from typing import Any, cast
+
+from jsonschema import ValidationError, validate
 
 from . import config as config_mod
 from .engine import constants as C
@@ -28,7 +30,7 @@ ActionSchema = {
 # "judgement": a string describing the judgement
 # "valid_attempt_A": a boolean indicating if fighter A's attempt is valid
 # "valid_attempt_B": a boolean indicating if fighter B's attempt is valid
-JudgeP1Schema: Dict[str, Any] = {
+JudgeP1Schema: dict[str, Any] = {
     C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
     C.SCHEMA_PROPERTIES: {
         "judgement_text": {C.SCHEMA_TYPE: C.SCHEMA_STRING},
@@ -325,11 +327,13 @@ SourceWoundSchema = {
 }
 
 SourceEffectSchema = deepcopy(EffectSchema)
+_source_effect_properties = cast(dict[str, Any], SourceEffectSchema[C.SCHEMA_PROPERTIES])
+_source_effect_required = cast(list[str], SourceEffectSchema[C.SCHEMA_REQUIRED])
 SourceEffectSchema[C.SCHEMA_PROPERTIES] = {
     C.SOURCE: SourceSchema,
-    **SourceEffectSchema[C.SCHEMA_PROPERTIES],
+    **_source_effect_properties,
 }
-SourceEffectSchema[C.SCHEMA_REQUIRED] = [C.SOURCE, *SourceEffectSchema[C.SCHEMA_REQUIRED]]
+SourceEffectSchema[C.SCHEMA_REQUIRED] = [C.SOURCE, *_source_effect_required]
 
 SourceEffectRemovalSchema = {
     C.SCHEMA_TYPE: C.SCHEMA_OBJECT,

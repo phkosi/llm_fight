@@ -1,16 +1,17 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
 
 import re
-from typing import Union, Optional, Callable, Any
+from collections.abc import Callable
+from typing import Any, cast
 
-from ..state import FighterState  # Relative import from parent package
-from ..agents import chat, chat_with_metadata
-from ..utils.token_counter import budget_messages_with_trimmed_log
 from .. import config as config_mod
-from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
+from ..agents import chat, chat_with_metadata
+from ..state import FighterState  # Relative import from parent package
+from ..utils.token_counter import budget_messages_with_trimmed_log
 from . import constants as C  # Added import
 from .combat_log import CombatLog
 from .logger import logger
+from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from .state_summary import (
     compact_fighter_state_summary,
     environment_scope_guardrail,
@@ -104,8 +105,8 @@ def describe_heat(heat_level: int) -> str:
 async def get_fighter_attempt(
     fighter: FighterState,
     opponent: FighterState,
-    combat_log: Union[CombatLog, str, None] = None,
-    turn_window: Optional[int] = None,
+    combat_log: CombatLog | str | None = None,
+    turn_window: int | None = None,
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     """Generates a fighter's attempted action for the current turn.
@@ -200,7 +201,10 @@ async def get_fighter_attempt(
 
     for attempt in range(empty_action_retries + 1):
         active_messages, active_max_tokens, _ = budget_messages_with_trimmed_log(
-            lambda recent_log, retry=bool(attempt): build_messages(recent_log, retry=retry),
+            cast(
+                Callable[[str], list[dict[str, str]]],
+                lambda recent_log, retry=bool(attempt): build_messages(recent_log, retry=retry),
+            ),
             current_recent_log,
             requested_max_tokens=generation_limit,
             context_limit=context_limit,

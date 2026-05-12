@@ -1,16 +1,19 @@
-import pytest
 import asyncio
-import aiohttp
 import logging
 import os
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
-from llm_fight.agents import chat, chat_with_metadata, get_ollama_url
+import aiohttp
+import pytest
+
 from llm_fight import agents as agents_module
-from llm_fight.engine import constants as C
-from llm_fight.config import CONFIG  # To access config values for assertions
-from llm_fight.config import Config
 from llm_fight import config as config_mod
+from llm_fight.agents import chat, chat_with_metadata, get_ollama_url
+from llm_fight.config import (
+    CONFIG,  # To access config values for assertions
+    Config,
+)
+from llm_fight.engine import constants as C
 
 BASE_OLLAMA_URL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str, fallback="http://localhost:11434/api/chat")
 DEFAULT_MODEL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
@@ -90,7 +93,7 @@ async def test_chat_best_of_n_calls_success():
     max_tokens = 100
     best_of_n = 3
     schema = {"type": "object"}
-    mock_responses_content = [f"Joke {i+1}" for i in range(best_of_n)]
+    mock_responses_content = [f"Joke {i + 1}" for i in range(best_of_n)]
 
     mock_actual_responses = []
     mock_post_context_managers = []
@@ -463,9 +466,8 @@ async def test_chat_http_error_raises_exception():
     mock_session_instance.close = AsyncMock()
     mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
-    with patch("aiohttp.ClientSession", return_value=mock_session_instance):
-        with pytest.raises(aiohttp.ClientResponseError):
-            await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+    with patch("aiohttp.ClientSession", return_value=mock_session_instance), pytest.raises(aiohttp.ClientResponseError):
+        await chat(messages=messages, max_tokens=max_tokens, best_of=1)
 
 
 @pytest.mark.asyncio
@@ -480,9 +482,11 @@ async def test_chat_connection_error_raises_exception():
     # The post method itself raises the error
     mock_session_instance.post = MagicMock(side_effect=aiohttp.ClientConnectionError("Cannot connect"))
 
-    with patch("aiohttp.ClientSession", return_value=mock_session_instance):
-        with pytest.raises(aiohttp.ClientConnectionError):
-            await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+    with (
+        patch("aiohttp.ClientSession", return_value=mock_session_instance),
+        pytest.raises(aiohttp.ClientConnectionError),
+    ):
+        await chat(messages=messages, max_tokens=max_tokens, best_of=1)
 
 
 @pytest.mark.asyncio
@@ -495,11 +499,10 @@ async def test_chat_timeout_error_raises_exception():
     mock_session_instance.closed = False
     mock_session_instance.close = AsyncMock()
     # The post method itself raises the error
-    mock_session_instance.post = MagicMock(side_effect=asyncio.TimeoutError())
+    mock_session_instance.post = MagicMock(side_effect=TimeoutError())
 
-    with patch("aiohttp.ClientSession", return_value=mock_session_instance):
-        with pytest.raises(asyncio.TimeoutError):
-            await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+    with patch("aiohttp.ClientSession", return_value=mock_session_instance), pytest.raises(asyncio.TimeoutError):
+        await chat(messages=messages, max_tokens=max_tokens, best_of=1)
 
 
 @pytest.mark.asyncio
@@ -514,9 +517,8 @@ async def test_chat_unexpected_error_raises_exception():
     # The post method itself raises the error
     mock_session_instance.post = MagicMock(side_effect=ValueError("Unexpected issue"))
 
-    with patch("aiohttp.ClientSession", return_value=mock_session_instance):
-        with pytest.raises(ValueError):
-            await chat(messages=messages, max_tokens=max_tokens, best_of=1)
+    with patch("aiohttp.ClientSession", return_value=mock_session_instance), pytest.raises(ValueError):
+        await chat(messages=messages, max_tokens=max_tokens, best_of=1)
 
 
 def _session_with_post_failure(failure):
@@ -555,7 +557,7 @@ def _session_with_status(status):
             aiohttp.ClientConnectionError,
         ),
         (
-            lambda sentinel: _session_with_post_failure(asyncio.TimeoutError(f"timeout {sentinel}")),
+            lambda sentinel: _session_with_post_failure(TimeoutError(f"timeout {sentinel}")),
             asyncio.TimeoutError,
         ),
         (lambda sentinel: _session_with_post_failure(ValueError(f"unexpected {sentinel}")), ValueError),
@@ -568,9 +570,8 @@ async def test_transport_failure_logs_redact_payload_and_prompt(caplog, session_
     session = session_factory(sentinel)
     caplog.set_level(logging.WARNING, logger="llm_fight_engine")
 
-    with patch.dict(os.environ, {"API_URL": api_url}):
-        with pytest.raises(expected_error):
-            await chat(messages=messages, max_tokens=10, session=session, retries=0)
+    with patch.dict(os.environ, {"API_URL": api_url}), pytest.raises(expected_error):
+        await chat(messages=messages, max_tokens=10, session=session, retries=0)
 
     log_text = caplog.text
     assert sentinel not in log_text

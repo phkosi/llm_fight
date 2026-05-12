@@ -1,30 +1,30 @@
-﻿"""Typer-powered CLI front-end."""
+"""Typer-powered CLI front-end."""
 
 import asyncio
 import configparser
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Any, cast
 
 import aiohttp
 import typer
+from click import ClickException
 
-from .engine import render
-from .engine import constants as C
 from .agents import ping_ollama
+from .engine import constants as C
+from .engine import render
 from .judge import JudgePhase2FailureError
 from .utils.token_counter import PromptBudgetError
-from click import ClickException
 
 app = typer.Typer()
 
 
 @contextmanager
 def _command_runtime(
-    config_path: Optional[Path],
+    config_path: Path | None,
     *,
-    runs: Optional[int] = None,
-    max_turns: Optional[int] = None,
+    runs: int | None = None,
+    max_turns: int | None = None,
 ):
     from . import config as config_mod
     from . import rng
@@ -40,7 +40,7 @@ def _command_runtime(
         rng.set_state(previous_rng_state)
 
 
-def _load_config(config_path: Optional[Path]):
+def _load_config(config_path: Path | None):
     from . import config as config_mod
 
     if config_path is None:
@@ -54,7 +54,7 @@ def _load_config(config_path: Optional[Path]):
         raise ClickException(f"Could not read config file {config_path}: {exc}") from exc
 
 
-def _apply_simulation_overrides(runtime_config, runs: Optional[int] = None, max_turns: Optional[int] = None) -> None:
+def _apply_simulation_overrides(runtime_config, runs: int | None = None, max_turns: int | None = None) -> None:
     if runs is None and max_turns is None:
         return
 
@@ -79,7 +79,7 @@ def _run_async(coro):
         raise ClickException(str(exc)) from exc
     except ConnectionError as exc:
         raise ClickException(str(exc)) from exc
-    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+    except (TimeoutError, aiohttp.ClientError) as exc:
         raise ClickException(
             f"Ollama request failed: {exc}. Make sure Ollama is running, the model is pulled, "
             "and ollama_api_url or API_URL points to the correct endpoint."
@@ -129,30 +129,30 @@ def simulate(
         "-o",
         help="Path for the simulation CSV output",
     ),
-    config: Optional[Path] = typer.Option(
+    config: Path | None = typer.Option(
         None,
         "--config",
         "-c",
         help="Path to configuration file",
     ),
-    fighter_a: Optional[str] = typer.Option(
+    fighter_a: str | None = typer.Option(
         None,
         "--fighter-a",
         "-A",
         help="INI section to use for fighter A",
     ),
-    fighter_b: Optional[str] = typer.Option(
+    fighter_b: str | None = typer.Option(
         None,
         "--fighter-b",
         "-B",
         help="INI section to use for fighter B",
     ),
-    runs: Optional[int] = typer.Option(
+    runs: int | None = typer.Option(
         None,
         "--runs",
         help="Override [SIMULATION] runs for this invocation",
     ),
-    max_turns: Optional[int] = typer.Option(
+    max_turns: int | None = typer.Option(
         None,
         "--max-turns",
         help="Override [SIMULATION] max_turns for this invocation",
@@ -171,8 +171,9 @@ def simulate(
 ):
     """Run self-play batch using llmfight.ini parameters."""
     from logging import CRITICAL
+
     from . import config as config_mod
-    from .engine.logger import update_logger_level, logger
+    from .engine.logger import logger, update_logger_level
 
     if not render.RICH_AVAILABLE:
         raise ClickException("The 'rich' library is required for this command")
@@ -190,7 +191,7 @@ def simulate(
 
         progress_cb = None
         if verbose:
-            from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
+            from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
             console = render.Console()
             progress = Progress(
@@ -203,7 +204,7 @@ def simulate(
             def update(done: int, total: int) -> None:
                 if not progress.tasks:
                     progress.add_task("runs", total=total)
-                progress.update(0, completed=done)
+                progress.update(cast(Any, 0), completed=done)
 
             progress_cb = update
             with progress:
@@ -243,25 +244,25 @@ def simulate(
 
 @app.command()
 def play(
-    config: Optional[Path] = typer.Option(
+    config: Path | None = typer.Option(
         None,
         "--config",
         "-c",
         help="Path to configuration file",
     ),
-    fighter_a: Optional[str] = typer.Option(
+    fighter_a: str | None = typer.Option(
         None,
         "--fighter-a",
         "-A",
         help="INI section to use for fighter A",
     ),
-    fighter_b: Optional[str] = typer.Option(
+    fighter_b: str | None = typer.Option(
         None,
         "--fighter-b",
         "-B",
         help="INI section to use for fighter B",
     ),
-    max_turns: Optional[int] = typer.Option(
+    max_turns: int | None = typer.Option(
         None,
         "--max-turns",
         help="Override [SIMULATION] max_turns for this invocation",
@@ -281,7 +282,8 @@ def play(
 ):
     """Run a single fight and print the winner."""
     from logging import CRITICAL
-    from .engine.logger import update_logger_level, logger
+
+    from .engine.logger import logger, update_logger_level
 
     if not render.RICH_AVAILABLE and not simple_output:
         raise ClickException("The 'rich' library is required for this command")

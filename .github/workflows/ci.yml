@@ -26,11 +26,13 @@ jobs:
         run: uv sync --locked --all-extras --dev
 
       - name: Check formatting
-        run: uv run black --check .
+        run: uv run ruff format --check .
 
       - name: Run lint
-        run: uv run flake8
+        run: uv run ruff check .
+
+      - name: Run type checks
+        run: uv run mypy src/llm_fight
 
       - name: Run tests
         run: uv run pytest -q --cov=llm_fight
-

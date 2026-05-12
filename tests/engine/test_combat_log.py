@@ -1,5 +1,5 @@
-from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.engine import constants as C
+from llm_fight.engine.combat_log import CombatLog, CombatTurn
 
 
 def test_combat_log_basic_usage():
@@ -100,11 +100,11 @@ def test_combat_turn_to_simple_text():
     assert lines[0].startswith("Turn 4")
     assert "Fighter A attempt: swing" in lines[1]
     assert "Fighter B attempt: block" in lines[2]
-    assert any("Judge ruling:" in l for l in lines)
-    assert any("A misses" in l for l in lines)
-    assert any("Outcome: B blocks" in l for l in lines)
-    assert any("Mechanical changes:" in l for l in lines)
-    assert any("B status fighting -> unconscious" in l for l in lines)
+    assert any("Judge ruling:" in line for line in lines)
+    assert any("A misses" in line for line in lines)
+    assert any("Outcome: B blocks" in line for line in lines)
+    assert any("Mechanical changes:" in line for line in lines)
+    assert any("B status fighting -> unconscious" in line for line in lines)
 
 
 def test_combat_turn_rolls_and_mechanical_changes_text():

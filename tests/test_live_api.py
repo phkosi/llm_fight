@@ -1,5 +1,6 @@
-import os
 import asyncio
+import os
+
 import pytest
 
 from llm_fight.agents import chat

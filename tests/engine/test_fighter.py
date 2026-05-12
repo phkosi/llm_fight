@@ -1,17 +1,25 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from llm_fight.engine.fighter import describe_pain, describe_exhaustion, describe_heat
-from unittest.mock import patch, AsyncMock, MagicMock
-from llm_fight.engine.fighter import _effects_list_text, _temporary_effect_instruction, get_fighter_attempt
+
+from llm_fight.anatomy import BodyPart, TissueLayer
+from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
+from llm_fight.engine.fighter import (
+    _effects_list_text,
+    _temporary_effect_instruction,
+    describe_exhaustion,
+    describe_heat,
+    describe_pain,
+    get_fighter_attempt,
+)
 from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
 from llm_fight.engine.state_summary import (
     compact_fighter_state_summary,
     environment_scope_guardrail,
     render_fighter_state_summary,
 )
-from llm_fight.engine import constants as C
-from llm_fight.state import FighterState, Effect  # For creating mock states
-from llm_fight.anatomy import BodyPart, TissueLayer
+from llm_fight.state import Effect, FighterState  # For creating mock states
 from llm_fight.utils.token_counter import PromptBudgetError
 
 
@@ -152,7 +160,6 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
         ) as mock_chat_func,
         patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
     ):
-
         actual_response = await get_fighter_attempt(
             fighter=mock_fighter_state,
             opponent=mock_opponent_state,
@@ -215,7 +222,8 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
 
         expected_user_content = (
             f"It's your turn to act, Fighter {mock_fighter_state.id} ({mock_fighter_state.display_name}). "
-            f"Opponent Fighter {mock_opponent_state.id} ({mock_opponent_state.display_name}) is visible. What do you do?"
+            f"Opponent Fighter {mock_opponent_state.id} ({mock_opponent_state.display_name}) is visible. "
+            "What do you do?"
         )
         assert user_message[C.AGENT_CONTENT] == expected_user_content
 
@@ -388,7 +396,7 @@ async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_
     mock_config_get = MagicMock()
 
     def config_get_side_effect(section, key, cast_type, fallback=None):
-        if section == C.CONFIG_CONTEXT and key == C.CONFIG_FIGHTER_LOG_WINDOW and cast_type == int:
+        if section == C.CONFIG_CONTEXT and key == C.CONFIG_FIGHTER_LOG_WINDOW and cast_type is int:
             return default_config_turn_window
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 100
@@ -406,7 +414,6 @@ async def test_get_fighter_attempt_default_turn_window(mock_fighter_state, mock_
         ) as mock_chat_func,
         patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
     ):
-
         await get_fighter_attempt(
             fighter=mock_fighter_state,
             opponent=mock_opponent_state,

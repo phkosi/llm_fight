@@ -1,5 +1,5 @@
-from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT, JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from llm_fight.engine import constants as C
+from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT, JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from llm_fight.engine.state_summary import environment_scope_guardrail
 
 

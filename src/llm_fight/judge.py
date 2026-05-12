@@ -1,20 +1,20 @@
-﻿"""Judge orchestration (Phase-1 probability, RNG, Phase-2 narration)."""
+"""Judge orchestration (Phase-1 probability, RNG, Phase-2 narration)."""
 
 import json
-from typing import Dict, Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from jsonschema import ValidationError, validate
 
-from .utils.json_parser import parse_json_from_text
-
-from .agents import chat, chat_with_metadata
-from .utils.token_counter import budget_messages_with_trimmed_log
-from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from . import config as config_mod
-from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
-from .engine.state_summary import compact_fighter_state_summary
+from .agents import chat, chat_with_metadata
 from .engine import constants as C
 from .engine.logger import logger
+from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
+from .engine.state_summary import compact_fighter_state_summary
+from .utils.json_parser import parse_json_from_text
+from .utils.token_counter import budget_messages_with_trimmed_log
+from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 
 # -------------------------------------------------------------------
 
@@ -26,10 +26,7 @@ class JudgePhase2FailureError(RuntimeError):
 def _effect_names_text(effects: list[Any]) -> str:
     names = []
     for effect in effects:
-        if isinstance(effect, dict):
-            name = effect.get(C.NAME, "")
-        else:
-            name = str(effect)
+        name = effect.get(C.NAME, "") if isinstance(effect, dict) else str(effect)
         if name:
             names.append(name)
     return ", ".join(names) if names else "none"
@@ -56,7 +53,8 @@ def _current_state_reminder(fighter_a: dict[str, Any], fighter_b: dict[str, Any]
         f"Fighter B buffs={_active_effect_names_text(fighter_b, C.BUFFS)}, "
         f"debuffs={_active_effect_names_text(fighter_b, C.DEBUFFS)}. "
         "Temporary effects not listed here are inactive, even if recent_combat_log mentions them. "
-        f"Do not cite old {temp_terms} as current conditions unless they are listed here or created by the current action."
+        f"Do not cite old {temp_terms} as current conditions unless they are listed here or "
+        "created by the current action."
     )
 
 
@@ -131,13 +129,13 @@ def _phase2_noop_result(exc: Exception | None = None, *, policy: str = C.P2_FAIL
 
 
 async def judge_phase1(
-    state: Dict[str, Any],
+    state: dict[str, Any],
     attemptA: str,
     attemptB: str,
     *,
     recent_log: str = "",
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
 
@@ -210,11 +208,11 @@ async def judge_phase1(
 
 
 async def judge_phase2(
-    p2_input_state: Dict[str, Any],
-    rolls: Dict[str, bool],
+    p2_input_state: dict[str, Any],
+    rolls: dict[str, bool],
     *,
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Judge Phase 2: Narrates combat outcomes and calculates state changes (deltas).
 

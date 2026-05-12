@@ -1,5 +1,7 @@
-import pytest
 import configparser
+
+import pytest
+
 from llm_fight.config import Config
 from llm_fight.engine import constants as C  # For constant keys
 

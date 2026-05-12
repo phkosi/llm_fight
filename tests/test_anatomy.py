@@ -1,4 +1,4 @@
-from llm_fight.anatomy import compose_humanoid, PRESETS, BodyPart
+from llm_fight.anatomy import PRESETS, BodyPart, compose_humanoid
 from llm_fight.engine import constants as C
 
 

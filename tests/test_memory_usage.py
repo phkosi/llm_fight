@@ -1,10 +1,11 @@
 import os
+
 import pytest
 from ollama import AsyncClient
 
 from llm_fight.agents import chat
-from llm_fight.utils.token_counter import compute_max_tokens
 from llm_fight.engine import constants as C
+from llm_fight.utils.token_counter import compute_max_tokens
 
 pytestmark = [pytest.mark.live, pytest.mark.perf]
 

@@ -1,4 +1,5 @@
 import pytest
+
 from llm_fight import rng  # Import the module itself to access its functions
 
 # Note: llm_fight.rng is seeded from CONFIG when it's first imported.

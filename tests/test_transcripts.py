@@ -1,14 +1,13 @@
 import json
+
+import llm_fight.config as config_mod
+import llm_fight.transcripts as transcripts
 from llm_fight.config import Config
 from llm_fight.engine import constants as C
-import llm_fight.transcripts as transcripts
-import llm_fight.config as config_mod
 
 
 def test_log_exchange_creates_file(tmp_path, monkeypatch):
-    ini = (
-        f"[{C.CONFIG_GENERAL}]\n" f"{C.CONFIG_SAVE_TRANSCRIPTS}=true\n" f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path/'logs'}\n"
-    )
+    ini = f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(ini)
     custom_cfg = Config(cfg_path)
@@ -30,9 +29,7 @@ def test_log_exchange_creates_file(tmp_path, monkeypatch):
 
 
 def test_log_exchange_unique_timestamps(tmp_path, monkeypatch):
-    ini = (
-        f"[{C.CONFIG_GENERAL}]\n" f"{C.CONFIG_SAVE_TRANSCRIPTS}=true\n" f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path/'logs'}\n"
-    )
+    ini = f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(ini)
     custom_cfg = Config(cfg_path)
@@ -62,7 +59,7 @@ def test_log_exchange_unique_timestamps(tmp_path, monkeypatch):
 
 def test_create_fight_trace_disabled_is_silent(tmp_path, monkeypatch):
     cfg_path = tmp_path / "cfg.ini"
-    cfg_path.write_text(f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path/'logs'}\n")
+    cfg_path.write_text(f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n")
     monkeypatch.setattr(config_mod, "CONFIG", Config(cfg_path))
 
     writer = transcripts.create_fight_trace(run_index=1, fight_id="disabled")
@@ -74,7 +71,7 @@ def test_create_fight_trace_disabled_is_silent(tmp_path, monkeypatch):
 def test_active_trace_routes_exchange_to_fight_jsonl(tmp_path, monkeypatch):
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(
-        f"[{C.CONFIG_GENERAL}]\n" f"{C.CONFIG_SAVE_TRANSCRIPTS}=true\n" f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path/'logs'}\n"
+        f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
     )
     monkeypatch.setattr(config_mod, "CONFIG", Config(cfg_path))
 
@@ -110,7 +107,7 @@ def test_active_trace_routes_exchange_to_fight_jsonl(tmp_path, monkeypatch):
 def test_trace_writer_orders_events(tmp_path, monkeypatch):
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(
-        f"[{C.CONFIG_GENERAL}]\n" f"{C.CONFIG_SAVE_TRANSCRIPTS}=true\n" f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path/'logs'}\n"
+        f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
     )
     monkeypatch.setattr(config_mod, "CONFIG", Config(cfg_path))
 

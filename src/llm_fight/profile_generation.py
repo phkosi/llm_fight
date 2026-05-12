@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import random
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from jsonschema import ValidationError
 
-from .agents import chat, chat_with_metadata
 from . import config as config_mod
+from .agents import chat, chat_with_metadata
 from .engine import constants as C
 from .engine.logger import logger
 from .profiles import FighterProfile, FighterProfileError, build_fighter_profile

@@ -1,8 +1,9 @@
 import importlib
 import logging
+
+import llm_fight.engine.logger as logger_module
 from llm_fight.config import Config
 from llm_fight.engine import constants as C
-import llm_fight.engine.logger as logger_module
 
 
 def test_logger_level_respected(monkeypatch, tmp_path):

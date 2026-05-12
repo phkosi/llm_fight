@@ -1,10 +1,11 @@
 import csv
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 import llm_fight.simulation as sim_module
-from llm_fight.engine import constants as C
 from llm_fight.config import CONFIG
+from llm_fight.engine import constants as C
 
 
 def _source_value(source=C.FIGHTER_A, value=1):

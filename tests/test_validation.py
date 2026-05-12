@@ -1,20 +1,20 @@
-import pytest
 import json
-from jsonschema import ValidationError, validate
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from llm_fight.judge import judge_phase1, judge_phase2
+import pytest
+from jsonschema import ValidationError, validate
 
-from llm_fight.validation import guarded_call, ActionSchema, JudgeP1Schema, JudgeP2Schema, DeltaSchema, EffectSchema
-from llm_fight.engine import constants as C
-from llm_fight.config import Config
 from llm_fight import config as config_mod
+from llm_fight.config import Config
+from llm_fight.engine import constants as C
+from llm_fight.judge import judge_phase1, judge_phase2
+from llm_fight.validation import ActionSchema, DeltaSchema, EffectSchema, JudgeP1Schema, JudgeP2Schema, guarded_call
 
 
 # --- Mocks for guarded_call tests ---
 class MockAsyncCallable:
-    def __init__(self, return_values: List[Any], errors: List[Exception | None] = None):
+    def __init__(self, return_values: list[Any], errors: list[Exception | None] | None = None):
         self.call_count = 0
         self.return_values = return_values
         self.errors = errors if errors else [None] * len(return_values)
@@ -87,7 +87,7 @@ async def test_guarded_call_retry_on_json_decode_error_then_success():
 
 @pytest.mark.asyncio
 async def test_guarded_call_exponential_backoff(monkeypatch):
-    sleep_calls: List[float] = []
+    sleep_calls: list[float] = []
 
     async def fake_sleep(delay: float) -> None:
         sleep_calls.append(delay)
@@ -169,7 +169,7 @@ async def test_guarded_call_fail_after_max_retries_json_decode_error():
 
 
 # Helper function to test schema validation
-def _validate_against_schema(data: Any, schema: Dict[str, Any], should_be_valid: bool):
+def _validate_against_schema(data: Any, schema: dict[str, Any], should_be_valid: bool):
     if should_be_valid:
         try:
             validate(instance=data, schema=schema)

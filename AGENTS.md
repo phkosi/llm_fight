@@ -26,8 +26,9 @@ uv run llmfight simulate
 Run quality checks:
 
 ```bash
-uv run black --check .
-uv run flake8
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src/llm_fight
 uv run pytest -q
 ```
 
@@ -56,6 +57,19 @@ uv run llmfight play --config <path>
 During each playtest pass, inspect terminal output, generated transcripts, state changes, prompt behavior, gameplay logic, and user-facing responsiveness. Add bugs, regressions, security risks, test gaps, prompt failures, and gameplay-system failures to `ISSUES.md`. If an issue already exists, append new evidence to the existing entry instead of creating a duplicate.
 
 Use `DESIGN_ISSUES.md` for game design concerns that are not clearly erroneous, such as pacing problems, unclear fantasy, weak drama, boring but valid strategies, or balance concerns. Do not automatically create `TODO.md` implementation tasks from design issues unless the user asks.
+
+## Code Size Review
+
+During codebase reviews, implementation reviews, playtest-loop code review passes, and before committing broad Python changes, check for monolithic Python files and oversized functions. If a file crosses the thresholds below, add or update an `ISSUES.md` entry instead of leaving the finding only in chat. If a matching issue already exists, append current evidence there rather than creating a duplicate.
+
+Use these thresholds:
+
+- Production modules under `src/`: target 150-350 physical LOC, warn at 500 LOC, create/update an issue at 700 LOC, and treat 1000+ LOC as urgent refactor pressure.
+- Test modules under `tests/`: target under 500 physical LOC, create/update an issue at 800 LOC, and treat 1000+ LOC as urgent test-suite refactor pressure.
+- Functions or methods: target under 75 LOC, create/update an issue for 100+ LOC or for roughly 50+ statements when this contributes to a large-file problem.
+- Generated files, vendored code, and intentionally flat constants/enums may be exempt, but note the exemption in the review.
+
+When logging a code-size issue, include the measured LOC, the largest functions/classes, why the current responsibilities are too broad, suggested split boundaries, and tests needed to keep behavior stable during extraction.
 
 `ISSUES.md` issue entries should support these tracking fields:
 

@@ -2,12 +2,13 @@
 
 import random
 from typing import Any
+
 from . import config as config_mod
 from .engine import constants as C
 
 _random = random.Random()
 
-__all__ = ["rand", "dice", "seed", "seed_from_config", "get_state", "set_state", "choice"]
+__all__ = ["choice", "dice", "get_state", "rand", "seed", "seed_from_config", "set_state"]
 
 
 def seed(value: int):
@@ -21,12 +22,12 @@ def seed_from_config(config=None) -> None:
     seed(cfg.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
 
 
-def get_state() -> object:
+def get_state() -> tuple[Any, ...]:
     """Return the current process RNG state for later restoration."""
     return _random.getstate()
 
 
-def set_state(state: object) -> None:
+def set_state(state: tuple[Any, ...]) -> None:
     """Restore a process RNG state captured by ``get_state``."""
     _random.setstate(state)
 

@@ -1,10 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 import llm_fight.simulation as sim_module
-from llm_fight.state import FighterState
-from llm_fight.engine import constants as C
 from llm_fight.config import CONFIG
+from llm_fight.engine import constants as C
+from llm_fight.state import FighterState
 
 
 @pytest.mark.asyncio

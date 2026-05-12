@@ -1,19 +1,20 @@
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
 import json
 import os
 import random
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 import llm_fight.simulation as sim_module
 import llm_fight.transcripts as transcripts
 from llm_fight.agents import ChatResult
-from llm_fight.state import Effect, FighterState  # Keep for spec
+from llm_fight.config import CONFIG, Config
 
 # from llm_fight.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
 from llm_fight.engine import constants as C
-from llm_fight.config import CONFIG, Config
 from llm_fight.profiles import build_fighter_profile
+from llm_fight.state import Effect, FighterState  # Keep for spec
 
 
 def _source_value(source=C.FIGHTER_A, value=1):
@@ -797,9 +798,9 @@ async def test_single_fight_trace_preserves_error_event(tmp_path):
         with (
             patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
             patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            pytest.raises(RuntimeError),
         ):
-            with pytest.raises(RuntimeError):
-                await sim_module._single_fight(return_log=True)
+            await sim_module._single_fight(return_log=True)
     finally:
         sim_module.config_mod.CONFIG = old_config
 
@@ -848,9 +849,11 @@ async def test_single_fight_trace_error_waits_for_cancelled_fighter_sibling(tmp_
     old_config = sim_module.config_mod.CONFIG
     sim_module.config_mod.CONFIG = Config(config_path)
     try:
-        with patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)):
-            with pytest.raises(RuntimeError):
-                await sim_module._single_fight(return_log=True)
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            pytest.raises(RuntimeError),
+        ):
+            await sim_module._single_fight(return_log=True)
     finally:
         sim_module.config_mod.CONFIG = old_config
 

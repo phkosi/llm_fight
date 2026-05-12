@@ -1,12 +1,13 @@
 import csv
 import random
+from logging import CRITICAL
+from pathlib import Path
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
+from click import ClickException, unstyle
 from typer.testing import CliRunner
 
 from llm_fight.cli import app
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
-from pathlib import Path
-from click import ClickException, unstyle
-from logging import CRITICAL
 from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.judge import JudgePhase2FailureError

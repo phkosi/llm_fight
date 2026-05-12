@@ -1,10 +1,12 @@
 """Configuration loader and writer for LLM Fight Engine (INI-style)."""
 
 from __future__ import annotations
-from collections.abc import Iterator
+
 import configparser
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+
 from .engine import constants as C
 
 DEFAULTS = {
@@ -124,15 +126,16 @@ class Config:
                         raise configparser.NoOptionError(key, section)
 
                 return self.cp.getboolean(section, key)
-            except ValueError:
+            except ValueError as exc:
                 if fallback is not None:
                     return _parse_bool(fallback)
                 original_value = "<not found>"
                 if has_option:
                     original_value = self.cp.get(section, key)
                 raise ValueError(
-                    f"Value for '{key}' in section '{section}' ('{original_value}') is not a valid boolean and no fallback provided."
-                )
+                    f"Value for '{key}' in section '{section}' ('{original_value}') "
+                    "is not a valid boolean and no fallback provided."
+                ) from exc
             except configparser.NoSectionError, configparser.NoOptionError:
                 if fallback is not None:
                     return _parse_bool(fallback)
@@ -145,7 +148,8 @@ class Config:
                     return cast(fallback)
                 except ValueError as e:
                     raise ValueError(
-                        f"Failed to cast fallback '{fallback}' for key '{key}' in section '{section}' to {cast.__name__}: {e}"
+                        f"Failed to cast fallback '{fallback}' for key '{key}' in section '{section}' "
+                        f"to {cast.__name__}: {e}"
                     ) from e
             # Re-raise the specific error if no fallback
             if not has_section:

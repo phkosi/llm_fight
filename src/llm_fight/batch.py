@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import csv
-from dataclasses import dataclass
 import hashlib
-from pathlib import Path
 import random
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from . import config as config_mod
 from .engine import constants as C

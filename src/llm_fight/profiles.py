@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import re
-from typing import Any
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, cast
 
 from jsonschema import ValidationError, validate
 
-from .anatomy import BodyPart, TissueLayer
 from . import config as config_mod
+from .anatomy import BodyPart, TissueLayer
 from .config import Config
 from .engine import constants as C
 from .validation import FighterProfileSchema
@@ -115,7 +115,7 @@ def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
     except ValidationError as exc:
         raise FighterProfileError(f"Invalid fighter profile: {exc.message}") from exc
 
-    raw_parts = raw_profile.get(C.BODY_PARTS, raw_profile.get(C.ANATOMY, []))
+    raw_parts = cast(list[dict[str, Any]], raw_profile.get(C.BODY_PARTS, raw_profile.get(C.ANATOMY, [])))
     parts: dict[str, BodyPart] = {}
     has_survival_consequence = False
     legacy_vital_count = sum(

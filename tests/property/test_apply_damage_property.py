@@ -1,8 +1,9 @@
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from llm_fight.state import FighterState
 from llm_fight.anatomy import PRESETS
 from llm_fight.engine import constants as C
+from llm_fight.state import FighterState
 
 
 @st.composite
@@ -52,7 +53,7 @@ def test_apply_damage_property(ops):
         max_hp_after = [layer.max_hp for layer in part.layers]
 
         # Current HP should never increase, while max HP remains stable.
-        for before, after in zip(hp_before, hp_after):
+        for before, after in zip(hp_before, hp_after, strict=False):
             assert after <= before
         assert max_hp_after == max_hp_before
 

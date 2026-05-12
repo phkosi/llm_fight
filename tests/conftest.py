@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 import pytest
 
 # Add the src-layout package directory to sys.path for local test runs.

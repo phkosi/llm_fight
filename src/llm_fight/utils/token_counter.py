@@ -1,6 +1,6 @@
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, List, Dict
 
 from ..engine import constants as C
 
@@ -10,7 +10,7 @@ try:  # tiktoken is optional for more accurate counts
     _ENCODING = None
     _ENCODING_MODEL = None
 
-    def _get_encoding() -> "tiktoken.Encoding":
+    def _get_encoding() -> tiktoken.Encoding:
         """Return a tiktoken encoding for the configured model."""
         global _ENCODING, _ENCODING_MODEL
         from .. import config as config_mod
@@ -21,7 +21,7 @@ try:  # tiktoken is optional for more accurate counts
             str,
             fallback="",
         )
-        if _ENCODING is None or _ENCODING_MODEL != model:
+        if _ENCODING is None or model != _ENCODING_MODEL:
             try:
                 _ENCODING = tiktoken.encoding_for_model(model)
             except Exception:
@@ -41,7 +41,7 @@ except Exception:  # pragma: no cover - fallback when tiktoken missing
         return len(_TOKEN_RE.findall(text))
 
 
-def count_message_tokens(messages: List[Dict[str, str]]) -> int:
+def count_message_tokens(messages: list[dict[str, str]]) -> int:
     """Count tokens across a list of chat messages."""
     return sum(count_tokens(m.get(C.AGENT_CONTENT, "")) for m in messages)
 
@@ -73,13 +73,12 @@ class PromptBudgetError(ValueError):
             )
         else:
             pieces.append(
-                f"Increase [{C.CONFIG_GENERAL}] {C.CONFIG_OLLAMA_NUM_CTX} "
-                "or shorten configured fighter/profile text."
+                f"Increase [{C.CONFIG_GENERAL}] {C.CONFIG_OLLAMA_NUM_CTX} or shorten configured fighter/profile text."
             )
         return " ".join(pieces)
 
 
-def compute_max_tokens(messages: List[Dict[str, str]], limit: int) -> int:
+def compute_max_tokens(messages: list[dict[str, str]], limit: int) -> int:
     """Return remaining tokens available for completion."""
     used = count_message_tokens(messages)
     remaining = limit - used
@@ -93,7 +92,7 @@ def _completion_reserve(requested_max_tokens: int, min_completion_tokens: int) -
 
 
 def compute_completion_tokens(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     requested_max_tokens: int,
     context_limit: int,
     *,
@@ -123,7 +122,7 @@ def _log_lines(recent_log: str) -> list[str]:
 
 
 def budget_messages_with_trimmed_log(
-    build_messages: Callable[[str], List[Dict[str, str]]],
+    build_messages: Callable[[str], list[dict[str, str]]],
     recent_log: str,
     *,
     requested_max_tokens: int,
@@ -131,7 +130,7 @@ def budget_messages_with_trimmed_log(
     min_completion_tokens: int,
     phase: str,
     log_window_setting: str,
-) -> tuple[List[Dict[str, str]], int, str]:
+) -> tuple[list[dict[str, str]], int, str]:
     """Fit messages by dropping oldest combat-log lines, preserving required context."""
     full_messages = build_messages(recent_log)
     try:

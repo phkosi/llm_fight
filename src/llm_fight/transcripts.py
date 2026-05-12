@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, cast
 
 from . import config as config_mod
 from .engine import constants as C
@@ -22,16 +23,16 @@ _TRACE_FIGHTER_ID: ContextVar[str | None] = ContextVar("llm_fight_trace_fighter_
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _timestamp_for_filename() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    return datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
 
 
 def _jsonable(value: Any) -> Any:
     if is_dataclass(value):
-        return _jsonable(asdict(value))
+        return _jsonable(asdict(cast(Any, value)))
     if hasattr(value, "value"):
         return value.value
     if isinstance(value, dict):
@@ -179,7 +180,7 @@ def create_fight_trace(run_index: int | None = None, fight_id: str | None = None
 
 @contextmanager
 def active_trace(writer: TraceWriter | NullTraceWriter) -> Iterator[None]:
-    token = _ACTIVE_TRACE.set(writer if getattr(writer, "enabled", False) else None)
+    token = _ACTIVE_TRACE.set(cast(TraceWriter | None, writer if getattr(writer, "enabled", False) else None))
     try:
         yield
     finally:

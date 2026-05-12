@@ -1,13 +1,14 @@
-import pytest
-from unittest.mock import AsyncMock, patch
 import json
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from llm_fight import config as config_mod
-from llm_fight.judge import JudgePhase2FailureError, _fighter_summary, judge_phase1, judge_phase2
-from llm_fight.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
 from llm_fight.engine import constants as C
+from llm_fight.judge import JudgePhase2FailureError, _fighter_summary, judge_phase1, judge_phase2
 from llm_fight.state import FighterState
 from llm_fight.utils.token_counter import PromptBudgetError
+from llm_fight.validation import JudgeP1Schema, JudgeP2Schema  # Assuming these are Pydantic models or similar
 
 # Mock states and attempts for testing
 MOCK_FIGHTER_A_STATE = {C.STATUS: "conscious", C.PAIN: 10}
@@ -153,13 +154,17 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
 @patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
     fenced = f"""```json
-{json.dumps({
-        "judgement_text": "ok",
-        "attempt_A_valid": True,
-        "attempt_A_prob": "0.5",
-        "attempt_B_valid": True,
-        "attempt_B_prob": "0.5",
-    })}
+{
+        json.dumps(
+            {
+                "judgement_text": "ok",
+                "attempt_A_valid": True,
+                "attempt_A_prob": "0.5",
+                "attempt_B_valid": True,
+                "attempt_B_prob": "0.5",
+            }
+        )
+    }
 ```"""
     mock_chat.return_value = [fenced]
 
@@ -176,11 +181,14 @@ async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
 @patch("llm_fight.judge.guarded_call")
 @patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
-    fenced = (
-        "```json\n"
-        f"{json.dumps({'narration': 'done', 'delta': {}, 'fight_end': False, 'winner': None, C.METADATA: {C.P2_FALLBACK_USED: True}})}"
-        "\n```"
-    )
+    payload = {
+        "narration": "done",
+        "delta": {},
+        "fight_end": False,
+        "winner": None,
+        C.METADATA: {C.P2_FALLBACK_USED: True},
+    }
+    fenced = f"```json\n{json.dumps(payload)}\n```"
     mock_chat.return_value = [fenced]
 
     async def mock_gc_logic(call_func, schema, max_retries=None):
@@ -287,12 +295,14 @@ async def test_judge_phase2_repair_budget_error_does_not_call_second_chat(mock_c
         log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
     )
 
-    with patch(
-        "llm_fight.judge.budget_messages_with_trimmed_log",
-        side_effect=[([{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "{}"}], 512, ""), budget_error],
+    with (
+        patch(
+            "llm_fight.judge.budget_messages_with_trimmed_log",
+            side_effect=[([{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "{}"}], 512, ""), budget_error],
+        ),
+        pytest.raises(PromptBudgetError) as exc_info,
     ):
-        with pytest.raises(PromptBudgetError) as exc_info:
-            await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+        await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
 
     assert exc_info.value.phase == C.PROMPT_PHASE_JUDGE_P2_REPAIR
     mock_chat.assert_awaited_once()

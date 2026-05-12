@@ -1,4 +1,4 @@
-﻿"""System prompt templates for LLM agents."""
+"""System prompt templates for LLM agents."""
 
 FIGHTER_SYSTEM_PROMPT = """
 You are Fighter {fighter_id} (display name: {display_name}), a {class_} currently fighting inside {environment}.

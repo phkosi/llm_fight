@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 from . import constants as C
 
@@ -12,20 +13,20 @@ class CombatTurn:
     turn: int
     attempt_A: str = ""
     attempt_B: str = ""
-    judge_p1: Dict[str, Any] = field(default_factory=dict)
-    judge_p2: Dict[str, Any] = field(default_factory=dict)
-    state_A_before: Dict[str, Any] = field(default_factory=dict)
-    state_B_before: Dict[str, Any] = field(default_factory=dict)
-    state_A_after: Dict[str, Any] = field(default_factory=dict)
-    state_B_after: Dict[str, Any] = field(default_factory=dict)
-    rolls: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    judge_p1: dict[str, Any] = field(default_factory=dict)
+    judge_p2: dict[str, Any] = field(default_factory=dict)
+    state_A_before: dict[str, Any] = field(default_factory=dict)
+    state_B_before: dict[str, Any] = field(default_factory=dict)
+    state_A_after: dict[str, Any] = field(default_factory=dict)
+    state_B_after: dict[str, Any] = field(default_factory=dict)
+    rolls: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def narration(self) -> str:
         return self.judge_p2.get(C.NARRATION, "")
 
     @property
-    def p2_metadata(self) -> Dict[str, Any]:
+    def p2_metadata(self) -> dict[str, Any]:
         metadata = self.judge_p2.get(C.METADATA, {})
         return metadata if isinstance(metadata, dict) else {}
 
@@ -202,14 +203,17 @@ class CombatTurn:
         for stat in (C.PAIN, C.EXHAUSTION, C.HEAT):
             before_value = before.get(stat)
             after_value = after.get(stat)
-            if isinstance(before_value, (int, float)) and isinstance(after_value, (int, float)):
-                if before_value != after_value:
-                    delta = after_value - before_value
-                    sign = "+" if delta > 0 else ""
-                    lines.append(
-                        f"{self._fighter_display_name_suffix(fighter)} {stat} "
-                        f"{sign}{delta:g} ({before_value:g} -> {after_value:g})"
-                    )
+            if (
+                isinstance(before_value, (int, float))
+                and isinstance(after_value, (int, float))
+                and before_value != after_value
+            ):
+                delta = after_value - before_value
+                sign = "+" if delta > 0 else ""
+                lines.append(
+                    f"{self._fighter_display_name_suffix(fighter)} {stat} "
+                    f"{sign}{delta:g} ({before_value:g} -> {after_value:g})"
+                )
         return lines
 
     def _fighter_display_name_suffix(self, fighter: str) -> str:
@@ -281,7 +285,7 @@ class CombatTurn:
             return []
 
         changes = []
-        for index, (before_layer, after_layer) in enumerate(zip(before_layers, after_layers), start=1):
+        for index, (before_layer, after_layer) in enumerate(zip(before_layers, after_layers, strict=False), start=1):
             before_hp = self._layer_current_hp(before_layer)
             after_hp = self._layer_current_hp(after_layer)
             if before_hp != after_hp:
@@ -368,8 +372,8 @@ class CombatLog:
     """Container for `CombatTurn` objects with helper query methods."""
 
     def __init__(self) -> None:
-        self.turns: List[CombatTurn] = []
-        self.profile_generation: Dict[str, Any] = {}
+        self.turns: list[CombatTurn] = []
+        self.profile_generation: dict[str, Any] = {}
 
     def append(self, turn: CombatTurn) -> None:
         self.turns.append(turn)
@@ -377,7 +381,7 @@ class CombatLog:
     def __len__(self) -> int:
         return len(self.turns)
 
-    def get_last_n(self, n: int) -> List[CombatTurn]:
+    def get_last_n(self, n: int) -> list[CombatTurn]:
         return self.turns[-n:]
 
     def to_summary(self, last_n: int | None = None) -> str:

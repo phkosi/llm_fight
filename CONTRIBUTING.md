@@ -7,9 +7,11 @@ For local development:
 ```bash
 uv sync --locked --all-extras --dev
 cp llmfight.ini.example llmfight.ini
-uv run black --check .
-uv run flake8
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src/llm_fight
 uv run pytest -q
+uv run pre-commit run --all-files
 ```
 
 On PowerShell, copy the config with:

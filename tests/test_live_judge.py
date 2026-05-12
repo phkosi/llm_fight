@@ -1,11 +1,12 @@
-import os
 import asyncio
+import os
+
 import pytest
 from jsonschema import validate
 
+from llm_fight.engine import constants as C
 from llm_fight.judge import judge_phase1, judge_phase2
 from llm_fight.validation import JudgeP1Schema, JudgeP2Schema
-from llm_fight.engine import constants as C
 
 pytestmark = pytest.mark.live
 

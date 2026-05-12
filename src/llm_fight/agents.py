@@ -1,13 +1,14 @@
 """Async wrappers for calling Ollama chat completions."""
 
-import aiohttp
 import asyncio
 import ipaddress
 import os
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any, cast
 from urllib.parse import SplitResult, urlsplit, urlunsplit
+
+import aiohttp
 
 from . import config as config_mod
 from .engine import constants as C
@@ -106,7 +107,7 @@ def _proxy_mode() -> str:
     valid_modes = {C.OLLAMA_PROXY_AUTO, C.OLLAMA_PROXY_DISABLED, C.OLLAMA_PROXY_ENABLED}
     if mode not in valid_modes:
         raise ValueError(
-            f"[{C.CONFIG_GENERAL}] {C.CONFIG_OLLAMA_PROXY_MODE} must be one of: " f"{', '.join(sorted(valid_modes))}."
+            f"[{C.CONFIG_GENERAL}] {C.CONFIG_OLLAMA_PROXY_MODE} must be one of: {', '.join(sorted(valid_modes))}."
         )
     return mode
 
@@ -160,10 +161,10 @@ class ChatResult:
     """Text response plus provider metadata when the transport supplies it."""
 
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _response_format(schema: Dict[str, Any]) -> Dict[str, Any]:
+def _response_format(schema: dict[str, Any]) -> dict[str, Any]:
     return {
         C.SCHEMA_TYPE: "json_schema",
         "json_schema": {
@@ -198,7 +199,7 @@ def _schema_for_ollama(schema: Any) -> Any:
     if not isinstance(schema, dict):
         return schema
 
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     for key, value in schema.items():
         if key in UNSUPPORTED_OLLAMA_SCHEMA_KEYS:
             continue
@@ -213,9 +214,9 @@ def _schema_for_ollama(schema: Any) -> Any:
     return result
 
 
-def _metadata_from_response(data: Dict[str, Any], *, use_openai: bool) -> Dict[str, Any]:
+def _metadata_from_response(data: dict[str, Any], *, use_openai: bool) -> dict[str, Any]:
     """Extract real provider metadata without inventing missing token counts."""
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
     if use_openai:
         usage = data.get("usage", {})
         if isinstance(usage, dict):
@@ -267,7 +268,7 @@ class SessionManager:
         self._session = None
 
 
-def _request_log_context(endpoint: ResolvedEndpoint, payload: Dict[str, Any], request_id: str) -> str:
+def _request_log_context(endpoint: ResolvedEndpoint, payload: dict[str, Any], request_id: str) -> str:
     messages = payload.get(C.AGENT_MESSAGES, [])
     message_count = len(messages) if isinstance(messages, list) else 0
     message_chars = 0
@@ -307,8 +308,7 @@ def _warn_openai_compat_native_options(endpoint: ResolvedEndpoint) -> None:
         return
     _OPENAI_COMPAT_WARNING_ENDPOINTS.add(key)
     logger.warning(
-        "OpenAI-compatible endpoint mode ignores native Ollama settings "
-        "%s, %s, %s, and schema grammar format for %s.",
+        "OpenAI-compatible endpoint mode ignores native Ollama settings %s, %s, %s, and schema grammar format for %s.",
         C.CONFIG_OLLAMA_NUM_CTX,
         C.CONFIG_OLLAMA_KEEP_ALIVE,
         C.AGENT_THINK,
@@ -319,7 +319,7 @@ def _warn_openai_compat_native_options(endpoint: ResolvedEndpoint) -> None:
 # -------------- helper ---------------------------------------------
 async def _post_json_result(
     session: aiohttp.ClientSession,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     retries: int = 0,
     endpoint: ResolvedEndpoint | None = None,
 ) -> ChatResult:
@@ -330,7 +330,7 @@ async def _post_json_result(
     log_context = _request_log_context(endpoint, payload, request_id)
     while True:
         try:
-            async with session.post(endpoint.chat_url, json=payload, headers=HEADERS, timeout=300) as resp:
+            async with session.post(endpoint.chat_url, json=payload, headers=HEADERS, timeout=cast(Any, 300)) as resp:
                 if resp.status >= 500:
                     raise aiohttp.ClientResponseError(
                         request_info=resp.request_info,
@@ -366,7 +366,7 @@ async def _post_json_result(
                 continue
             logger.error("Ollama API request failed with status %s. %s", e.status, log_context)
             raise
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (TimeoutError, aiohttp.ClientError) as e:
             if attempt < retries:
                 delay = 2**attempt
                 logger.warning(
@@ -394,7 +394,7 @@ async def _post_json_result(
 
 async def _post_json(
     session: aiohttp.ClientSession,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     retries: int = 0,
     endpoint: ResolvedEndpoint | None = None,
 ) -> str:
@@ -403,15 +403,15 @@ async def _post_json(
 
 
 async def chat(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     max_tokens: int,
     num_ctx: int | None = None,
     best_of: int = 1,
-    schema: Optional[Dict[str, Any]] = None,
+    schema: dict[str, Any] | None = None,
     session: aiohttp.ClientSession | None = None,
     retries: int = 0,
     log_transcript: bool = True,
-) -> List[str]:
+) -> list[str]:
     """Return ``best_of`` completions from Ollama.
 
     ``max_tokens`` limits how many tokens the model may generate. ``num_ctx``
@@ -433,15 +433,15 @@ async def chat(
 
 
 async def chat_with_metadata(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     max_tokens: int,
     num_ctx: int | None = None,
     best_of: int = 1,
-    schema: Optional[Dict[str, Any]] = None,
+    schema: dict[str, Any] | None = None,
     session: aiohttp.ClientSession | None = None,
     retries: int = 0,
     log_transcript: bool = True,
-) -> List[ChatResult]:
+) -> list[ChatResult]:
     """Return completions with real provider metadata when available."""
     tasks = []
     cfg = config_mod.CONFIG
@@ -453,7 +453,7 @@ async def chat_with_metadata(
     if use_openai:
         _warn_openai_compat_native_options(endpoint)
 
-    async def _collect(sess: aiohttp.ClientSession) -> List[ChatResult]:
+    async def _collect(sess: aiohttp.ClientSession) -> list[ChatResult]:
         for _ in range(best_of):
             if use_openai:
                 payload = {
@@ -503,9 +503,11 @@ async def ping_ollama(timeout: int = 5) -> None:
     """Raise an error if the Ollama server cannot be reached."""
     endpoint = resolve_endpoint()
     try:
-        async with aiohttp.ClientSession(trust_env=endpoint.trust_env) as session:
-            async with session.get(endpoint.health_url, timeout=timeout) as resp:
-                resp.raise_for_status()
+        async with (
+            aiohttp.ClientSession(trust_env=endpoint.trust_env) as session,
+            session.get(endpoint.health_url, timeout=cast(Any, timeout)) as resp,
+        ):
+            resp.raise_for_status()
     except Exception as exc:
         raise ConnectionError(
             f"Cannot reach Ollama server at {endpoint.redacted_health_url}: {type(exc).__name__}"

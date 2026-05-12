@@ -1,21 +1,22 @@
 """Dataclasses representing runtime mutable fighter state."""
 
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict, fields, is_dataclass
-import random
-from typing import Dict, List, Any
+
 import copy
 import math
+import random
 import re
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from typing import Any, cast
+
 from jsonschema import ValidationError, validate
 
-from .rng import choice
-
-from .anatomy import BodyPart, PRESETS
+from . import config as config_mod
+from .anatomy import PRESETS, BodyPart
 from .engine import constants as C
 from .engine.logger import logger
-from . import config as config_mod
 from .profiles import FighterProfile, resolve_fighter_profile
+from .rng import choice
 from .validation import EffectSchema
 
 PART_ALIASES = {
@@ -85,9 +86,9 @@ class Effect:
     on_apply: str  # Description of what happens when applied (for LLM context / logging)
     on_tick: str | None = None  # Description of what happens each tick (for LLM context / logging)
     # Actual logic for on_apply and on_tick will be handled in FighterState methods
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    mechanics: List[Dict[str, Any]] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    mechanics: list[dict[str, Any]] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     fresh_turns: int = field(default=0, repr=False, compare=False)
 
     def tick(self):
@@ -105,7 +106,7 @@ class Effect:
         return self.ttl == 0
 
 
-def _effect_asdict(effect: Effect) -> Dict[str, Any]:
+def _effect_asdict(effect: Effect) -> dict[str, Any]:
     data = asdict(effect)
     data.pop("fresh_turns", None)
     return data
@@ -128,19 +129,19 @@ class FighterState:
     """Represents the complete state of a fighter at any point in combat."""
 
     id: str
-    parts: Dict[str, BodyPart]
+    parts: dict[str, BodyPart]
     pain: int = 0
     exhaustion: int = 0
     heat: int = 0
-    buffs: List[Effect] = field(default_factory=list)
-    debuffs: List[Effect] = field(default_factory=list)
+    buffs: list[Effect] = field(default_factory=list)
+    debuffs: list[Effect] = field(default_factory=list)
     status: C.FighterStatus = C.FighterStatus.FIGHTING
     display_name: str = ""
     class_: str = "Generic Fighter"
     theme: str = ""
     loadout: str = "their bare fists and wits"
     environment: str = "an open arena"
-    profile_generation: Dict[str, Any] | None = None
+    profile_generation: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         self.display_name = " ".join(str(self.display_name or "").strip().split()) or self.id
@@ -234,7 +235,7 @@ class FighterState:
         return cls.from_preset(id_, "humanoid", config_section=section, config=cfg)
 
     # ------------------ utilities --------------------------------------
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         """Serializes the fighter's state to a JSON-compatible dictionary."""
         return _to_public_json(self)
 
@@ -279,10 +280,10 @@ class FighterState:
                 tags.append(normalized)
         return tags
 
-    def _safe_effect_removal_selector(self, raw_selector: Any) -> Dict[str, Any] | None:
+    def _safe_effect_removal_selector(self, raw_selector: Any) -> dict[str, Any] | None:
         if isinstance(raw_selector, str):
             effect_name = raw_selector.strip()
-            selector: Dict[str, Any] = {C.NAME: effect_name}
+            selector: dict[str, Any] = {C.NAME: effect_name}
         elif isinstance(raw_selector, dict):
             raw_name = raw_selector.get(C.NAME)
             if not isinstance(raw_name, str):
@@ -323,7 +324,7 @@ class FighterState:
             return None
         return selector
 
-    def _effect_matches_removal_selector(self, eff: Effect, selector: Dict[str, Any], list_name: str) -> bool:
+    def _effect_matches_removal_selector(self, eff: Effect, selector: dict[str, Any], list_name: str) -> bool:
         if eff.name != selector[C.NAME]:
             return False
         if selector.get(C.TYPE) not in (None, list_name):
@@ -333,7 +334,7 @@ class FighterState:
             return eff.metadata.get(C.TARGETED_PART) == targeted_part
         return True
 
-    def _apply_effect_removal_selector(self, selector: Dict[str, Any]) -> None:
+    def _apply_effect_removal_selector(self, selector: dict[str, Any]) -> None:
         for list_name in (C.BUFFS, C.DEBUFFS):
             if selector.get(C.TYPE) not in (None, list_name):
                 continue
@@ -345,13 +346,13 @@ class FighterState:
             )
         logger.debug("Effect removal selector applied to %s: %r", self.id, selector)
 
-    def _safe_effect_mechanics(self, raw_mechanics: Any) -> list[Dict[str, Any]] | None:
+    def _safe_effect_mechanics(self, raw_mechanics: Any) -> list[dict[str, Any]] | None:
         if raw_mechanics is None:
             return []
         if not isinstance(raw_mechanics, list):
             logger.warning("Rejected effect for %s with non-list mechanics.", self.id)
             return None
-        mechanics: list[Dict[str, Any]] = []
+        mechanics: list[dict[str, Any]] = []
         for mechanic in raw_mechanics:
             if not isinstance(mechanic, dict):
                 logger.warning("Rejected effect for %s with non-object mechanic: %r", self.id, mechanic)
@@ -360,7 +361,7 @@ class FighterState:
             normalized = dict(mechanic)
             if kind == C.EFFECT_MECHANIC_DAMAGE_TICK:
                 target_part = normalized.get(C.TARGETED_PART)
-                resolved_part = self.normalize_part_name(target_part)
+                resolved_part = self.normalize_part_name(cast(str, target_part))
                 if resolved_part is None:
                     logger.warning(
                         "Rejected effect mechanic for %s with unknown targeted part: %r",
@@ -699,7 +700,8 @@ class FighterState:
             logger.info(f"{self.id} status is now {self.status}")
 
         logger.debug(
-            f"Checking death by pain for {self.id}: Pain={self.pain} (Limit={C.MAX_PAIN_BEFORE_DEATH}), Status={self.status}"
+            f"Checking death by pain for {self.id}: Pain={self.pain} "
+            f"(Limit={C.MAX_PAIN_BEFORE_DEATH}), Status={self.status}"
         )
         if self.pain >= C.MAX_PAIN_BEFORE_DEATH and self.status != C.FighterStatus.DEAD:
             logger.info(f"{self.id} met conditions for death by pain. Current status before change: {self.status}")
@@ -825,7 +827,7 @@ class FighterState:
 
         self._update_status_from_invariants()
 
-    def apply_delta(self, delta: Dict[str, Any]):
+    def apply_delta(self, delta: dict[str, Any]):
         """Applies changes from a Judge P2 delta to the fighter's state."""
         if not delta:
             self._update_status_from_invariants()
@@ -870,7 +872,8 @@ class FighterState:
                 else:
                     self.debuffs.append(new_effect)
                 logger.info(
-                    f"Effect '{new_effect.name}' added to {self.id}. TTL: {new_effect.ttl}, Magnitude: {new_effect.magnitude:.2f}"
+                    f"Effect '{new_effect.name}' added to {self.id}. TTL: {new_effect.ttl}, "
+                    f"Magnitude: {new_effect.magnitude:.2f}"
                 )
 
         if C.EFFECTS_REMOVED in delta:
@@ -927,7 +930,8 @@ class FighterState:
                                 )
                     else:
                         logger.debug(
-                            f"'{eff.name}' effect on {self.id} has no specific target part ('{affected_part_name}') or target is gone."
+                            f"'{eff.name}' effect on {self.id} has no specific target part "
+                            f"('{affected_part_name}') or target is gone."
                         )
 
                 elif eff.name == C.EFFECT_BLEEDING:
@@ -935,7 +939,8 @@ class FighterState:
                     self.exhaustion += int(effect_magnitude * 0.5)
                     affected_part_name = eff.metadata.get(C.TARGETED_PART)
                     logger.debug(
-                        f"{self.id}'s '{affected_part_name}' is bleeding (magnitude {effect_magnitude:.2f}) due to '{C.EFFECT_BLEEDING}' effect."
+                        f"{self.id}'s '{affected_part_name}' is bleeding "
+                        f"(magnitude {effect_magnitude:.2f}) due to '{C.EFFECT_BLEEDING}' effect."
                     )
 
                 if eff.on_tick:

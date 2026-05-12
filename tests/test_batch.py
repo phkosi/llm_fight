@@ -433,9 +433,9 @@ async def test_run_batch_invalid_concurrency_raises_without_starting_fight(tmp_p
     with (
         patch.object(sim_module, "_single_fight", new=mock_fight),
         patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
+        pytest.raises(ValueError, match="concurrent_runs"),
     ):
-        with pytest.raises(ValueError, match="concurrent_runs"):
-            await asyncio.wait_for(sim_module.run_batch(out_file), timeout=0.1)
+        await asyncio.wait_for(sim_module.run_batch(out_file), timeout=0.1)
 
     assert not out_file.exists()
     mock_fight.assert_not_awaited()
@@ -457,9 +457,9 @@ async def test_run_batch_negative_runs_raises_without_starting_fight(tmp_path):
     with (
         patch.object(sim_module, "_single_fight", new=mock_fight),
         patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
+        pytest.raises(ValueError, match="runs"),
     ):
-        with pytest.raises(ValueError, match="runs"):
-            await asyncio.wait_for(sim_module.run_batch(out_file), timeout=0.1)
+        await asyncio.wait_for(sim_module.run_batch(out_file), timeout=0.1)
 
     assert not out_file.exists()
     mock_fight.assert_not_awaited()
@@ -647,9 +647,9 @@ async def test_run_batch_propagates_prompt_budget_error(tmp_path):
     with (
         patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
         patch.object(sim_module, "_single_fight", new=AsyncMock(side_effect=error)),
+        pytest.raises(PromptBudgetError),
     ):
-        with pytest.raises(PromptBudgetError):
-            await sim_module.run_batch(out_file)
+        await sim_module.run_batch(out_file)
 
 
 @pytest.mark.asyncio
@@ -690,9 +690,9 @@ async def test_run_batch_cancels_pending_tasks_on_prompt_budget_error(tmp_path):
     with (
         patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
         patch.object(sim_module, "_single_fight", new=AsyncMock(side_effect=fake_single_fight)),
+        pytest.raises(PromptBudgetError),
     ):
-        with pytest.raises(PromptBudgetError):
-            await sim_module.run_batch(out_file)
+        await sim_module.run_batch(out_file)
 
     assert pending_cancelled is True
     with out_file.open(newline="") as fp:

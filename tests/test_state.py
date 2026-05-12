@@ -1,8 +1,8 @@
 import pytest
-from llm_fight.state import FighterState, Effect
 
 # PRESETS import ensures presets are loaded when FighterState.from_preset runs
 from llm_fight.engine import constants as C
+from llm_fight.state import Effect, FighterState
 
 
 # Fixture to create a fresh humanoid fighter state for each test
@@ -774,7 +774,9 @@ def test_burn_tick_mutates_selected_layer_and_logs_it(humanoid_fighter: FighterS
 
     after_current = [layer.current_hp for layer in target_part.layers]
     after_max = [layer.max_hp for layer in target_part.layers]
-    changed = [idx for idx, (before, after) in enumerate(zip(before_current, after_current)) if before != after]
+    changed = [
+        idx for idx, (before, after) in enumerate(zip(before_current, after_current, strict=False)) if before != after
+    ]
     assert changed == [len(target_part.layers) - 1]
     assert after_current[-1] == before_current[-1] - 3
     assert after_max == before_max

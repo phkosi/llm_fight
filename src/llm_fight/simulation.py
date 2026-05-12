@@ -1,20 +1,19 @@
-﻿"""Batch self-play simulation harness."""
+"""Batch self-play simulation harness."""
 
 import asyncio
+import random
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-import random
-from typing import Any, Dict, Callable
+from typing import Any, cast
 
-from .state import FighterState
-from .rng import rand
-from .judge import judge_phase1, judge_phase2
+from . import batch as batch_mod
 from . import config as config_mod
-from .engine.fighter import get_fighter_attempt
 from .engine import constants as C
-from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
-from .transcripts import active_trace, create_fight_trace, llm_trace_context
+from .engine.fighter import get_fighter_attempt
+from .engine.logger import logger
+from .judge import judge_phase1, judge_phase2
 from .phase2_authorization import authorize_phase2_result as _authorize_phase2_result
 from .profile_generation import (
     ProfileGenerationError,
@@ -22,7 +21,9 @@ from .profile_generation import (
     generate_fighter_profile,
     profile_generation_metadata,
 )
-from . import batch as batch_mod
+from .rng import rand
+from .state import FighterState
+from .transcripts import active_trace, create_fight_trace, llm_trace_context
 
 BatchSummary = batch_mod.BatchSummary
 _derive_fight_seed = batch_mod._derive_fight_seed
@@ -37,7 +38,7 @@ class FightEvent:
     name: str
     turn: int | None = None
     fighter_id: str | None = None
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 FightEventCallback = Callable[[FightEvent], None]
@@ -88,7 +89,7 @@ def _winner_display_name(winner: str | None, fighters: dict[str, FighterState]) 
     return fighter.display_name
 
 
-def _judge_outcome(p2: Dict[str, Any]) -> str | None:
+def _judge_outcome(p2: dict[str, Any]) -> str | None:
     if not p2.get(C.FIGHT_END, False):
         if p2.get(C.WINNER) is not None:
             logger.warning("Judge supplied winner without fight_end=true; ignoring winner.")
@@ -105,7 +106,7 @@ def _judge_outcome(p2: Dict[str, Any]) -> str | None:
 
 
 def _resolve_attempt_roll(
-    p1: Dict[str, Any],
+    p1: dict[str, Any],
     fighter_id: str,
     fight_rng: random.Random | None = None,
 ) -> dict[str, Any]:
@@ -113,7 +114,7 @@ def _resolve_attempt_roll(
     valid = p1.get(f"{C.ATTEMPT}_{fighter_id}_valid", False) is True
     raw_probability = p1.get(f"{C.ATTEMPT}_{fighter_id}_prob", "0.0")
     probability_text = str(raw_probability) if raw_probability is not None else ""
-    metadata = {
+    metadata: dict[str, Any] = {
         "valid": valid,
         "probability": None,
         "probability_text": probability_text,
@@ -149,7 +150,7 @@ def _resolve_attempt_roll(
 
 
 def _resolve_turn_rolls(
-    p1: Dict[str, Any],
+    p1: dict[str, Any],
     fight_rng: random.Random | None = None,
 ) -> tuple[dict[str, bool], dict[str, dict[str, Any]]]:
     roll_metadata = {
@@ -184,7 +185,7 @@ def _active_roll_modifier_mechanics(fighter: FighterState):
     return mechanics
 
 
-def _apply_effect_roll_modifiers(p1: Dict[str, Any], fighters: dict[str, FighterState]) -> Dict[str, Any]:
+def _apply_effect_roll_modifiers(p1: dict[str, Any], fighters: dict[str, FighterState]) -> dict[str, Any]:
     """Apply deterministic active-effect modifiers to P1 validity/probabilities."""
     modified = dict(p1)
     notes: list[str] = []
@@ -340,7 +341,7 @@ async def _single_fight(
     on_event: FightEventCallback | None = None,
     run_index: int | None = None,
     fight_id: str | None = None,
-) -> Dict[str, str] | tuple[Dict[str, str], CombatLog]:
+) -> dict[str, str] | tuple[dict[str, str], CombatLog]:
     """
     Simulates a single fight between two AI fighters (A and B).
 
@@ -534,7 +535,10 @@ async def _single_fight(
             turn_entry.state_B_after = B.to_json()
 
             combat_log.append(turn_entry)
-            _emit_event(on_event, FightEvent(C.FIGHT_EVENT_TURN_COMPLETE, turn=turn, data={"turn": turn_entry}))
+            _emit_event(
+                on_event,
+                FightEvent(C.FIGHT_EVENT_TURN_COMPLETE, turn=turn, data={"turn": turn_entry}),
+            )
             if config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
                 logger.info(turn_entry.to_simple_text())
 
@@ -633,5 +637,5 @@ async def run_batch(
         fighter_a_section=fighter_a_section,
         fighter_b_section=fighter_b_section,
         progress=progress,
-        fight_runner=_single_fight,
+        fight_runner=cast(batch_mod.FightRunner, _single_fight),
     )

@@ -817,8 +817,9 @@ Required tests:
 
 - `uv run pytest -q tests\test_simulation.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_phase2_authorization.py`
 - `uv run pytest -q`
-- `uv run black --check .`
-- `uv run flake8`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
 
 Verification:
 
@@ -851,8 +852,9 @@ Required tests:
 
 - `uv run pytest -q tests\test_batch.py tests\test_simulation.py tests\test_simulation_failures.py tests\test_simulation_integration.py tests\test_cli.py tests\test_live_simulation.py`
 - `uv run pytest -q`
-- `uv run black --check .`
-- `uv run flake8`
+- `uv run ruff format --check .`
+- `uv run ruff check .`
+- `uv run mypy src/llm_fight`
 
 Verification:
 

@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 import llm_fight.simulation as sim_module
 from llm_fight.engine import constants as C

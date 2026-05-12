@@ -3,31 +3,36 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any
 
-from .combat_log import CombatTurn
 from . import constants as C
+from .combat_log import CombatTurn
+
+Console: Any
 
 try:
+    from rich.console import Console as _RichConsole
     from rich.table import Table
-    from rich.console import Console as RichConsole
     from rich.text import Text
 
     RICH_AVAILABLE = True
-    Console = RichConsole
+    Console = _RichConsole
 except Exception:  # pragma: no cover - import error fallback
     RICH_AVAILABLE = False
 
-    class Console:
+    class _FallbackConsole:
         """Minimal console fallback printing to stdout."""
 
         def print(self, *objects: object, **kwargs: object) -> None:
             for obj in objects:
                 print(obj)
 
+    Console = _FallbackConsole
 
-def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
+
+def make_turn_table(turn: CombatTurn, simple: bool = False) -> Table | str:
     """Return a rich ``Table`` or plain text representation of ``turn``."""
     if simple or not RICH_AVAILABLE:
         if simple:
@@ -93,7 +98,7 @@ def _fighter_design_lines(fighter_id: str, state: dict[str, Any]) -> list[str]:
     return lines
 
 
-def make_fighter_design_view(fighters: dict[str, dict[str, Any]], simple: bool = False) -> "Table | str":
+def make_fighter_design_view(fighters: dict[str, dict[str, Any]], simple: bool = False) -> Table | str:
     """Return a pre-fight fighter design view for rich or plain output."""
     if simple or not RICH_AVAILABLE:
         lines = ["Fighter Designs"]
@@ -176,7 +181,7 @@ def format_token_summary(metadata_items: Iterable[dict[str, Any]]) -> str:
     return "Token usage: " + ", ".join(parts)
 
 
-def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None = None) -> "Table | str":
+def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None = None) -> Table | str:
     """Create a summary table from simulation ``results``."""
     data = list(results)
     if total_runs is None:
