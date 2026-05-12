@@ -35,7 +35,14 @@ uv run pytest -q
 Live Ollama tests are skipped by default. Opt in only when Ollama is intentionally running and configured:
 
 ```bash
+uv sync --locked --all-extras --dev
 uv run pytest -q --run-live
+```
+
+Heavy performance probes are separately gated:
+
+```bash
+uv run pytest -q --run-live --run-perf tests/test_memory_usage.py
 ```
 
 ## Playtest Loop

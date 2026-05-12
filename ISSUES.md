@@ -418,14 +418,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-032: Live/perf test gating and docs are inconsistent
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Live/Perf Gating And Installed-Package Test Workflow
 - Source: codebase review
 - Area: Test workflow, docs
-- Evidence: Live tests require `--run-live` in `tests/conftest.py:15`, but some tests also require `API_URL`; `tests/test_memory_usage.py:3` imports optional `ollama` at collection time; AGENTS live command can include heavy perf coverage while README omits newer live simulation smoke.
+- Evidence: Live tests required `--run-live` in `tests/conftest.py:15`, but some tests also required `API_URL`; `tests/test_memory_usage.py:3` imported optional `ollama` at collection time; AGENTS live command could include heavy perf coverage while README omitted newer live simulation smoke. Resolved by centralizing `--run-live`, `API_URL`, and `--run-perf` collection gating, moving the optional `ollama` import behind a runtime skip, documenting quick live versus perf commands, and making CI use `uv sync --locked --dev`.
 - Impact: `--run-live` can still skip useful smoke tests, accidentally run heavy VRAM probes, or fail collection without live extras.
 - Suggested fix: Centralize live gating, move optional imports behind skips, split quick live smoke from perf, and document both.
-- Tests: Pytester-style gating tests plus `uv sync --locked --dev && uv run pytest -q` collection without `live` extra.
+- Tests: Added pytester coverage for live/perf marker gates. Verified `uv sync --locked --dev`, `uv run pytest -q tests\test_test_gating.py tests\test_packaging.py tests\test_memory_usage.py` -> 6 passed, 1 skipped, and `uv run llmfight --help` -> passed.
 
 ### ISSUE-033: Docs do not clearly state current fixed-humanoid/retry/progress contracts
 
@@ -451,14 +451,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-035: Test suite bypasses installed package behavior
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Live/Perf Gating And Installed-Package Test Workflow
 - Source: codebase review
 - Area: Test workflow
-- Evidence: `tests/conftest.py:5` inserts `src` directly into `sys.path`.
+- Evidence: `tests/conftest.py:5` inserted `src` directly into `sys.path`. Resolved by removing manual path insertion, adding package import and installed `llmfight --help` smoke tests, and adding a CI console-script smoke step.
 - Impact: Packaging metadata, console-script, or installed-resource regressions can pass tests.
 - Suggested fix: Rely on editable install via `uv` and add packaging smoke checks.
-- Tests: CI step using installed package/import and `llmfight --help` without manual `sys.path` insertion.
+- Tests: Added `tests/test_packaging.py` for import and installed console script coverage. Verified `uv sync --locked --dev`, `uv run pytest -q tests\test_test_gating.py tests\test_packaging.py tests\test_memory_usage.py` -> 6 passed, 1 skipped, and `uv run llmfight --help` -> passed.
 
 ## Resolved Playtest Issues
 
