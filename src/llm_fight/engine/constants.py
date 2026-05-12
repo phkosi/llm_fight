@@ -265,6 +265,10 @@ CONTEXT_RECENT_LOG = "recent_log"
 CONTEXT_OPPONENT_NAME = "opponent_name"
 CONTEXT_OPPONENT_CLASS = "opponent_class"  # If classes are introduced
 CONTEXT_SELF_CLASS = "self_class"  # If classes are introduced
+ACTIVE_EFFECTS = "active_effects"
+VALID_TARGET_PARTS = "valid_target_parts"
+TARGET_PARTS = "target_parts"
+DAMAGED_PARTS = "damaged_parts"
 
 # Validation outcomes
 VALIDATION_PROB = "prob"

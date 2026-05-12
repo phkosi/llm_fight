@@ -154,6 +154,13 @@ attempts, rolls, valid target parts, and active-effect reminders remain
 authoritative. If required non-log content cannot fit in `ollama_num_ctx`, the
 run surfaces a prompt-budget error rather than sending a one-token request.
 
+Fighter prompts and Judge Phase 1 share a compact state-summary contract:
+identity/class, loadout, environment, status, pain/exhaustion/heat, structured
+`active_effects`, canonical `valid_target_parts`, shallow `target_parts`
+anatomy metadata, and `damaged_parts` only for non-intact, severed, or partially
+damaged parts. Effect summaries expose type, name, TTL, magnitude, target,
+mechanics, and tags, but not freeform `on_apply` or `on_tick` prose.
+
 `judge_phase2_failure_policy = fail_open` preserves long-run playtests by
 recording an exhausted Judge Phase 2 parse/validation retry cycle as a marked
 no-op turn with `metadata.fallback_used = true`, empty `delta`, `fight_end =

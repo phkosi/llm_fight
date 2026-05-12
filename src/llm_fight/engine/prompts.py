@@ -6,6 +6,8 @@ Pain: {pain_desc}   Exhaustion: {exhaustion_desc}   Heat: {heat_desc}
 Active effects: {effects_list}
 Your valid target parts: {own_target_parts}
 Opponent valid target parts: {opponent_target_parts}
+Self state summary: {self_state_summary}
+Opponent state summary: {opponent_state_summary}
 Last {turn_window} turns:
 {recent_log}
 Current state reminder: active effects right now are {effects_list}. Older temporary effects not listed here have ended.
@@ -15,8 +17,7 @@ Your equipment: {loadout}
 Respond with {sentence_limit} sentence describing what you attempt next. <= {word_limit} words.
 Current state is authoritative. Treat the recent log as history, not active state.
 Do not rely on temporary effects from the recent log unless they are still listed in Active effects.
-Use only the current environment, active effects, equipment, and durable changes established above.
-Do not invent walls, pillars, corridors, shadows, cover, terrain, or objects.
+{environment_scope_guardrail}
 (No outcome narration. Raw text only.)
 """
 
@@ -28,7 +29,7 @@ You are an impartial combat arbiter. Analyze the attempts from Fighter A and Fig
 Your role is to determine the validity of each attempt and the probability of its success.
 Consider the fighters' states, their proposed actions, and the general context of a duel.
 You are also provided with a short snippet of the recent combat log under 'recent_combat_log'.
-Each fighter summary includes class, loadout, environment, active effects, valid_target_parts, and damaged_parts.
+Each fighter summary includes class, loadout, environment, active_effects, valid_target_parts, target_parts, and damaged_parts.
 Current fighter summaries are authoritative. Treat the recent combat log as history, not active state.
 Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still listed in buffs/debuffs or are created by the current attempts.
 Return JSON only, adhering to the following schema:

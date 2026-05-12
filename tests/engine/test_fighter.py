@@ -4,6 +4,11 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from llm_fight.engine.fighter import _effects_list_text, _temporary_effect_instruction, get_fighter_attempt
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
+from llm_fight.engine.state_summary import (
+    compact_fighter_state_summary,
+    environment_scope_guardrail,
+    render_fighter_state_summary,
+)
 from llm_fight.engine import constants as C
 from llm_fight.state import FighterState, Effect  # For creating mock states
 from llm_fight.anatomy import BodyPart, TissueLayer
@@ -191,6 +196,9 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
             effects_list=expected_effects_list,
             own_target_parts=", ".join(sorted(mock_fighter_state.parts.keys())) or "none",
             opponent_target_parts=", ".join(sorted(mock_opponent_state.parts.keys())) or "none",
+            self_state_summary=render_fighter_state_summary(compact_fighter_state_summary(mock_fighter_state)),
+            opponent_state_summary=render_fighter_state_summary(compact_fighter_state_summary(mock_opponent_state)),
+            environment_scope_guardrail=environment_scope_guardrail(),
             temporary_effect_instruction=_temporary_effect_instruction(expected_effects_list),
             turn_window=turn_window_input,
             recent_log=recent_log_input,
@@ -313,7 +321,7 @@ async def test_get_fighter_attempt_trims_long_log_newest_first(mock_fighter_stat
         if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
             return 64
         if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
-            return 520
+            return 1400
         if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
             return 1
         return fallback
@@ -612,6 +620,66 @@ async def test_fighter_prompt_includes_custom_target_parts():
     prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
     assert "Your valid target parts: left_wing, second_head" in prompt_text
     assert "Opponent valid target parts: core, tentacle_1" in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_fighter_prompt_includes_opponent_state_summary():
+    fighter = FighterState.from_preset("A", "humanoid")
+    opponent = FighterState.from_preset("B", "humanoid")
+    opponent.loadout = "dagger and smoke bomb"
+    opponent.status = C.FighterStatus.UNCONSCIOUS
+    opponent.apply_damage_to_part("left_eye", 2, C.DamageType.GENERIC)
+    opponent.apply_damage_to_part("left_arm", 100, C.DamageType.SLASHING)
+    opponent.debuffs.append(
+        Effect(
+            name="corroded",
+            magnitude=2,
+            ttl=3,
+            on_apply="Corrosion bites.",
+            metadata={C.TARGETED_PART: "left_eye"},
+            mechanics=[
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_STAT_TICK,
+                    C.EFFECT_MECHANIC_STAT: C.PAIN,
+                    C.VALUE: 2,
+                }
+            ],
+            tags=["corrosion"],
+        )
+    )
+
+    mock_config_get = MagicMock()
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 128
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_OLLAMA_NUM_CTX:
+            return 32768
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=["I press."]) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
+    ):
+        await get_fighter_attempt(fighter, opponent, combat_log="", turn_window=0)
+
+    prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
+    assert "Opponent state summary:" in prompt_text
+    assert "dagger and smoke bomb" in prompt_text
+    assert '"status":"unconscious"' in prompt_text
+    assert '"left_eye"' in prompt_text
+    assert '"left_arm"' in prompt_text
+    assert '"severed":true' in prompt_text
+    assert '"name":"corroded"' in prompt_text
+    assert '"ttl":3' in prompt_text
+    assert '"magnitude":2' in prompt_text
+    assert '"targeted_part":"left_eye"' in prompt_text
+    assert C.EFFECT_MECHANICS in prompt_text
+    assert "Corrosion bites" not in prompt_text
 
 
 @pytest.mark.asyncio

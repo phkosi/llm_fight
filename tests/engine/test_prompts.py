@@ -1,5 +1,29 @@
 from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT, JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
 from llm_fight.engine import constants as C
+from llm_fight.engine.state_summary import environment_scope_guardrail
+
+
+def _render_fighter_prompt(environment="an open arena"):
+    return FIGHTER_SYSTEM_PROMPT.format(
+        name="A",
+        class_="Knight",
+        environment=environment,
+        pain_desc="no pain",
+        exhaustion_desc="fully rested",
+        heat_desc="normal body temperature",
+        effects_list="none",
+        own_target_parts="head, torso",
+        opponent_target_parts="left_wing, tail",
+        self_state_summary='{"id":"A"}',
+        opponent_state_summary='{"id":"B"}',
+        environment_scope_guardrail=environment_scope_guardrail(),
+        temporary_effect_instruction="No temporary effects are active right now.",
+        turn_window=0,
+        recent_log="",
+        loadout="sword",
+        sentence_limit=1,
+        word_limit=30,
+    )
 
 
 def test_judge_p2_prompt_contains_damage_types():
@@ -27,46 +51,14 @@ def test_judge_p2_prompt_documents_structured_targeted_effect_removal():
 
 
 def test_fighter_prompt_does_not_add_article_before_environment():
-    rendered = FIGHTER_SYSTEM_PROMPT.format(
-        name="A",
-        class_="Knight",
-        environment="an open arena",
-        pain_desc="no pain",
-        exhaustion_desc="fully rested",
-        heat_desc="normal body temperature",
-        effects_list="none",
-        own_target_parts="head, torso",
-        opponent_target_parts="left_wing, tail",
-        temporary_effect_instruction="No temporary effects are active right now.",
-        turn_window=0,
-        recent_log="",
-        loadout="sword",
-        sentence_limit=1,
-        word_limit=30,
-    )
+    rendered = _render_fighter_prompt()
 
     assert "inside an open arena" in rendered
     assert "inside a an open arena" not in rendered
 
 
 def test_fighter_prompt_forbids_inventing_environment_features():
-    rendered = FIGHTER_SYSTEM_PROMPT.format(
-        name="A",
-        class_="Knight",
-        environment="an open arena",
-        pain_desc="no pain",
-        exhaustion_desc="fully rested",
-        heat_desc="normal body temperature",
-        effects_list="none",
-        own_target_parts="head, torso",
-        opponent_target_parts="left_wing, tail",
-        temporary_effect_instruction="No temporary effects are active right now.",
-        turn_window=0,
-        recent_log="",
-        loadout="sword",
-        sentence_limit=1,
-        word_limit=30,
-    )
+    rendered = _render_fighter_prompt()
 
     assert "Current state is authoritative" in rendered
     assert (
@@ -76,11 +68,17 @@ def test_fighter_prompt_forbids_inventing_environment_features():
     assert "Current state reminder: active effects right now are none." in rendered
     assert "Your valid target parts: head, torso" in rendered
     assert "Opponent valid target parts: left_wing, tail" in rendered
-    assert (
-        "Use only the current environment, active effects, equipment, and durable changes established above."
-        in rendered
-    )
-    assert "Do not invent walls, pillars, corridors, shadows, cover, terrain, or objects." in rendered
+    assert "Self state summary: " in rendered
+    assert "Opponent state summary: " in rendered
+    assert "Use only features present in the current environment, equipment, active effects" in rendered
+    assert "Do not claim new cover, walls, pillars, smoke, shadows, terrain, or objects already exist" in rendered
+
+
+def test_fighter_prompt_allows_explicit_environment_features():
+    rendered = _render_fighter_prompt(environment="a ruined hall with pillars, smoke, and broken cover")
+
+    assert "inside a ruined hall with pillars, smoke, and broken cover" in rendered
+    assert "unless listed there" in rendered
 
 
 def test_fighter_prompt_repeats_active_effects_after_recent_log():
@@ -95,6 +93,9 @@ def test_fighter_prompt_repeats_active_effects_after_recent_log():
         effects_list="none",
         own_target_parts="head, torso",
         opponent_target_parts="left_wing, tail",
+        self_state_summary='{"id":"A"}',
+        opponent_state_summary='{"id":"B"}',
+        environment_scope_guardrail=environment_scope_guardrail(),
         temporary_effect_instruction="No temporary effects are active right now.",
         turn_window=1,
         recent_log=recent_log,

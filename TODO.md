@@ -633,7 +633,19 @@ Verification:
 
 Addresses: ISSUE-014, ISSUE-015, ISSUE-030
 
-- [ ] Add shared compact fighter-state summary helpers for fighter prompts and Judge Phase 1, and rephrase environment guardrails so configured environment/equipment/effect features are usable while invented open-arena cover remains forbidden.
+- [x] Add shared compact fighter-state summary helpers for fighter prompts and Judge Phase 1, and rephrase environment guardrails so configured environment/equipment/effect features are usable while invented open-arena cover remains forbidden.
+
+Implementation intent:
+
+- Add a shared compact state-summary helper, preferably in `src/llm_fight/engine/state_summary.py`, and use it from both fighter prompt construction and Judge Phase 1.
+- Pin the compact summary shape so it does not grow into a full state dump:
+  - `id`, `class`, `loadout`, `environment`, `status`, `pain`, `exhaustion`, and `heat`.
+  - `active_effects`: structured effect entries with `type`, `name`, `ttl`, `magnitude`, optional `targeted_part`, optional `mechanics`, and optional `tags`, but no freeform `on_apply` or `on_tick` prose.
+  - `valid_target_parts`: canonical part ids for compatibility with existing judge logic.
+  - `target_parts`: shallow anatomy entries with part id/name, vital/severable flags, bleed/burn rates, and consequence tags/group.
+  - `damaged_parts`: only non-intact, severed, or partially damaged parts, including damaged layer `current_hp`/`max_hp`.
+- Keep Judge Phase 1's current partial-damage/effect capabilities, but route them through the shared helper so fighter prompts and Judge Phase 1 reason from the same authoritative contract.
+- Do not parse environment strings into special rules. Rephrase the guardrail so features literally present in environment/loadout/active effects/durable state are usable, while unlisted cover, walls, pillars, smoke, shadows, terrain, or objects are still forbidden.
 
 Acceptance goals:
 
@@ -644,8 +656,16 @@ Acceptance goals:
 
 Required tests:
 
-- Prompt tests cover opponent loadout, custom/manual body parts, partial eye/limb damage, severed parts, effect TTL/magnitude/target, open arena guardrails, and explicit-feature environments.
+- Shared summary tests cover custom/manual body parts, partial eye/limb damage, severed parts, effect type/TTL/magnitude/target/mechanics/tags, and omission of unsafe effect prose.
+- Fighter prompt tests cover opponent loadout/status, custom anatomy, damaged/severed parts, targeted effects, open arena guardrails, and explicit-feature environments.
+- Judge Phase 1 tests prove it uses the shared summary shape for partial injuries and structured effect metadata.
+- Add a prompt-budget regression proving long recent logs are still the trimmed field when enriched state summaries are present.
 - Update `docs/Design_doc.md` or README prompt/state-summary contract if the payload shape changes.
+
+Verification:
+
+- Focused tests: `uv run pytest -q tests/engine/test_state_summary.py tests/engine/test_fighter.py tests/engine/test_judge.py tests/engine/test_prompts.py tests/test_creativity_gate.py` -> 86 passed.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 428 passed, 6 skipped, 1 warning.
 
 ## Turn Diff And Roll Transparency
 

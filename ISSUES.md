@@ -172,25 +172,27 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-014: Fighter prompts omit opponent state, anatomy, and effect metadata
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Prompt State Context And Environment-Scoped Creativity
 - Source: codebase review
 - Area: Prompts, gameplay quality
 - Evidence: Fighter prompt generation includes acting fighter pain/exhaustion/heat/effect names/loadout in `src/llm_fight/engine/fighter.py:104`; the user prompt only says opponent is visible in `src/llm_fight/engine/fighter.py:147`.
 - Impact: Fighters cannot intentionally exploit injuries, target supported anatomy, react to effect TTL/severity, or make informed creative decisions.
 - Suggested fix: Add compact self/opponent summaries: class, loadout, status, pain/exhaustion/heat bands, valid target parts, damaged/severed parts, and active effects with TTL/magnitude/target.
-- Tests: Prompt tests for opponent loadout, custom parts, severed limbs, eye damage, and targeted effect metadata.
+- Resolution: Fighter prompts now include shared compact self/opponent JSON summaries with loadout, status, anatomy metadata, damaged/severed parts, and structured active effects, while preserving current-state authority over recent narration.
+- Tests: Shared summary, fighter prompt, judge prompt, creativity-gate, and full suite verification passed: `uv run pytest -q` -> 428 passed, 6 skipped, 1 warning.
 
 ### ISSUE-015: Judge Phase 1 drops partial injury and effect details
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Prompt State Context And Environment-Scoped Creativity
 - Source: codebase review
 - Area: Prompts, judge quality
 - Evidence: `_fighter_summary()` returns effect names only in `src/llm_fight/judge.py:82`; `_damaged_parts()` only reports non-intact/severed/fully depleted layers in `src/llm_fight/judge.py:54`.
 - Impact: P1 probability/validity cannot account for poison strength, burn target, partial arm damage, damaged eyes, or custom part durability.
 - Suggested fix: Include effect objects and coarse anatomy health bands, vital/severable flags, and partial-damage summaries.
-- Tests: Damage a part partially and add a targeted effect; assert `judge_phase1()` payload includes both.
+- Resolution: Judge Phase 1 now reuses the shared compact summary contract, including structured `active_effects`, `valid_target_parts`, shallow `target_parts`, and partial `damaged_parts`.
+- Tests: Judge P1 tests cover partial layer damage plus structured effect type/TTL/magnitude/target/mechanics/tags; full suite verification passed: `uv run pytest -q` -> 428 passed, 6 skipped, 1 warning.
 
 ### ISSUE-016: Default humanoid bleed/burn anatomy is mostly inert
 
@@ -355,14 +357,15 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-030: Environment guardrail can suppress explicit environment/equipment creativity
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Prompt State Context And Environment-Scoped Creativity
 - Source: codebase review
 - Area: Prompts
 - Evidence: Fighter prompt says not to invent walls, pillars, corridors, shadows, cover, terrain, or objects in `src/llm_fight/engine/prompts.py:17`.
 - Impact: This helps for open arenas but conflicts with configured environments or equipment that explicitly includes cover, smoke, walls, or shadows.
 - Suggested fix: Rephrase as "do not add new features unless they are in environment, equipment, active effects, or created by the current action."
-- Tests: Prompt tests for open arena forbidding invented cover and pillared/smoke environments allowing explicit features.
+- Resolution: Fighter prompts now allow features literally present in environment, equipment, active effects, durable state summaries, or the current action, while still forbidding unlisted cover, walls, pillars, smoke, shadows, terrain, or objects.
+- Tests: Prompt tests cover open arena guardrails and explicit pillar/smoke/cover environments; full suite verification passed: `uv run pytest -q` -> 428 passed, 6 skipped, 1 warning.
 
 ### ISSUE-031: OpenAI-compatible endpoint support conflicts with native Ollama assumptions
 

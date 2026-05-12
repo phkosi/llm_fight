@@ -96,8 +96,10 @@ def test_fighter_summary_reports_partial_current_hp_damage():
     fighter.apply_damage_to_part("torso", 3, C.DamageType.GENERIC)
 
     summary = _fighter_summary(fighter.to_json())
-    damaged_layers = summary["damaged_parts"]["torso"]["damaged_layers"]
+    damaged_layers = summary[C.DAMAGED_PARTS]["torso"]["damaged_layers"]
     assert damaged_layers == [{C.NAME: "skin", C.CURRENT_HP: 7, C.MAX_HP: 10}]
+    assert "torso" in summary[C.VALID_TARGET_PARTS]
+    assert any(part["id"] == "torso" for part in summary[C.TARGET_PARTS])
 
 
 @pytest.mark.asyncio
@@ -487,7 +489,8 @@ async def test_judge_phase1_payload_includes_dynamic_effect_details(mock_chat, m
     )
 
     user_payload = json.loads(mock_chat.call_args[0][0][1][C.AGENT_CONTENT])
-    debuff = user_payload[f"fighter_{C.FIGHTER_A}_state_summary"][C.DEBUFFS][0]
+    debuff = user_payload[f"fighter_{C.FIGHTER_A}_state_summary"][C.ACTIVE_EFFECTS][0]
+    assert debuff[C.TYPE] == C.DEBUFFS
     assert debuff[C.NAME] == "poisoned"
     assert debuff[C.EFFECT_MECHANICS][0][C.EFFECT_MECHANIC_KIND] == C.EFFECT_MECHANIC_STAT_TICK
     assert debuff[C.EFFECT_TAGS] == ["poison"]

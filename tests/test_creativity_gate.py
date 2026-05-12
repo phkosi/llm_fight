@@ -188,7 +188,8 @@ async def test_non_hard_coded_declarative_effect_survives_prompts_ticks_and_expi
     assert fighter.debuffs == []
 
     prompt_text = captured_fighter_prompts[0]
-    debuff_payload = captured_judge_payloads[0][f"fighter_{C.FIGHTER_A}_state_summary"][C.DEBUFFS][0]
+    debuff_payload = captured_judge_payloads[0][f"fighter_{C.FIGHTER_A}_state_summary"][C.ACTIVE_EFFECTS][0]
+    assert debuff_payload[C.TYPE] == C.DEBUFFS
     assert "crystal_rot" in prompt_text
     assert C.EFFECT_MECHANICS in prompt_text
     assert "corrosion" in prompt_text

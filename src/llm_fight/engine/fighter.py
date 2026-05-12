@@ -1,7 +1,6 @@
 """Fighter agent logic: builds context and queries LLM for actions."""
 
 import re
-import json
 from typing import Union, Optional, Callable, Any
 
 from ..state import FighterState  # Relative import from parent package
@@ -12,6 +11,11 @@ from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
 from . import constants as C  # Added import
 from .combat_log import CombatLog
 from .logger import logger
+from .state_summary import (
+    compact_fighter_state_summary,
+    environment_scope_guardrail,
+    render_fighter_state_summary,
+)
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _EMPTY_ACTION_FALLBACK = "I keep my guard up and look for an opening."
@@ -42,27 +46,11 @@ def _valid_target_parts_text(fighter: FighterState) -> str:
     return ", ".join(sorted(fighter.parts.keys())) or "none"
 
 
-def _effect_summary(effect) -> dict:
-    target = effect.metadata.get(C.TARGETED_PART) if hasattr(effect, "metadata") else None
-    summary = {
-        C.NAME: effect.name,
-        "ttl": effect.ttl,
-        "magnitude": effect.magnitude,
-    }
-    if target:
-        summary[C.TARGETED_PART] = target
-    if getattr(effect, "mechanics", None):
-        summary[C.EFFECT_MECHANICS] = effect.mechanics
-    if getattr(effect, "tags", None):
-        summary[C.EFFECT_TAGS] = effect.tags
-    return summary
-
-
 def _effects_list_text(fighter: FighterState) -> str:
-    effects = [_effect_summary(effect) for effect in fighter.buffs + fighter.debuffs]
+    effects = compact_fighter_state_summary(fighter)[C.ACTIVE_EFFECTS]
     if not effects:
         return "none"
-    return json.dumps(effects, sort_keys=True, separators=(",", ":"))
+    return render_fighter_state_summary(effects)
 
 
 def describe_pain(pain_level: int) -> str:
@@ -134,6 +122,8 @@ async def get_fighter_attempt(
     exhaustion_desc = describe_exhaustion(fighter.exhaustion)
     heat_desc = describe_heat(fighter.heat)
     effects_list = _effects_list_text(fighter)
+    self_state_summary = compact_fighter_state_summary(fighter)
+    opponent_state_summary = compact_fighter_state_summary(opponent)
 
     loadout = fighter.loadout
 
@@ -176,6 +166,9 @@ async def get_fighter_attempt(
             effects_list=effects_list,
             own_target_parts=_valid_target_parts_text(fighter),
             opponent_target_parts=_valid_target_parts_text(opponent),
+            self_state_summary=render_fighter_state_summary(self_state_summary),
+            opponent_state_summary=render_fighter_state_summary(opponent_state_summary),
+            environment_scope_guardrail=environment_scope_guardrail(),
             temporary_effect_instruction=_temporary_effect_instruction(effects_list),
             turn_window=turn_window,
             recent_log=recent_log,

@@ -12,6 +12,7 @@ from .utils.token_counter import budget_messages_with_trimmed_log
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from . import config as config_mod
 from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
+from .engine.state_summary import compact_fighter_state_summary
 from .engine import constants as C
 from .engine.logger import logger
 
@@ -20,31 +21,6 @@ from .engine.logger import logger
 
 class JudgePhase2FailureError(RuntimeError):
     """Raised when Judge Phase 2 exhausts retries under fail-closed policy."""
-
-
-def _status_value(value: Any) -> Any:
-    return value.value if hasattr(value, "value") else value
-
-
-def _effect_summary(effect: dict[str, Any]) -> dict[str, Any]:
-    summary = {
-        C.NAME: effect.get(C.NAME),
-        "ttl": effect.get(C.EFFECT_TTL),
-        "magnitude": effect.get("magnitude"),
-    }
-    metadata = effect.get(C.METADATA, {})
-    target = metadata.get(C.TARGETED_PART) if isinstance(metadata, dict) else None
-    if target:
-        summary[C.TARGETED_PART] = target
-    if effect.get(C.EFFECT_MECHANICS):
-        summary[C.EFFECT_MECHANICS] = effect.get(C.EFFECT_MECHANICS)
-    if effect.get(C.EFFECT_TAGS):
-        summary[C.EFFECT_TAGS] = effect.get(C.EFFECT_TAGS)
-    return {key: value for key, value in summary.items() if value not in (None, "", [])}
-
-
-def _effect_summaries(effects: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [_effect_summary(effect) for effect in effects if effect.get(C.NAME)]
 
 
 def _effect_names_text(effects: list[Any]) -> str:
@@ -59,58 +35,33 @@ def _effect_names_text(effects: list[Any]) -> str:
     return ", ".join(names) if names else "none"
 
 
+def _active_effect_names_text(fighter: dict[str, Any], effect_type: str) -> str:
+    active_effects = fighter.get(C.ACTIVE_EFFECTS)
+    if isinstance(active_effects, list):
+        names = [
+            effect.get(C.NAME, "")
+            for effect in active_effects
+            if isinstance(effect, dict) and effect.get(C.TYPE) == effect_type and effect.get(C.NAME)
+        ]
+        return ", ".join(names) if names else "none"
+    return _effect_names_text(fighter.get(effect_type, []))
+
+
 def _current_state_reminder(fighter_a: dict[str, Any], fighter_b: dict[str, Any]) -> str:
     temp_terms = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
     return (
         "Current active effects: "
-        f"Fighter A buffs={_effect_names_text(fighter_a.get(C.BUFFS, []))}, "
-        f"debuffs={_effect_names_text(fighter_a.get(C.DEBUFFS, []))}; "
-        f"Fighter B buffs={_effect_names_text(fighter_b.get(C.BUFFS, []))}, "
-        f"debuffs={_effect_names_text(fighter_b.get(C.DEBUFFS, []))}. "
+        f"Fighter A buffs={_active_effect_names_text(fighter_a, C.BUFFS)}, "
+        f"debuffs={_active_effect_names_text(fighter_a, C.DEBUFFS)}; "
+        f"Fighter B buffs={_active_effect_names_text(fighter_b, C.BUFFS)}, "
+        f"debuffs={_active_effect_names_text(fighter_b, C.DEBUFFS)}. "
         "Temporary effects not listed here are inactive, even if recent_combat_log mentions them. "
         f"Do not cite old {temp_terms} as current conditions unless they are listed here or created by the current action."
     )
 
 
-def _damaged_parts(parts: dict[str, Any]) -> dict[str, Any]:
-    damaged = {}
-    for name, part in parts.items():
-        status = part.get(C.STATUS, "intact")
-        layers = part.get("layers", [])
-        damaged_layers = [
-            {
-                C.NAME: layer.get(C.NAME),
-                C.CURRENT_HP: layer.get(C.CURRENT_HP, layer.get(C.MAX_HP)),
-                C.MAX_HP: layer.get(C.MAX_HP),
-            }
-            for layer in layers
-            if layer.get(C.CURRENT_HP, layer.get(C.MAX_HP, 0)) < layer.get(C.MAX_HP, 0)
-        ]
-        if status != "intact" or part.get("severed") or damaged_layers:
-            damaged[name] = {
-                C.STATUS: status,
-                "severed": part.get("severed", False),
-                "damaged_layers": damaged_layers,
-            }
-    return damaged
-
-
 def _fighter_summary(state: dict[str, Any]) -> dict[str, Any]:
-    parts = state.get("parts", {})
-    return {
-        "id": state.get("id"),
-        "class": state.get("class_"),
-        C.LOADOUT: state.get(C.LOADOUT),
-        "environment": state.get("environment"),
-        C.STATUS: _status_value(state.get(C.STATUS)),
-        C.PAIN: state.get(C.PAIN),
-        C.EXHAUSTION: state.get(C.EXHAUSTION),
-        C.HEAT: state.get(C.HEAT),
-        C.BUFFS: _effect_summaries(state.get(C.BUFFS, [])),
-        C.DEBUFFS: _effect_summaries(state.get(C.DEBUFFS, [])),
-        "valid_target_parts": sorted(parts.keys()),
-        "damaged_parts": _damaged_parts(parts),
-    }
+    return compact_fighter_state_summary(state)
 
 
 def _judge_settings() -> tuple[int, int, int]:
