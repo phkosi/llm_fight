@@ -829,6 +829,40 @@ Verification:
 - Focused tests: `uv run pytest -q tests\test_simulation.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_phase2_authorization.py` -> 61 passed.
 - Full gate: `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 454 passed, 6 skipped, 1 warning; `git diff --check`.
 
+## Batch Harness Module Extraction And Test Split
+
+Addresses: ISSUE-039
+
+- [x] Extract batch simulation orchestration from `src/llm_fight/simulation.py` into a focused batch module and move batch-only tests out of `tests/test_simulation.py`.
+
+Implementation intent:
+
+Move `BatchSummary`, `validate_batch_settings()`, `summarize_batch_csv()`, `_derive_fight_seed()`, CSV row defaulting, and the batch runner body into `src/llm_fight/batch.py`. Keep `simulation.run_batch`, `simulation.validate_batch_settings`, `simulation.summarize_batch_csv`, and `simulation.BatchSummary` as compatibility exports or wrappers so CLI/tests/importers keep working. Avoid changing `_single_fight()` semantics; inject or wrap the fight runner so existing `patch("llm_fight.simulation._single_fight", ...)` compatibility remains intact.
+
+Acceptance goals:
+
+- `src/llm_fight/simulation.py` drops below the 700 LOC issue threshold, with batch code no longer mixed into the fight loop.
+- `tests/test_simulation.py` is materially smaller by moving `run_batch`, batch-summary, seeded batch, batch error/fallback, batch budget-failure, and concurrent trace uniqueness tests into `tests/test_batch.py` or equivalent.
+- Batch CSV columns, row ordering, per-fight RNG derivation, progress callbacks, error-row behavior, `PromptBudgetError` propagation/cancellation, fallback counts, CLI simulate behavior, and live-smoke import paths remain unchanged.
+- Existing public imports from `llm_fight.simulation` continue to work, including `run_batch`, `validate_batch_settings`, `summarize_batch_csv`, and `BatchSummary`.
+- Do not touch state/effects extraction or ISSUE-040 function extraction in this slice.
+
+Required tests:
+
+- `uv run pytest -q tests\test_batch.py tests\test_simulation.py tests\test_simulation_failures.py tests\test_simulation_integration.py tests\test_cli.py tests\test_live_simulation.py`
+- `uv run pytest -q`
+- `uv run black --check .`
+- `uv run flake8`
+
+Verification:
+
+- Architect subagent proposed the batch extraction as the next ISSUE-039 slice; review subagent approved it with the `simulation.run_batch()` wrapper requirement to preserve existing monkeypatch compatibility.
+- Extracted `src\llm_fight\batch.py`; `src\llm_fight\simulation.py` now keeps compatibility exports/wrappers for `BatchSummary`, `validate_batch_settings()`, `summarize_batch_csv()`, `_derive_fight_seed()`, and `run_batch()`.
+- Moved batch-only tests to `tests\test_batch.py`, including concurrent trace uniqueness, concurrency/progress/CSV ordering, seeded RNG, error-row, validation, PromptBudgetError cancellation/propagation, fallback, and summary coverage.
+- Size impact: `src\llm_fight\simulation.py` -> 637 physical LOC; `src\llm_fight\batch.py` -> 170 physical LOC; `tests\test_simulation.py` -> 1496 physical LOC; `tests\test_batch.py` -> 700 physical LOC; `tests\test_simulation_failures.py` -> 39 physical LOC.
+- Focused tests: `uv run pytest -q tests\test_batch.py tests\test_simulation.py tests\test_simulation_failures.py tests\test_simulation_integration.py tests\test_cli.py tests\test_live_simulation.py` -> 85 passed, 2 skipped, 1 warning.
+- Full gate: `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 454 passed, 6 skipped, 1 warning; `git diff --check`.
+
 ## Live/Perf Gating And Installed-Package Test Workflow
 
 Addresses: ISSUE-032, ISSUE-035
