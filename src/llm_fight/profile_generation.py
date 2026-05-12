@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import random
-from typing import Any
+from typing import Any, Callable
 
 from jsonschema import ValidationError
 
-from .agents import chat
+from .agents import chat, chat_with_metadata
 from . import config as config_mod
 from .engine import constants as C
 from .engine.logger import logger
@@ -105,6 +105,7 @@ async def generate_fighter_profile(
     nudge: str,
     *,
     config=None,
+    on_metadata: Callable[[dict[str, Any]], None] | None = None,
 ) -> FighterProfile:
     """Generate and validate one fighter profile, raising sanitized failures."""
     cfg = config or config_mod.CONFIG
@@ -134,15 +135,30 @@ async def generate_fighter_profile(
     profile_retries = 1
 
     async def _call() -> dict[str, Any]:
-        responses = await chat(
-            messages,
-            max_tokens=max_tokens,
-            num_ctx=context_limit,
-            best_of=1,
-            schema=FighterProfileSchema,
-            retries=transport_retries,
-            log_transcript=False,
-        )
+        if on_metadata is None:
+            responses = await chat(
+                messages,
+                max_tokens=max_tokens,
+                num_ctx=context_limit,
+                best_of=1,
+                schema=FighterProfileSchema,
+                retries=transport_retries,
+                log_transcript=False,
+            )
+        else:
+            results = await chat_with_metadata(
+                messages,
+                max_tokens=max_tokens,
+                num_ctx=context_limit,
+                best_of=1,
+                schema=FighterProfileSchema,
+                retries=transport_retries,
+                log_transcript=False,
+            )
+            responses = [result.content for result in results]
+            for result in results:
+                if result.metadata:
+                    on_metadata(result.metadata)
         return _parse_first_json_response(responses)
 
     last_invalid_error: Exception | None = None

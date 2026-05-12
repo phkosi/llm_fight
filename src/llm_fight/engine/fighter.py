@@ -2,10 +2,10 @@
 
 import re
 import json
-from typing import Union, Optional
+from typing import Union, Optional, Callable, Any
 
 from ..state import FighterState  # Relative import from parent package
-from ..agents import chat
+from ..agents import chat, chat_with_metadata
 from ..utils.token_counter import compute_completion_tokens
 from .. import config as config_mod
 from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
@@ -118,6 +118,7 @@ async def get_fighter_attempt(
     opponent: FighterState,
     combat_log: Union[CombatLog, str, None] = None,
     turn_window: Optional[int] = None,
+    on_metadata: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     """Generates a fighter's attempted action for the current turn.
 
@@ -203,13 +204,26 @@ async def get_fighter_attempt(
             active_messages = [system, user, retry_user]
         active_max_tokens = compute_completion_tokens(active_messages, generation_limit, context_limit)
 
-        texts = await chat(
-            active_messages,
-            max_tokens=active_max_tokens,
-            num_ctx=context_limit,
-            best_of=best_of,
-            retries=max_retries,
-        )
+        if on_metadata is None:
+            texts = await chat(
+                active_messages,
+                max_tokens=active_max_tokens,
+                num_ctx=context_limit,
+                best_of=best_of,
+                retries=max_retries,
+            )
+        else:
+            results = await chat_with_metadata(
+                active_messages,
+                max_tokens=active_max_tokens,
+                num_ctx=context_limit,
+                best_of=best_of,
+                retries=max_retries,
+            )
+            texts = [result.content for result in results]
+            for result in results:
+                if result.metadata:
+                    on_metadata(result.metadata)
         for txt in texts:
             cleaned = _clean_fighter_action(txt)
             if cleaned:

@@ -3,6 +3,7 @@ from unittest.mock import patch
 from llm_fight.engine.combat_log import CombatTurn
 from llm_fight.engine import constants as C
 from llm_fight.engine import render
+from llm_fight.simulation import FightEvent
 
 
 def _turn_with_all_sections():
@@ -122,3 +123,53 @@ def test_make_summary_table_fallback():
     with patch.object(render, "RICH_AVAILABLE", False):
         result = render.make_summary_table(rows)
     assert "Average Turns" in result
+
+
+def test_make_fighter_design_view_simple_includes_dynamic_design_details():
+    fighters = {
+        C.FIGHTER_A: {
+            "class_": "Winged Duelist",
+            C.THEME: "sky mutant",
+            C.LOADOUT: "hook blades",
+            "environment": "an open arena",
+            "parts": {"left_wing": {}, "second_head": {}},
+            C.BUFFS: [],
+            C.DEBUFFS: [{C.NAME: "crystal_rot"}],
+            C.PROFILE_GENERATION: {"mode": "generated", "nudge": "original", "error": None},
+        },
+        C.FIGHTER_B: {
+            "class_": "Knight",
+            C.LOADOUT: "sword",
+            "environment": "an open arena",
+            "parts": {"head": {}, "torso": {}},
+            C.BUFFS: [],
+            C.DEBUFFS: [],
+        },
+    }
+
+    result = render.make_fighter_design_view(fighters, simple=True)
+
+    assert "Fighter Designs" in result
+    assert "Winged Duelist (sky mutant)" in result
+    assert "left_wing, second_head" in result
+    assert "crystal_rot" in result
+    assert "Profile generation" in result
+
+
+def test_format_fight_event_status_includes_phase_fighter_and_turn():
+    event = FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_START, turn=3, fighter_id=C.FIGHTER_A)
+
+    assert render.format_fight_event_status(event) == "Generating fighter action (Fighter A, turn 3)"
+
+
+def test_format_token_summary_with_counts_and_missing_fallback():
+    assert render.format_token_summary([]) == "Token usage: tokens unavailable"
+
+    summary = render.format_token_summary(
+        [
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            {"prompt_tokens": 4, "completion_tokens": 6, "total_tokens": 10},
+        ]
+    )
+
+    assert summary == "Token usage: prompt 14, completion 11, total 25"

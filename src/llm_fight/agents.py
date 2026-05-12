@@ -3,6 +3,7 @@
 import aiohttp
 import asyncio
 import os
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
 from . import config as config_mod
@@ -37,6 +38,14 @@ def get_ollama_url() -> str:
 
 
 HEADERS = {C.CONTENT_TYPE: C.APPLICATION_JSON}
+
+
+@dataclass(frozen=True)
+class ChatResult:
+    """Text response plus provider metadata when the transport supplies it."""
+
+    content: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 def _uses_openai_compat(url: str) -> bool:
@@ -101,6 +110,43 @@ def _chat_base_url(url: str) -> str:
     return url.rstrip("/")
 
 
+def _metadata_from_response(data: Dict[str, Any], *, use_openai: bool) -> Dict[str, Any]:
+    """Extract real provider metadata without inventing missing token counts."""
+    metadata: Dict[str, Any] = {}
+    if use_openai:
+        usage = data.get("usage", {})
+        if isinstance(usage, dict):
+            mapping = {
+                "prompt_tokens": "prompt_tokens",
+                "completion_tokens": "completion_tokens",
+                "total_tokens": "total_tokens",
+            }
+            for source, target in mapping.items():
+                if usage.get(source) is not None:
+                    metadata[target] = usage[source]
+        return metadata
+
+    native_mapping = {
+        "prompt_eval_count": "prompt_tokens",
+        "eval_count": "completion_tokens",
+        "total_duration": "total_duration",
+        "load_duration": "load_duration",
+        "prompt_eval_duration": "prompt_eval_duration",
+        "eval_duration": "eval_duration",
+        "done_reason": "done_reason",
+    }
+    for source, target in native_mapping.items():
+        if data.get(source) is not None:
+            metadata[target] = data[source]
+            if target != source:
+                metadata[source] = data[source]
+    prompt_tokens = metadata.get("prompt_tokens")
+    completion_tokens = metadata.get("completion_tokens")
+    if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+        metadata["total_tokens"] = prompt_tokens + completion_tokens
+    return metadata
+
+
 class SessionManager:
     """Async context manager that provides an ``aiohttp.ClientSession``."""
 
@@ -118,9 +164,10 @@ class SessionManager:
 
 
 # -------------- helper ---------------------------------------------
-async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], retries: int = 0) -> str:
+async def _post_json_result(session: aiohttp.ClientSession, payload: Dict[str, Any], retries: int = 0) -> ChatResult:
     attempt = 0
     url = get_ollama_url()
+    use_openai = _uses_openai_compat(url)
     while True:
         try:
             # Allow aiohttp to respect proxy-related environment variables
@@ -137,9 +184,14 @@ async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], re
                     )
                 resp.raise_for_status()
                 data = await resp.json()
-                if _uses_openai_compat(url):
-                    return data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
-                return data[C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+                if use_openai:
+                    content = data[C.OLLAMA_CHOICES][0][C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+                else:
+                    content = data[C.OLLAMA_MESSAGE][C.AGENT_CONTENT]
+                return ChatResult(
+                    content=content,
+                    metadata=_metadata_from_response(data, use_openai=use_openai),
+                )
 
         except aiohttp.ClientResponseError as e:
             if e.status >= 500 and attempt < retries:
@@ -170,6 +222,11 @@ async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], re
             raise
 
 
+async def _post_json(session: aiohttp.ClientSession, payload: Dict[str, Any], retries: int = 0) -> str:
+    """Return only response text for callers that do not need metadata."""
+    return (await _post_json_result(session, payload, retries=retries)).content
+
+
 async def chat(
     messages: List[Dict[str, str]],
     max_tokens: int,
@@ -187,6 +244,30 @@ async def chat(
     ``retries`` specifies how many additional attempts should be made if the
     request fails due to network issues or 5xx responses.
     """
+    results = await chat_with_metadata(
+        messages=messages,
+        max_tokens=max_tokens,
+        num_ctx=num_ctx,
+        best_of=best_of,
+        schema=schema,
+        session=session,
+        retries=retries,
+        log_transcript=log_transcript,
+    )
+    return [result.content for result in results]
+
+
+async def chat_with_metadata(
+    messages: List[Dict[str, str]],
+    max_tokens: int,
+    num_ctx: int | None = None,
+    best_of: int = 1,
+    schema: Optional[Dict[str, Any]] = None,
+    session: aiohttp.ClientSession | None = None,
+    retries: int = 0,
+    log_transcript: bool = True,
+) -> List[ChatResult]:
+    """Return completions with real provider metadata when available."""
     tasks = []
     cfg = config_mod.CONFIG
     model = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
@@ -195,7 +276,7 @@ async def chat(
     url = get_ollama_url()
     use_openai = _uses_openai_compat(url)
 
-    async def _collect(sess: aiohttp.ClientSession) -> List[str]:
+    async def _collect(sess: aiohttp.ClientSession) -> List[ChatResult]:
         for _ in range(best_of):
             if use_openai:
                 payload = {
@@ -223,7 +304,7 @@ async def chat(
                 }
                 if schema is not None:
                     payload[C.AGENT_FORMAT] = _schema_for_ollama(schema)
-            tasks.append(_post_json(sess, payload, retries=retries))
+            tasks.append(_post_json_result(sess, payload, retries=retries))
         return await asyncio.gather(*tasks)
 
     if session is None:
@@ -233,7 +314,7 @@ async def chat(
         responses = await _collect(session)
 
     if log_transcript:
-        log_exchange(messages, responses)
+        log_exchange(messages, [response.content for response in responses])
     return responses
 
 

@@ -7,6 +7,7 @@ import os
 import random
 
 import llm_fight.simulation as sim_module
+from llm_fight.agents import ChatResult
 from llm_fight.state import Effect, FighterState  # Keep for spec
 
 # from llm_fight.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
@@ -486,6 +487,110 @@ async def test_invalid_generated_profiles_fallback_without_transcript_leak(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_single_fight_emits_play_events_and_token_metadata():
+    events = []
+
+    async def fake_get_attempt(*args, **kwargs):
+        kwargs["on_metadata"]({"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3})
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        kwargs["on_metadata"]({"prompt_tokens": 4, "completion_tokens": 5, "total_tokens": 9})
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "No one lands.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        kwargs["on_metadata"]({"prompt_tokens": 6, "completion_tokens": 7, "total_tokens": 13})
+        return {C.NARRATION: "They reset.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    original_max_turns = CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int, fallback=100)
+    CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, "1")
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        ):
+            result, combat_log = await sim_module._single_fight(return_log=True, on_event=events.append)
+    finally:
+        CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str(original_max_turns))
+
+    names = [event.name for event in events]
+    assert result[C.WINNER] == C.DRAW
+    assert combat_log.turns[0].turn == 1
+    assert names.index(C.FIGHT_EVENT_FIGHTERS_READY) < names.index(C.FIGHT_EVENT_FIGHTER_ACTION_START)
+    assert names.index(C.FIGHT_EVENT_JUDGE_PHASE1_START) < names.index(C.FIGHT_EVENT_JUDGE_PHASE1_END)
+    assert names.index(C.FIGHT_EVENT_ROLLS_START) < names.index(C.FIGHT_EVENT_ROLLS_END)
+    assert names.index(C.FIGHT_EVENT_JUDGE_PHASE2_START) < names.index(C.FIGHT_EVENT_JUDGE_PHASE2_END)
+    assert names.index(C.FIGHT_EVENT_TURN_COMPLETE) < names.index(C.FIGHT_EVENT_FIGHT_COMPLETE)
+    token_events = [event for event in events if event.name == C.FIGHT_EVENT_TOKEN_METADATA]
+    assert {event.data["phase"] for event in token_events} == {"fighter_action", "judge_phase1", "judge_phase2"}
+    assert len(token_events) == 4
+    assert sum(event.data["metadata"]["total_tokens"] for event in token_events) == 28
+
+
+@pytest.mark.asyncio
+async def test_generated_profile_events_precede_fighters_ready(tmp_path):
+    config_path = tmp_path / "game.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "fighter_creation_mode = generated",
+                "",
+                "[SIMULATION]",
+                "max_turns = 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    events = []
+
+    async def fake_generate(fighter_id, section, opponent_section, nudge, **kwargs):
+        return build_fighter_profile(_custom_profile(f"creative_{fighter_id.lower()}"))
+
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(*args, **kwargs):
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "No one lands.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(*args, **kwargs):
+        return {C.NARRATION: "They reset.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with (
+            patch.object(sim_module, "generate_fighter_profile", new=AsyncMock(side_effect=fake_generate)),
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        ):
+            await sim_module._single_fight(return_log=True, on_event=events.append, fight_rng=random.Random(3))
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    names = [event.name for event in events]
+    assert names.index(C.FIGHT_EVENT_PROFILE_GENERATION_START) < names.index(C.FIGHT_EVENT_FIGHTERS_READY)
+    assert names.count(C.FIGHT_EVENT_PROFILE_GENERATION_START) == 2
+    assert names.count(C.FIGHT_EVENT_PROFILE_GENERATION_END) == 2
+
+
+@pytest.mark.asyncio
 async def test_targeting_modifier_reduces_success_probability_before_roll():
     fighter_a = FighterState.from_preset(C.FIGHTER_A, "humanoid")
     fighter_b = FighterState.from_preset(C.FIGHTER_B, "humanoid")
@@ -659,9 +764,12 @@ async def test_single_fight_uses_one_fixed_ollama_context_for_all_native_calls()
             }
         )
 
+    async def fake_post_json_result(session, payload, retries=0):
+        return ChatResult(content=await fake_post_json(session, payload, retries=retries), metadata={})
+
     try:
         with (
-            patch("llm_fight.agents._post_json", new=fake_post_json),
+            patch("llm_fight.agents._post_json_result", new=fake_post_json_result),
             patch.dict(os.environ, {"API_URL": "http://localhost:11434/api/chat"}),
         ):
             result = await sim_module._single_fight()

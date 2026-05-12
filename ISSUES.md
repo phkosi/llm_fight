@@ -137,14 +137,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-011: `llmfight play` is silent until the whole fight finishes
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Terminal Fight Startup And Progress Feedback
 - Source: codebase review
 - Area: UX, terminal rendering
-- Evidence: `play` awaits `_single_fight(... return_log=True)` at `src/llm_fight/cli.py:232`, then prints all turn tables afterward at `src/llm_fight/cli.py:240`. Playtest loop `transcripts\playtest_loop_20260512_010010` captured non-crashing runs where the first visible output line was `Turn 1`, with no pre-fight fighter design view or progress/status surface before the turn table.
+- Evidence: `play` awaited `_single_fight(... return_log=True)`, then printed all turn tables afterward. Playtest loop `transcripts\playtest_loop_20260512_010010` captured non-crashing runs where the first visible output line was `Turn 1`, with no pre-fight fighter design view or progress/status surface before the turn table. Resolved with play events, pre-fight fighter design rendering, phase status output, and streamed turn rendering.
 - Impact: Slow local LLM runs look frozen for the full fight.
 - Suggested fix: Add an `on_turn` callback or async event stream, render each turn as it completes, and show Rich status/spinners for fighter/judge phases.
-- Tests: Fake a multi-turn fight/event stream and assert turn 1 renders before turn 2 completes.
+- Tests: Added CLI/event tests proving generated-profile status appears before fighter designs, fighter designs appear before the first turn, token summaries render from real metadata, and turns are not duplicated.
 
 ### ISSUE-012: Prompt payloads can leak through error logs and proxies
 
@@ -271,14 +271,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-023: Token/model-call metadata is discarded
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Terminal Fight Startup And Progress Feedback
 - Source: codebase review
 - Area: LLM transport, UX
-- Evidence: `_post_json()` parses the full response but returns only content in `src/llm_fight/agents.py:139`; `chat()` returns `list[str]` in `src/llm_fight/agents.py:173`.
+- Evidence: `_post_json()` parsed the full response but returned only content; `chat()` returned `list[str]`. Resolved by adding `ChatResult` and `chat_with_metadata()` while preserving `chat() -> list[str]` compatibility, extracting native Ollama and OpenAI-compatible token metadata, and surfacing summaries in `llmfight play` when metadata exists.
 - Impact: The app cannot show prompt/completion tokens, done reasons, load/eval durations, context pressure, or truncation warnings.
 - Suggested fix: Return a typed call result with content plus model/options/token/duration metadata; log/transcript and render it when useful.
-- Tests: Mock Ollama metadata and assert extraction plus CLI/verbose display.
+- Tests: Mocked native Ollama and OpenAI-compatible metadata extraction, token-summary formatting, CLI token display, and missing-token fallback.
 
 ### ISSUE-024: P2 failures are hidden as normal no-op turns
 

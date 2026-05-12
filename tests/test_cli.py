@@ -2,12 +2,13 @@ import csv
 from typer.testing import CliRunner
 
 from llm_fight.cli import app
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from pathlib import Path
 from click import ClickException
 from logging import CRITICAL
 from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
+from llm_fight.simulation import FightEvent
 
 
 def _write_batch_csv(path, rows):
@@ -43,6 +44,7 @@ def test_cli_play():
         fighter_a_section=None,
         fighter_b_section=None,
         return_log=True,
+        on_event=ANY,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=False)
 
@@ -65,6 +67,7 @@ def test_cli_play_verbose():
         fighter_a_section=None,
         fighter_b_section=None,
         return_log=True,
+        on_event=ANY,
     )
     assert mock_render.make_turn_table.call_count == 2
     for call in mock_render.make_turn_table.call_args_list:
@@ -89,6 +92,7 @@ def test_cli_play_simple_output():
         fighter_a_section=None,
         fighter_b_section=None,
         return_log=True,
+        on_event=ANY,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
 
@@ -111,6 +115,7 @@ def test_cli_play_simple_output_no_rich():
         fighter_a_section=None,
         fighter_b_section=None,
         return_log=True,
+        on_event=ANY,
     )
     mock_render.make_turn_table.assert_called_once_with(log.turns[0], simple=True)
 
@@ -150,6 +155,68 @@ def test_cli_play_simple_output_separates_turn_phases():
     assert "Outcome: A keeps their footing while B gains partial cover." in result.output
     assert result.output.index("Fighter B attempt") < result.output.index("Judge ruling:")
     assert result.output.index("Judge ruling:") < result.output.index("Outcome:")
+
+
+def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
+    runner = CliRunner()
+    turn = CombatTurn(
+        turn=1,
+        attempt_A="A tests range",
+        attempt_B="B guards",
+        judge_p2={C.NARRATION: "The fighters measure each other."},
+    )
+    log = CombatLog()
+    log.append(turn)
+    fighters = {
+        C.FIGHTER_A: {
+            "class_": "Winged Duelist",
+            C.THEME: "sky mutant",
+            C.LOADOUT: "hook blades",
+            "environment": "an open arena",
+            "parts": {"left_wing": {}, "second_head": {}},
+            C.BUFFS: [],
+            C.DEBUFFS: [],
+        },
+        C.FIGHTER_B: {
+            "class_": "Knight",
+            C.LOADOUT: "sword",
+            "environment": "an open arena",
+            "parts": {"head": {}, "torso": {}},
+            C.BUFFS: [],
+            C.DEBUFFS: [],
+        },
+    }
+
+    async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False, on_event=None):
+        on_event(FightEvent(C.FIGHT_EVENT_PROFILE_GENERATION_START, fighter_id=C.FIGHTER_A))
+        on_event(FightEvent(C.FIGHT_EVENT_PROFILE_GENERATION_END, fighter_id=C.FIGHTER_A))
+        on_event(FightEvent(C.FIGHT_EVENT_FIGHTERS_READY, data={"fighters": fighters}))
+        on_event(
+            FightEvent(
+                C.FIGHT_EVENT_TOKEN_METADATA,
+                data={"metadata": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14}},
+            )
+        )
+        on_event(FightEvent(C.FIGHT_EVENT_TURN_COMPLETE, turn=1, data={"turn": turn}))
+        on_event(FightEvent(C.FIGHT_EVENT_FIGHT_COMPLETE, turn=1, data={"result": {C.WINNER: C.DRAW}}))
+        return {C.WINNER: C.DRAW, C.LOG_TURN: "1"}, log
+
+    with (
+        patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["play", "--simple-output"])
+
+    assert result.exit_code == 0
+    assert "Generating fighter profile (Fighter A)" in result.output
+    assert "Fighter Designs" in result.output
+    assert "Winged Duelist" in result.output
+    assert "Turn 1:" in result.output
+    assert "Token usage: prompt 10, completion 4, total 14" in result.output
+    assert result.output.count("Turn 1:") == 1
+    assert result.output.index("Generating fighter profile") < result.output.index("Fighter Designs")
+    assert result.output.index("Fighter Designs") < result.output.index("Turn 1:")
+    assert result.output.index("Turn 1:") < result.output.index("Token usage:")
 
 
 def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_enabled(tmp_path):
@@ -290,7 +357,7 @@ def test_cli_play_with_config(tmp_path):
     cfg = tmp_path / "alt.ini"
     cfg.write_text("[General]\nmax_retries = 9\n")
 
-    async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False):
+    async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False, on_event=None):
         from llm_fight.config import CONFIG
 
         assert CONFIG.path == cfg
@@ -314,7 +381,7 @@ def test_cli_play_with_config(tmp_path):
         result = runner.invoke(app, ["play", "--config", str(cfg), "--max-turns", "3", "--simple-output"])
     assert result.exit_code == 0
     assert "Winner: B" in result.output
-    mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None, return_log=True)
+    mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None, return_log=True, on_event=ANY)
     mock_update.assert_called_once()
     config_mod.CONFIG = original
 
@@ -340,7 +407,7 @@ def test_cli_fighter_options():
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--fighter-a", "X", "--fighter-b", "Y", "--simple-output"])
     assert result.exit_code == 0
-    mock_fight.assert_called_once_with(fighter_a_section="X", fighter_b_section="Y", return_log=True)
+    mock_fight.assert_called_once_with(fighter_a_section="X", fighter_b_section="Y", return_log=True, on_event=ANY)
 
 
 def test_cli_simulate_fighter_options(tmp_path):

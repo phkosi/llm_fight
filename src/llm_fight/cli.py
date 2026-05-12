@@ -258,18 +258,71 @@ def play(
 
     _run_async(ping_ollama())
 
+    console = render.Console()
+    rendered_turns: set[int] = set()
+    token_metadata: list[dict] = []
+
+    def handle_event(event) -> None:
+        if event.name == C.FIGHT_EVENT_TOKEN_METADATA:
+            metadata = event.data.get("metadata", {})
+            if metadata:
+                token_metadata.append(metadata)
+            return
+        if event.name == C.FIGHT_EVENT_FIGHTERS_READY:
+            console.print(render.make_fighter_design_view(event.data.get("fighters", {}), simple=simple_output))
+            return
+        if event.name == C.FIGHT_EVENT_TURN_COMPLETE:
+            turn = event.data.get("turn")
+            if turn is not None:
+                rendered_turns.add(turn.turn)
+                console.print(render.make_turn_table(turn, simple=simple_output))
+            return
+        if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
+            return
+        if simple_output:
+            console.print(render.format_fight_event_status(event))
+
     from .simulation import _single_fight
 
-    result, log = _run_async(
-        _single_fight(
-            fighter_a_section=fighter_a,
-            fighter_b_section=fighter_b,
-            return_log=True,
+    if simple_output:
+        result, log = _run_async(
+            _single_fight(
+                fighter_a_section=fighter_a,
+                fighter_b_section=fighter_b,
+                return_log=True,
+                on_event=handle_event,
+            )
         )
-    )
-    console = render.Console()
+    else:
+        with console.status("Starting fight...", spinner="dots") as status:
+
+            def rich_event_handler(event) -> None:
+                if event.name in {
+                    C.FIGHT_EVENT_TOKEN_METADATA,
+                    C.FIGHT_EVENT_FIGHTERS_READY,
+                    C.FIGHT_EVENT_TURN_COMPLETE,
+                    C.FIGHT_EVENT_FIGHT_COMPLETE,
+                }:
+                    handle_event(event)
+                    if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
+                        status.update("Fight complete")
+                    return
+                status.update(render.format_fight_event_status(event))
+
+            result, log = _run_async(
+                _single_fight(
+                    fighter_a_section=fighter_a,
+                    fighter_b_section=fighter_b,
+                    return_log=True,
+                    on_event=rich_event_handler,
+                )
+            )
+
     for turn in log.turns:
-        table = render.make_turn_table(turn, simple=simple_output)
-        console.print(table)
+        if turn.turn not in rendered_turns:
+            console.print(render.make_turn_table(turn, simple=simple_output))
+
+    if token_metadata:
+        console.print(render.format_token_summary(token_metadata))
 
     typer.echo(f"Winner: {result.get(C.WINNER, C.DRAW)}")

@@ -4,7 +4,7 @@ import aiohttp
 import os
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
-from llm_fight.agents import chat, get_ollama_url
+from llm_fight.agents import chat, chat_with_metadata, get_ollama_url
 from llm_fight.engine import constants as C
 from llm_fight.config import CONFIG  # To access config values for assertions
 from llm_fight.config import Config
@@ -198,6 +198,39 @@ async def test_chat_openai_compat_payload_and_response_format():
 
 
 @pytest.mark.asyncio
+async def test_chat_with_metadata_extracts_openai_usage():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+    openai_url = "http://localhost:11434/v1/chat/completions"
+
+    mock_actual_response = AsyncMock()
+    mock_actual_response.json = AsyncMock(
+        return_value={
+            C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "compat ok"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+    )
+    mock_actual_response.status = 200
+    mock_actual_response.raise_for_status = MagicMock()
+
+    mock_post_context_manager = AsyncMock()
+    mock_post_context_manager.__aenter__.return_value = mock_actual_response
+
+    mock_session_instance = MagicMock()
+    mock_session_instance.closed = False
+    mock_session_instance.close = AsyncMock()
+    mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
+
+    with (
+        patch("aiohttp.ClientSession", return_value=mock_session_instance),
+        patch.dict(os.environ, {"API_URL": openai_url}),
+    ):
+        results = await chat_with_metadata(messages=messages, max_tokens=12, best_of=1)
+
+    assert results[0].content == "compat ok"
+    assert results[0].metadata == {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+
+
+@pytest.mark.asyncio
 async def test_chat_native_payload_sanitizes_schema_for_ollama():
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
     schema = {
@@ -240,6 +273,46 @@ async def test_chat_native_payload_sanitizes_schema_for_ollama():
     assert C.FIGHTER_A in sent_schema[C.SCHEMA_PROPERTIES]
     assert C.FIGHTER_B in sent_schema[C.SCHEMA_PROPERTIES]
     assert C.SCHEMA_MINIMUM not in sent_schema[C.SCHEMA_PROPERTIES][C.FIGHTER_A][C.SCHEMA_PROPERTIES]["pain"]
+
+
+@pytest.mark.asyncio
+async def test_chat_with_metadata_extracts_native_ollama_counts_and_durations():
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(
+        return_value={
+            C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"},
+            "prompt_eval_count": 7,
+            "eval_count": 3,
+            "total_duration": 100,
+            "load_duration": 20,
+            "prompt_eval_duration": 30,
+            "eval_duration": 40,
+            "done_reason": "stop",
+        }
+    )
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    with patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
+        results = await chat_with_metadata(messages=messages, max_tokens=12, session=session)
+
+    assert results[0].content == "ok"
+    assert results[0].metadata["prompt_tokens"] == 7
+    assert results[0].metadata["completion_tokens"] == 3
+    assert results[0].metadata["total_tokens"] == 10
+    assert results[0].metadata["prompt_eval_count"] == 7
+    assert results[0].metadata["eval_count"] == 3
+    assert results[0].metadata["done_reason"] == "stop"
 
 
 @pytest.mark.asyncio

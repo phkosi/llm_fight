@@ -75,6 +75,11 @@ Run a short single-fight smoke test:
 uv run llmfight play --max-turns 2 --simple-output
 ```
 
+`play` renders the fighter designs before turn 1 and shows live phase status
+while fighter and judge calls are running. When the configured provider returns
+real token usage metadata, `play` summarizes prompt/completion/total tokens at
+the end; providers that omit usage metadata are handled silently.
+
 Run a one-fight batch simulation:
 
 ```bash

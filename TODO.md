@@ -217,7 +217,18 @@ Verification: `uv run pytest -q tests/test_creativity_gate.py tests/test_state.p
 
 Addresses: ISSUE-011, ISSUE-023
 
-- [ ] Show fighter designs before combat starts and provide responsive terminal feedback while LLM calls are running. When `llmfight play` starts, render a clear pre-fight view of both fighters before turn 1, including class/theme, loadout, environment, anatomy/body parts, and starting buffs/debuffs or traits. While fighters and judges are generating, show progress feedback such as a spinner, progress bar, or phase status so the terminal does not look frozen. When available from the LLM transport or transcript metadata, surface useful token stats such as prompt tokens, completion tokens, total tokens, or tokens generated.
+- [x] Show fighter designs before combat starts and provide responsive terminal feedback while LLM calls are running. When `llmfight play` starts, render a clear pre-fight view of both fighters before turn 1, including class/theme, loadout, environment, anatomy/body parts, and starting buffs/debuffs or traits. While fighters and judges are generating, show progress feedback such as a spinner, progress bar, or phase status so the terminal does not look frozen. When available from the LLM transport or transcript metadata, surface useful token stats such as prompt tokens, completion tokens, total tokens, or tokens generated.
+
+Clarified implementation contract:
+
+- This task applies to `llmfight play` only. Do not change `run_batch()` behavior, batch CSV output, or `simulate` completion-progress semantics.
+- Add an internal optional play-event hook to `_single_fight()`, such as `on_event(event: FightEvent)`, without changing the default return shape.
+- Emit play events for profile generation for A/B when `fighter_creation_mode = generated`, fighters ready/pre-fight state, fighter A/B action generation, Judge Phase 1, rolls, Judge Phase 2, applying deltas, ticking effects, turn complete, and fight complete.
+- Render the pre-fight design only after configured/generated fighters are built and before turn 1 action generation. In generated mode, show status while profile generation is running.
+- Add `render.make_fighter_design_view()` for rich/plain output showing fighter id, class/theme, loadout, environment, body parts, active buffs/debuffs, and profile-generation metadata when present.
+- Define token metadata explicitly. Add a typed call result or optional metadata path for `chat()` that preserves existing string-list behavior for current callers unless intentionally migrated. Extract native Ollama fields such as `prompt_eval_count`, `eval_count`, `total_duration`, `load_duration`, `prompt_eval_duration`, `eval_duration`, and `done_reason` when present, and OpenAI-compatible `usage.prompt_tokens`, `usage.completion_tokens`, and `usage.total_tokens` when present.
+- Attach token metadata to play events and/or `CombatLog` turns so `llmfight play` can summarize it. Missing metadata must render nothing or a clear `tokens unavailable` fallback without crashing; do not display guessed, zero, or placeholder token counts as real usage.
+- Rich mode should use a spinner/status surface. `--simple-output` should avoid Rich-only controls and may use plain phase lines, but must not look frozen before the first turn.
 
 Acceptance goals:
 
@@ -226,6 +237,9 @@ Acceptance goals:
 - Token usage is displayed or summarized when available, and omitted cleanly when the provider does not return token data.
 - Existing rich turn tables remain readable and are not duplicated by engine logs.
 - Add tests or snapshot-style coverage for the pre-fight render, progress/status hooks, token-stat formatting, and missing-token fallback behavior.
+- Add tests for pre-fight render before the first turn table, generated-profile status before generated fighter design display, phase event ordering with mocked async calls, native Ollama and OpenAI-compatible token metadata extraction, missing-token fallback, and no `simulate`/`run_batch` API or output regression.
+
+Verification: `uv run pytest -q tests/test_agents.py tests/test_render.py tests/test_simulation.py tests/test_cli.py tests/engine/test_fighter.py tests/engine/test_judge.py tests/test_validation.py` -> 218 passed, 1 warning; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 344 passed, 6 skipped, 1 warning; `git diff --check`.
 
 ## Effect Payload Safety Gate
 

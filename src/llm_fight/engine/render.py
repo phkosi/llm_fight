@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from statistics import mean
-from typing import Iterable
+from typing import Any, Iterable
 
 from .combat_log import CombatTurn
 from . import constants as C
@@ -50,6 +50,115 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
     if changes:
         table.add_row("Status changes", changes)
     return table
+
+
+def _effect_names(state: dict[str, Any]) -> str:
+    names = []
+    for effect in state.get(C.BUFFS, []) + state.get(C.DEBUFFS, []):
+        if isinstance(effect, dict) and effect.get(C.NAME):
+            names.append(str(effect[C.NAME]))
+    return ", ".join(names) if names else "none"
+
+
+def _fighter_design_lines(fighter_id: str, state: dict[str, Any]) -> list[str]:
+    title = f"Fighter {fighter_id}: {state.get('class_', 'Unknown Fighter')}"
+    theme = state.get(C.THEME)
+    if theme:
+        title += f" ({theme})"
+    lines = [
+        title,
+        f"  Loadout: {state.get(C.LOADOUT, 'unknown')}",
+        f"  Environment: {state.get('environment', 'unknown')}",
+        f"  Body parts: {', '.join(sorted(state.get('parts', {}).keys())) or 'none'}",
+        f"  Active effects: {_effect_names(state)}",
+    ]
+    profile_generation = state.get(C.PROFILE_GENERATION)
+    if profile_generation:
+        lines.append(f"  Profile generation: {profile_generation}")
+    return lines
+
+
+def make_fighter_design_view(fighters: dict[str, dict[str, Any]], simple: bool = False) -> "Table | str":
+    """Return a pre-fight fighter design view for rich or plain output."""
+    if simple or not RICH_AVAILABLE:
+        lines = ["Fighter Designs"]
+        for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
+            lines.extend(_fighter_design_lines(fighter_id, fighters.get(fighter_id, {})))
+        return "\n".join(lines)
+
+    table = Table(title="Fighter Designs", show_lines=True)
+    table.add_column("Fighter", style="bold", no_wrap=True)
+    table.add_column("Design")
+    for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
+        state = fighters.get(fighter_id, {})
+        table.add_row(fighter_id, "\n".join(_fighter_design_lines(fighter_id, state)))
+    return table
+
+
+_EVENT_STATUS_LABELS = {
+    C.FIGHT_EVENT_PROFILE_GENERATION_START: "Generating fighter profile",
+    C.FIGHT_EVENT_PROFILE_GENERATION_END: "Finished fighter profile",
+    C.FIGHT_EVENT_FIGHTERS_READY: "Fighters ready",
+    C.FIGHT_EVENT_FIGHTER_ACTION_START: "Generating fighter action",
+    C.FIGHT_EVENT_FIGHTER_ACTION_END: "Finished fighter action",
+    C.FIGHT_EVENT_JUDGE_PHASE1_START: "Judge Phase 1",
+    C.FIGHT_EVENT_JUDGE_PHASE1_END: "Judge Phase 1 complete",
+    C.FIGHT_EVENT_ROLLS_START: "Rolling outcomes",
+    C.FIGHT_EVENT_ROLLS_END: "Rolls complete",
+    C.FIGHT_EVENT_JUDGE_PHASE2_START: "Judge Phase 2",
+    C.FIGHT_EVENT_JUDGE_PHASE2_END: "Judge Phase 2 complete",
+    C.FIGHT_EVENT_DELTAS_START: "Applying deltas",
+    C.FIGHT_EVENT_DELTAS_END: "Deltas applied",
+    C.FIGHT_EVENT_EFFECTS_START: "Ticking effects",
+    C.FIGHT_EVENT_EFFECTS_END: "Effects ticked",
+    C.FIGHT_EVENT_TURN_COMPLETE: "Turn complete",
+    C.FIGHT_EVENT_FIGHT_COMPLETE: "Fight complete",
+}
+
+
+def format_fight_event_status(event: Any) -> str:
+    """Return a short user-facing status line for a play event."""
+    label = _EVENT_STATUS_LABELS.get(getattr(event, "name", ""), str(getattr(event, "name", "event")))
+    fighter_id = getattr(event, "fighter_id", None)
+    turn = getattr(event, "turn", None)
+    event_name = getattr(event, "name", "")
+    suffixes = []
+    if fighter_id:
+        suffixes.append(f"Fighter {fighter_id}")
+    if turn is not None and event_name not in {
+        C.FIGHT_EVENT_PROFILE_GENERATION_START,
+        C.FIGHT_EVENT_PROFILE_GENERATION_END,
+    }:
+        suffixes.append(f"turn {turn}")
+    if suffixes:
+        return f"{label} ({', '.join(suffixes)})"
+    return label
+
+
+def format_token_summary(metadata_items: Iterable[dict[str, Any]]) -> str:
+    """Summarize real provider token metadata, or report that it is unavailable."""
+    items = [item for item in metadata_items if item]
+    if not items:
+        return "Token usage: tokens unavailable"
+
+    prompt_tokens = sum(item.get("prompt_tokens", 0) for item in items if isinstance(item.get("prompt_tokens"), int))
+    completion_tokens = sum(
+        item.get("completion_tokens", 0) for item in items if isinstance(item.get("completion_tokens"), int)
+    )
+    total_tokens = sum(item.get("total_tokens", 0) for item in items if isinstance(item.get("total_tokens"), int))
+    if not total_tokens and (prompt_tokens or completion_tokens):
+        total_tokens = prompt_tokens + completion_tokens
+
+    parts = []
+    if prompt_tokens:
+        parts.append(f"prompt {prompt_tokens}")
+    if completion_tokens:
+        parts.append(f"completion {completion_tokens}")
+    if total_tokens:
+        parts.append(f"total {total_tokens}")
+    if not parts:
+        return "Token usage: tokens unavailable"
+    return "Token usage: " + ", ".join(parts)
 
 
 def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None = None) -> "Table | str":

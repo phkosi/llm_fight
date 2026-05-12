@@ -2,7 +2,7 @@
 
 import asyncio
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 import random
@@ -37,6 +37,45 @@ class BatchSummary:
     @property
     def has_errors(self) -> bool:
         return self.error_rows > 0
+
+
+@dataclass(frozen=True)
+class FightEvent:
+    """A play-mode progress event emitted by a running fight."""
+
+    name: str
+    turn: int | None = None
+    fighter_id: str | None = None
+    data: Dict[str, Any] = field(default_factory=dict)
+
+
+FightEventCallback = Callable[[FightEvent], None]
+
+
+def _emit_event(on_event: FightEventCallback | None, event: FightEvent) -> None:
+    if on_event is not None:
+        on_event(event)
+
+
+def _emit_token_metadata(
+    on_event: FightEventCallback | None,
+    *,
+    phase: str,
+    metadata: dict[str, Any],
+    turn: int | None = None,
+    fighter_id: str | None = None,
+) -> None:
+    if not metadata:
+        return
+    _emit_event(
+        on_event,
+        FightEvent(
+            C.FIGHT_EVENT_TOKEN_METADATA,
+            turn=turn,
+            fighter_id=fighter_id,
+            data={"phase": phase, "metadata": metadata},
+        ),
+    )
 
 
 def validate_batch_settings() -> tuple[int, int]:
@@ -282,6 +321,7 @@ async def _build_match_fighter(
     section: str,
     opponent_section: str,
     fight_rng: random.Random | None,
+    on_event: FightEventCallback | None = None,
 ) -> FighterState:
     """Create one fighter from config or the opt-in generated-profile flow."""
     mode = config_mod.CONFIG.get_fighter_creation_mode()
@@ -289,16 +329,32 @@ async def _build_match_fighter(
         return FighterState.from_config(fighter_id, config_section=section)
 
     nudge = choose_fighter_creation_nudge(fight_rng)
+    _emit_event(
+        on_event,
+        FightEvent(
+            C.FIGHT_EVENT_PROFILE_GENERATION_START,
+            fighter_id=fighter_id,
+            data={"section": section, "nudge": nudge},
+        ),
+    )
     try:
+        generation_kwargs: dict[str, Any] = {"config": config_mod.CONFIG}
+        if on_event is not None:
+            generation_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                on_event,
+                phase="profile_generation",
+                metadata=metadata,
+                fighter_id=fighter_id,
+            )
         profile = await generate_fighter_profile(
             fighter_id,
             section,
             opponent_section,
             nudge,
-            config=config_mod.CONFIG,
+            **generation_kwargs,
         )
         metadata = profile_generation_metadata(nudge, mode=C.FIGHTER_CREATION_MODE_GENERATED)
-        return FighterState.from_profile(
+        fighter = FighterState.from_profile(
             fighter_id,
             profile,
             config_section=section,
@@ -306,6 +362,15 @@ async def _build_match_fighter(
             allow_config_overrides=False,
             profile_generation=metadata,
         )
+        _emit_event(
+            on_event,
+            FightEvent(
+                C.FIGHT_EVENT_PROFILE_GENERATION_END,
+                fighter_id=fighter_id,
+                data={"section": section, "nudge": nudge, "metadata": metadata},
+            ),
+        )
+        return fighter
     except ProfileGenerationError as exc:
         metadata = profile_generation_metadata(
             nudge,
@@ -319,6 +384,14 @@ async def _build_match_fighter(
         )
         fighter = FighterState.from_config(fighter_id, config_section=section)
         fighter.profile_generation = metadata
+        _emit_event(
+            on_event,
+            FightEvent(
+                C.FIGHT_EVENT_PROFILE_GENERATION_END,
+                fighter_id=fighter_id,
+                data={"section": section, "nudge": nudge, "metadata": metadata},
+            ),
+        )
         return fighter
 
 
@@ -327,15 +400,29 @@ async def _build_match_fighters(
     fighter_b_section: str,
     combat_log: CombatLog,
     fight_rng: random.Random | None,
+    on_event: FightEventCallback | None = None,
 ) -> tuple[FighterState, FighterState]:
     """Create both match fighters before turn 1."""
-    A = await _build_match_fighter(C.FIGHTER_A, fighter_a_section, fighter_b_section, fight_rng)
-    B = await _build_match_fighter(C.FIGHTER_B, fighter_b_section, fighter_a_section, fight_rng)
+    A = await _build_match_fighter(C.FIGHTER_A, fighter_a_section, fighter_b_section, fight_rng, on_event=on_event)
+    B = await _build_match_fighter(C.FIGHTER_B, fighter_b_section, fighter_a_section, fight_rng, on_event=on_event)
     if A.profile_generation or B.profile_generation:
         combat_log.profile_generation = {
             C.FIGHTER_A: A.profile_generation,
             C.FIGHTER_B: B.profile_generation,
         }
+    _emit_event(
+        on_event,
+        FightEvent(
+            C.FIGHT_EVENT_FIGHTERS_READY,
+            data={
+                "fighters": {
+                    C.FIGHTER_A: A.to_json(),
+                    C.FIGHTER_B: B.to_json(),
+                },
+                C.PROFILE_GENERATION: combat_log.profile_generation,
+            },
+        ),
+    )
     return A, B
 
 
@@ -344,6 +431,7 @@ async def _single_fight(
     fighter_b_section: str | None = None,
     return_log: bool = False,
     fight_rng: random.Random | None = None,
+    on_event: FightEventCallback | None = None,
 ) -> Dict[str, str] | tuple[Dict[str, str], CombatLog]:
     """
     Simulates a single fight between two AI fighters (A and B).
@@ -369,7 +457,7 @@ async def _single_fight(
     turn = 0
     outcome = None
     combat_log = CombatLog()
-    A, B = await _build_match_fighters(fighter_a_section, fighter_b_section, combat_log, fight_rng)
+    A, B = await _build_match_fighters(fighter_a_section, fighter_b_section, combat_log, fight_rng, on_event=on_event)
     fighter_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
     judge_log_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_JUDGE_LOG_WINDOW, int, fallback=9999)
 
@@ -377,16 +465,52 @@ async def _single_fight(
         turn += 1
 
         # Fighters propose actions concurrently, each receiving the combat log
+        async def _fighter_attempt(fighter: FighterState, opponent: FighterState) -> str:
+            _emit_event(
+                on_event,
+                FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_START, turn=turn, fighter_id=fighter.id),
+            )
+            try:
+                attempt_kwargs: dict[str, Any] = {
+                    "combat_log": combat_log,
+                    "turn_window": fighter_log_window,
+                }
+                if on_event is not None:
+                    attempt_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                        on_event,
+                        phase="fighter_action",
+                        metadata=metadata,
+                        turn=turn,
+                        fighter_id=fighter.id,
+                    )
+                return await get_fighter_attempt(fighter, opponent, **attempt_kwargs)
+            finally:
+                _emit_event(
+                    on_event,
+                    FightEvent(C.FIGHT_EVENT_FIGHTER_ACTION_END, turn=turn, fighter_id=fighter.id),
+                )
+
         attemptA, attemptB = await asyncio.gather(
-            get_fighter_attempt(A, B, combat_log=combat_log, turn_window=fighter_log_window),
-            get_fighter_attempt(B, A, combat_log=combat_log, turn_window=fighter_log_window),
+            _fighter_attempt(A, B),
+            _fighter_attempt(B, A),
         )
         # Provide recent combat log context to judge_phase1
         p1_recent_log = combat_log.to_summary(last_n=fighter_log_window)
-        p1 = await judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, recent_log=p1_recent_log)
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE1_START, turn=turn))
+        p1_kwargs: dict[str, Any] = {"recent_log": p1_recent_log}
+        if on_event is not None:
+            p1_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                on_event,
+                phase="judge_phase1",
+                metadata=metadata,
+                turn=turn,
+            )
+        p1 = await judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, **p1_kwargs)
         p1 = _apply_effect_roll_modifiers(p1, {C.FIGHTER_A: A, C.FIGHTER_B: B})
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE1_END, turn=turn, data={"p1": p1}))
 
         # Determine success of attempts based on probabilities from Judge P1
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_ROLLS_START, turn=turn))
         rolls = {"A": False, "B": False}
         try:
             prob_a_str = p1.get(f"{C.ATTEMPT}_{C.FIGHTER_A}_prob", "0.0")
@@ -409,6 +533,7 @@ async def _single_fight(
                 f"Could not parse probability string for Fighter B: '{prob_b_str}'. Defaulting to 0.0 probability."
             )
             # rolls['B'] remains False
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_ROLLS_END, turn=turn, data={"rolls": dict(rolls)}))
 
         # Pass the judgement text to P2 for narration context, full states, and combat log
         judge_recent_log = combat_log.to_summary(last_n=judge_log_window)
@@ -428,8 +553,18 @@ async def _single_fight(
             "combat_log_turns": len(combat_log),
             "recent_combat_log": judge_recent_log,
         }
-        p2 = await judge_phase2(p2_input_state, rolls)
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_START, turn=turn))
+        p2_kwargs: dict[str, Any] = {}
+        if on_event is not None:
+            p2_kwargs["on_metadata"] = lambda metadata: _emit_token_metadata(
+                on_event,
+                phase="judge_phase2",
+                metadata=metadata,
+                turn=turn,
+            )
+        p2 = await judge_phase2(p2_input_state, rolls, **p2_kwargs)
         p2 = _authorize_phase2_result(p2, p1, rolls)
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_JUDGE_PHASE2_END, turn=turn, data={"p2": p2}))
 
         turn_entry = CombatTurn(
             turn=turn,
@@ -442,18 +577,23 @@ async def _single_fight(
         )
 
         # Apply deltas to fighter states
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_DELTAS_START, turn=turn))
         if "delta" in p2 and isinstance(p2["delta"], dict):
             A.apply_delta(p2["delta"].get("A", {}))
             B.apply_delta(p2["delta"].get("B", {}))
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_DELTAS_END, turn=turn))
 
         # Tick effects for both fighters AFTER deltas are applied for the turn
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_EFFECTS_START, turn=turn))
         A.apply_effects(rng=fight_rng)
         B.apply_effects(rng=fight_rng)
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_EFFECTS_END, turn=turn))
 
         turn_entry.state_A_after = A.to_json()
         turn_entry.state_B_after = B.to_json()
 
         combat_log.append(turn_entry)
+        _emit_event(on_event, FightEvent(C.FIGHT_EVENT_TURN_COMPLETE, turn=turn, data={"turn": turn_entry}))
         if config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False):
             logger.info(turn_entry.to_simple_text())
 
@@ -480,6 +620,7 @@ async def _single_fight(
     logger.info(f"Fight ended. Outcome: {outcome}, Turns: {turn}")
     logger.info(f"Fighter A ({A.id}) status: {A.status}, Fighter B ({B.id}) status: {B.status}")
     result = {C.WINNER: outcome, C.LOG_TURN: str(turn)}
+    _emit_event(on_event, FightEvent(C.FIGHT_EVENT_FIGHT_COMPLETE, turn=turn, data={"result": result}))
     if return_log:
         return result, combat_log
     return result

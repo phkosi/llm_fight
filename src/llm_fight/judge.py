@@ -1,13 +1,13 @@
 ﻿"""Judge orchestration (Phase-1 probability, RNG, Phase-2 narration)."""
 
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Callable
 
 from jsonschema import ValidationError, validate
 
 from .utils.json_parser import parse_json_from_text
 
-from .agents import chat
+from .agents import chat, chat_with_metadata
 from .utils.token_counter import compute_completion_tokens
 from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 from . import config as config_mod
@@ -141,7 +141,14 @@ def _phase2_noop_result() -> dict[str, Any]:
     }
 
 
-async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, recent_log: str = "") -> Dict[str, Any]:
+async def judge_phase1(
+    state: Dict[str, Any],
+    attemptA: str,
+    attemptB: str,
+    *,
+    recent_log: str = "",
+    on_metadata: Callable[[dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
     """
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
 
@@ -175,21 +182,40 @@ async def judge_phase1(state: Dict[str, Any], attemptA: str, attemptB: str, *, r
     max_tok = compute_completion_tokens(messages, max_tok_j, context_limit)
 
     async def _call():
-        response_texts = await chat(
-            messages,
-            max_tokens=max_tok,
-            num_ctx=context_limit,
-            best_of=best_j,
-            schema=JudgeP1Schema,
-            retries=max_retries,
-        )
+        if on_metadata is None:
+            response_texts = await chat(
+                messages,
+                max_tokens=max_tok,
+                num_ctx=context_limit,
+                best_of=best_j,
+                schema=JudgeP1Schema,
+                retries=max_retries,
+            )
+        else:
+            results = await chat_with_metadata(
+                messages,
+                max_tokens=max_tok,
+                num_ctx=context_limit,
+                best_of=best_j,
+                schema=JudgeP1Schema,
+                retries=max_retries,
+            )
+            response_texts = [result.content for result in results]
+            for result in results:
+                if result.metadata:
+                    on_metadata(result.metadata)
         return _parse_first_json_response(response_texts)
 
     result = await guarded_call(_call, JudgeP1Schema, max_retries=max_retries)
     return result
 
 
-async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -> Dict[str, Any]:
+async def judge_phase2(
+    p2_input_state: Dict[str, Any],
+    rolls: Dict[str, bool],
+    *,
+    on_metadata: Callable[[dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
     """
     Judge Phase 2: Narrates combat outcomes and calculates state changes (deltas).
 
@@ -219,14 +245,28 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
     max_tok = compute_completion_tokens(messages, max_tok_j, context_limit)
 
     async def _call_with_schema() -> dict[str, Any]:
-        response_texts = await chat(
-            messages,
-            max_tokens=max_tok,
-            num_ctx=context_limit,
-            best_of=best_j,
-            schema=JudgeP2Schema,
-            retries=max_retries,
-        )
+        if on_metadata is None:
+            response_texts = await chat(
+                messages,
+                max_tokens=max_tok,
+                num_ctx=context_limit,
+                best_of=best_j,
+                schema=JudgeP2Schema,
+                retries=max_retries,
+            )
+        else:
+            results = await chat_with_metadata(
+                messages,
+                max_tokens=max_tok,
+                num_ctx=context_limit,
+                best_of=best_j,
+                schema=JudgeP2Schema,
+                retries=max_retries,
+            )
+            response_texts = [result.content for result in results]
+            for result in results:
+                if result.metadata:
+                    on_metadata(result.metadata)
         return _parse_first_json_response(response_texts)
 
     async def _call_without_schema() -> dict[str, Any]:
@@ -241,13 +281,26 @@ async def judge_phase2(p2_input_state: Dict[str, Any], rolls: Dict[str, bool]) -
             system,
             {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(repair_payload)},
         ]
-        response_texts = await chat(
-            repair_messages,
-            max_tokens=max_tok,
-            num_ctx=context_limit,
-            best_of=max(1, best_j),
-            retries=max_retries,
-        )
+        if on_metadata is None:
+            response_texts = await chat(
+                repair_messages,
+                max_tokens=max_tok,
+                num_ctx=context_limit,
+                best_of=max(1, best_j),
+                retries=max_retries,
+            )
+        else:
+            results = await chat_with_metadata(
+                repair_messages,
+                max_tokens=max_tok,
+                num_ctx=context_limit,
+                best_of=max(1, best_j),
+                retries=max_retries,
+            )
+            response_texts = [result.content for result in results]
+            for result in results:
+                if result.metadata:
+                    on_metadata(result.metadata)
         return _parse_first_json_response(response_texts)
 
     async def _call() -> dict[str, Any]:
