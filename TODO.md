@@ -794,6 +794,41 @@ Verification:
 - Focused tests: `uv run pytest -q tests\test_config.py tests\test_rng.py tests\test_rng_seed_import.py tests\test_cli.py tests\test_simulation.py` -> 120 passed, 1 warning.
 - Full gate: `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 454 passed, 6 skipped, 1 warning; `git diff --check`.
 
+## Phase 2 Authorization Module Extraction
+
+Addresses: ISSUE-039
+
+- [x] Extract Judge Phase 2 authorization, source filtering, target canonicalization, invalid-target warning generation, and sanitized-result shaping from `src/llm_fight/simulation.py` into a focused module such as `src/llm_fight/phase2_authorization.py`.
+
+Implementation intent:
+
+Keep `_single_fight()` behavior unchanged and leave broader fight-loop, batch, and `FighterState` refactors for later slices. This task should move mostly pure authorization logic out of `simulation.py`, including `_attempts_both_invalid_and_failed()`, not redesign the Phase 2 contract.
+
+Acceptance goals:
+
+- `simulation.py` imports and calls the extracted authorization function; preserve a compatibility alias if needed for existing private tests during the move.
+- Preserve the private `_authorize_phase2_result` import alias in `simulation.py` while exposing the focused implementation from the new module.
+- No behavior changes to winner suppression, delta filtering, invalid wound/effect-removal target handling, fallback metadata preservation, narration sanitization, or validation warnings.
+- Move the Phase 2 authorization/target-validation tests out of `tests/test_simulation.py` into a focused test file such as `tests/test_phase2_authorization.py`.
+- Keep helper churn minimal; duplicate tiny test helpers or extract only the smallest shared helper needed.
+- `simulation.py` drops below the urgent 1000 LOC threshold, and `tests/test_simulation.py` is materially smaller.
+
+Required tests:
+
+- `uv run pytest -q tests\test_simulation.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_phase2_authorization.py`
+- `uv run pytest -q`
+- `uv run black --check .`
+- `uv run flake8`
+
+Verification:
+
+- Architect subagent proposed this as the first ISSUE-039 slice; review subagent approved the task design with the explicit `_authorize_phase2_result` compatibility alias and `_attempts_both_invalid_and_failed()` extraction.
+- Extracted `src\llm_fight\phase2_authorization.py`; `src\llm_fight\simulation.py` now imports `authorize_phase2_result as _authorize_phase2_result`.
+- Moved Phase 2 target-authorization tests to `tests\test_phase2_authorization.py`.
+- Size impact: `src\llm_fight\simulation.py` -> 676 physical LOC; `src\llm_fight\phase2_authorization.py` -> 328 physical LOC; `tests\test_simulation.py` -> 1751 physical LOC; `tests\test_phase2_authorization.py` -> 720 physical LOC.
+- Focused tests: `uv run pytest -q tests\test_simulation.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_phase2_authorization.py` -> 61 passed.
+- Full gate: `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 454 passed, 6 skipped, 1 warning; `git diff --check`.
+
 ## Live/Perf Gating And Installed-Package Test Workflow
 
 Addresses: ISSUE-032, ISSUE-035

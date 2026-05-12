@@ -357,6 +357,17 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 - Resolution: `tests/test_cli.py` now normalizes captured CLI output through Click's `unstyle()` and whitespace collapse before asserting the negative `--runs` validation text, preserving the existing pre-ping behavior assertion.
 - Tests: Re-run `uv run pytest -q --cov=llm_fight` locally and in GitHub Actions. Add or update focused coverage proving `simulate --runs -1` exits nonzero, reports the validation message after normalization, and does not await `ping_ollama()`.
 
+### ISSUE-039: Core simulation/state and large test files are monolithic
+
+- Status: tasked
+- Task: TODO.md - Phase 2 Authorization Module Extraction
+- Source: codebase review
+- Area: Maintainability, AI-agent ergonomics
+- Evidence: Code-size review found `src/llm_fight/simulation.py` at 1124 physical LOC with `_single_fight()` at 262 LOC / roughly 102 statements, `run_batch()` at 105 LOC, and `_authorize_fighter_delta()` near the function statement threshold; `src/llm_fight/state.py` at 948 physical LOC with `FighterState` spanning roughly 822 LOC. Test-suite review found `tests/test_simulation.py` at 2783 physical LOC, `tests/test_state.py` at 1200 physical LOC, and `tests/test_agents.py` at 818 physical LOC. This exceeds the `AGENTS.md` code-size issue thresholds for production and test modules; `simulation.py`, `tests/test_simulation.py`, and `tests/test_state.py` also exceed the urgent 1000+ LOC threshold. First slice extracted Phase 2 authorization into `src/llm_fight/phase2_authorization.py`; current measurements are `simulation.py` 676 LOC, `phase2_authorization.py` 328 LOC, `tests/test_simulation.py` 1751 LOC, and `tests/test_phase2_authorization.py` 720 LOC. Remaining pressure still applies to `state.py`, `tests/test_simulation.py`, `tests/test_state.py`, and `tests/test_agents.py`.
+- Impact: Refactors and reviews require loading broad, mixed-responsibility files into context, which raises risk for missed behavior, duplicate logic, and harder AI-agent edits. The largest files mix orchestration, authorization, state mutation, effects, damage, batch handling, and trace/test concerns.
+- Suggested fix: Split `simulation.py` into focused fight-loop, batch, event, and Phase 2 authorization modules; split `state.py` into fighter state/construction, effect mechanics, damage/anatomy mutation, and status invariant modules. Split large tests along matching behavior boundaries: simulation single-fight/profile/trace, batch/progress/CSV, modifiers/config, Phase 2 authorization/target sanitization; state damage/anatomy status, effect creation/ticking, dynamic mechanics/RNG, effect removal/status invariants; agents native payloads, OpenAI-compatible payloads, metadata extraction, retry/config, endpoint/proxy, ping health, and transport privacy.
+- Tests: Preserve current behavior with focused extraction commits and run `uv run black --check .`, `uv run flake8`, moved focused test files such as `uv run pytest -q tests/test_simulation.py tests/test_state.py tests/test_agents.py`, and `uv run pytest -q` after each slice.
+
 ## P3
 
 ### ISSUE-029: Burn tick logs a random layer but damages the normal outer layer
