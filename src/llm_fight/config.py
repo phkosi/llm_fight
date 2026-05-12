@@ -1,7 +1,9 @@
 """Configuration loader and writer for LLM Fight Engine (INI-style)."""
 
 from __future__ import annotations
+from collections.abc import Iterator
 import configparser
+from contextlib import contextmanager
 from pathlib import Path
 from .engine import constants as C
 
@@ -286,5 +288,16 @@ class Config:
         }
 
 
-# convenience singleton
 CONFIG = Config()
+
+
+@contextmanager
+def use_config(config: Config) -> Iterator[Config]:
+    """Temporarily make ``config`` the active process config."""
+    global CONFIG
+    previous = CONFIG
+    CONFIG = config
+    try:
+        yield config
+    finally:
+        CONFIG = previous

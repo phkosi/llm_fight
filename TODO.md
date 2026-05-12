@@ -772,7 +772,7 @@ Verification:
 
 Addresses: ISSUE-028
 
-- [ ] Introduce scoped runtime ownership for config and randomness. Prefer passing an explicit runtime context/config/RNG through simulation entry points and helpers; at minimum, make CLI config replacement/restoration exception-safe and seed RNG explicitly after config loading.
+- [x] Introduce scoped runtime ownership for config and randomness as a focused global-state containment slice. Add a small scoped config helper for programmatic callers, make CLI config replacement and CLI overrides restore the previous config in `finally`, and seed/restore the process RNG around entry-point execution. Do not attempt a full explicit runtime-context refactor through every simulation, prompt, transport, and transcript helper in this task.
 
 Acceptance goals:
 
@@ -784,9 +784,15 @@ Acceptance goals:
 Required tests:
 
 - `CliRunner` tests invoking different configs sequentially in one process.
+- CLI success and failure tests proving `config_mod.CONFIG` and RNG state are restored after `--config`, `--runs`, and `--max-turns` invocations.
 - RNG/config import-order regression tests.
-- Simulation tests for deterministic seeded runs after config load.
-- Update `docs/Design_doc.md` if a runtime-context API is introduced.
+- Programmatic scoped-config tests proving an explicit config can be active temporarily without permanently mutating global state.
+
+Verification:
+
+- Review subagent approved the narrowed task design after removing the too-broad full runtime-context refactor from this slice.
+- Focused tests: `uv run pytest -q tests\test_config.py tests\test_rng.py tests\test_rng_seed_import.py tests\test_cli.py tests\test_simulation.py` -> 120 passed, 1 warning.
+- Full gate: `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 454 passed, 6 skipped, 1 warning; `git diff --check`.
 
 ## Live/Perf Gating And Installed-Package Test Workflow
 

@@ -336,14 +336,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-028: Config and RNG rely on process-global state
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Runtime Config And RNG Isolation
 - Source: codebase review
 - Area: Best practices, reproducibility
-- Evidence: `CONFIG = Config()` loads at import time in `src/llm_fight/config.py:186`; CLI replaces/mutates it in `src/llm_fight/cli.py:28` and `src/llm_fight/cli.py:42`; RNG initializes from current config at `src/llm_fight/rng.py:8`.
+- Evidence: `CONFIG = Config()` loaded at import time, CLI config loading/replacement and CLI overrides mutated `config_mod.CONFIG` for the process, and `rng.py` seeded the process RNG from whatever config was active at module import. Resolved by `config.use_config()` for temporary programmatic config ownership, `_command_runtime()` in `cli.py` for per-command scoped config/override activation, and `rng.seed_from_config()` plus RNG state save/restore around CLI entry points.
 - Impact: CLI invocations in one process can leak config/overrides, and seeds loaded after import may not affect programmatic `play` unless callers remember to reseed.
 - Suggested fix: Pass a scoped `Config`/runtime context through simulation and LLM calls, or restore globals in `finally`. Initialize RNG explicitly at entry points.
-- Tests: Invoke multiple CLI commands with different configs in one process and assert isolation. Import RNG before swapping config and assert entry points still seed correctly.
+- Tests: Added CLI success/failure scoping tests, CLI override non-leakage coverage, RNG import-order/seed-from-config coverage, programmatic scoped-config coverage, and design-doc notes. Verified with `uv run pytest -q tests\test_config.py tests\test_rng.py tests\test_rng_seed_import.py tests\test_cli.py tests\test_simulation.py` -> 120 passed, 1 warning; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 454 passed, 6 skipped, 1 warning; `git diff --check`.
 
 ### ISSUE-038: GitHub CI fails on Rich/Typer-rendered negative `--runs` output
 

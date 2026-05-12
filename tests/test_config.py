@@ -264,3 +264,18 @@ def test_config_reads_utf8_bom(tmp_path):
     cfg = Config(file_path)
 
     assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int) == 7
+
+
+def test_use_config_restores_previous_global_config(tmp_path):
+    from llm_fight import config as config_mod
+
+    file_path = tmp_path / "scoped.ini"
+    file_path.write_text("[SIMULATION]\nseed = 987\n", encoding="utf-8")
+    original = config_mod.CONFIG
+    scoped = Config(file_path)
+
+    with config_mod.use_config(scoped):
+        assert config_mod.CONFIG is scoped
+        assert config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int) == 987
+
+    assert config_mod.CONFIG is original

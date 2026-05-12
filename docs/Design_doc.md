@@ -114,7 +114,14 @@ health checks use `/api/tags`, while OpenAI-compatible health checks use
 
 ## 7. Configuration
 
-Config is read at call time through `llm_fight.config.CONFIG` or explicit `Config` replacement from the CLI. Avoid import-time copies of config-derived values.
+Config is read at call time through `llm_fight.config.CONFIG`. CLI commands
+activate a fresh scoped `Config` for the invocation, apply CLI overrides inside
+that scope, seed the process RNG from the active `[SIMULATION].seed`, and
+restore the previous config/RNG state when the command exits. Programmatic
+callers that need temporary config ownership should use
+`llm_fight.config.use_config(Config(...))` plus explicit RNG seeding rather than
+permanently replacing the process global. Avoid import-time copies of
+config-derived values.
 
 Important keys:
 

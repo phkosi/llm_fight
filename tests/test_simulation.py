@@ -71,6 +71,55 @@ def _patch_batch_config(runs: int, concurrency: int, seed_value: int = 42):
 
 
 @pytest.mark.asyncio
+async def test_programmatic_scoped_config_seeds_single_fight_rng_and_restores(tmp_path):
+    from llm_fight import rng
+
+    cfg_path = tmp_path / "scoped.ini"
+    cfg_path.write_text("[SIMULATION]\nseed = 1234\nmax_turns = 1\n", encoding="utf-8")
+    scoped_config = Config(cfg_path)
+    original_config = sim_module.config_mod.CONFIG
+    previous_rng_state = rng.get_state()
+    observed_rolls = []
+
+    async def fake_judge_phase2(input_state, successful_rolls, **kwargs):
+        observed_rolls.append(dict(successful_rolls))
+        return {C.NARRATION: "No decisive exchange.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    try:
+        with sim_module.config_mod.use_config(scoped_config):
+            rng.seed_from_config()
+            with (
+                patch("llm_fight.simulation.get_fighter_attempt", new=AsyncMock(return_value="attack")),
+                patch(
+                    "llm_fight.simulation.judge_phase1",
+                    new=AsyncMock(
+                        return_value={
+                            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+                            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.5",
+                            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+                            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.5",
+                        }
+                    ),
+                ),
+                patch("llm_fight.simulation.judge_phase2", new=AsyncMock(side_effect=fake_judge_phase2)),
+            ):
+                result, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        rng.set_state(previous_rng_state)
+
+    expected_rng = random.Random(1234)
+    assert observed_rolls == [
+        {
+            C.FIGHTER_A: expected_rng.random() < 0.5,
+            C.FIGHTER_B: expected_rng.random() < 0.5,
+        }
+    ]
+    assert result[C.WINNER] == C.DRAW
+    assert len(combat_log.turns) == 1
+    assert sim_module.config_mod.CONFIG is original_config
+
+
+@pytest.mark.asyncio
 @patch("llm_fight.simulation.get_fighter_attempt", new_callable=AsyncMock)
 @patch("llm_fight.simulation.judge_phase1", new_callable=AsyncMock)
 @patch("llm_fight.simulation.judge_phase2", new_callable=AsyncMock)

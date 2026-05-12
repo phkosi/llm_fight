@@ -1,4 +1,5 @@
 import csv
+import random
 from typer.testing import CliRunner
 
 from llm_fight.cli import app
@@ -450,6 +451,116 @@ def test_cli_play_with_config(tmp_path):
     mock_fight.assert_called_once_with(fighter_a_section=None, fighter_b_section=None, return_log=True, on_event=ANY)
     mock_update.assert_called_once()
     config_mod.CONFIG = original
+
+
+def test_cli_simulate_scopes_configs_across_sequential_invocations(tmp_path):
+    runner = CliRunner()
+    cfg_one = tmp_path / "one.ini"
+    cfg_two = tmp_path / "two.ini"
+    cfg_one.write_text("[SIMULATION]\nseed = 11\n", encoding="utf-8")
+    cfg_two.write_text("[SIMULATION]\nseed = 22\n", encoding="utf-8")
+    seen = []
+
+    async def fake_run_batch(output_csv, fighter_a_section=None, fighter_b_section=None):
+        from llm_fight import config as config_mod
+
+        seen.append((config_mod.CONFIG.path, config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int)))
+        dummy = tmp_path / f"dummy_{len(seen)}.csv"
+        _write_batch_csv(dummy, [{C.WINNER: "A", C.LOG_TURN: "1"}])
+        return dummy
+
+    from llm_fight import config as config_mod
+
+    original = config_mod.CONFIG
+    with (
+        patch("llm_fight.simulation.run_batch", new=AsyncMock(side_effect=fake_run_batch)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        first = runner.invoke(app, ["simulate", "--config", str(cfg_one)])
+        assert config_mod.CONFIG is original
+        second = runner.invoke(app, ["simulate", "--config", str(cfg_two)])
+        assert config_mod.CONFIG is original
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert seen == [(cfg_one, 11), (cfg_two, 22)]
+
+
+def test_cli_simulate_overrides_do_not_leak_without_config(tmp_path):
+    runner = CliRunner()
+
+    async def fake_run_batch(output_csv, fighter_a_section=None, fighter_b_section=None):
+        from llm_fight import config as config_mod
+
+        assert config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int) == 3
+        assert config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 4
+        dummy = tmp_path / "dummy.csv"
+        _write_batch_csv(dummy, [{C.WINNER: "A", C.LOG_TURN: "1"}])
+        return dummy
+
+    from llm_fight import config as config_mod
+
+    original = config_mod.CONFIG
+    original_runs = original.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
+    original_max_turns = original.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int)
+    with (
+        patch("llm_fight.simulation.run_batch", new=AsyncMock(side_effect=fake_run_batch)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["simulate", "--runs", "3", "--max-turns", "4"])
+
+    assert result.exit_code == 0
+    assert config_mod.CONFIG is original
+    assert original.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int) == original_runs
+    assert original.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == original_max_turns
+
+
+def test_cli_play_restores_config_after_runtime_failure(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "failure.ini"
+    cfg.write_text("[General]\nmax_retries = 9\n", encoding="utf-8")
+
+    from llm_fight import config as config_mod
+
+    original = config_mod.CONFIG
+    with patch("llm_fight.cli.ping_ollama", new=AsyncMock(side_effect=ConnectionError("offline"))):
+        result = runner.invoke(app, ["play", "--config", str(cfg), "--simple-output"])
+
+    assert result.exit_code != 0
+    assert "offline" in result.output
+    assert config_mod.CONFIG is original
+
+
+def test_cli_play_seeds_rng_from_active_config_after_rng_import(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "seeded.ini"
+    cfg.write_text("[SIMULATION]\nseed = 31415\n", encoding="utf-8")
+    observed_rolls = []
+
+    from llm_fight import config as config_mod
+    from llm_fight import rng
+
+    original_config = config_mod.CONFIG
+    previous_rng_state = rng.get_state()
+    rng.seed(5)
+    expected_after_restore = random.Random(5)
+    expected_active = random.Random(31415)
+
+    async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False, on_event=None):
+        observed_rolls.append(rng.rand())
+        return {C.WINNER: C.DRAW, C.LOG_TURN: "1"}, MagicMock(turns=[])
+
+    with (
+        patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["play", "--config", str(cfg), "--simple-output"])
+
+    assert result.exit_code == 0
+    assert observed_rolls == [expected_active.random()]
+    assert config_mod.CONFIG is original_config
+    assert rng.rand() == expected_after_restore.random()
+    rng.set_state(previous_rng_state)
 
 
 def test_cli_unexpected_argument():

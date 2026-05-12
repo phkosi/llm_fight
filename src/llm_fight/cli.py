@@ -2,6 +2,7 @@
 
 import asyncio
 import configparser
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -18,34 +19,53 @@ from click import ClickException
 app = typer.Typer()
 
 
-def _load_config(config_path: Optional[Path]) -> None:
-    if config_path is None:
-        return
-    if not config_path.exists():
-        raise ClickException(f"Config file not found: {config_path}")
+@contextmanager
+def _command_runtime(
+    config_path: Optional[Path],
+    *,
+    runs: Optional[int] = None,
+    max_turns: Optional[int] = None,
+):
+    from . import config as config_mod
+    from . import rng
 
+    runtime_config = _load_config(config_path)
+    previous_rng_state = rng.get_state()
+    try:
+        with config_mod.use_config(runtime_config):
+            _apply_simulation_overrides(runtime_config, runs=runs, max_turns=max_turns)
+            rng.seed_from_config(runtime_config)
+            yield runtime_config
+    finally:
+        rng.set_state(previous_rng_state)
+
+
+def _load_config(config_path: Optional[Path]):
     from . import config as config_mod
 
+    if config_path is None:
+        config_path = Path("llmfight.ini")
+    elif not config_path.exists():
+        raise ClickException(f"Config file not found: {config_path}")
+
     try:
-        config_mod.CONFIG = config_mod.Config(config_path)
+        return config_mod.Config(config_path)
     except configparser.Error as exc:
         raise ClickException(f"Could not read config file {config_path}: {exc}") from exc
 
 
-def _apply_simulation_overrides(runs: Optional[int] = None, max_turns: Optional[int] = None) -> None:
+def _apply_simulation_overrides(runtime_config, runs: Optional[int] = None, max_turns: Optional[int] = None) -> None:
     if runs is None and max_turns is None:
         return
-
-    from . import config as config_mod
 
     if runs is not None:
         if runs < 0:
             raise ClickException("--runs must be 0 or greater")
-        config_mod.CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_RUNS, runs)
+        runtime_config.set(C.CONFIG_SIMULATION, C.CONFIG_RUNS, runs)
     if max_turns is not None:
         if max_turns < 1:
             raise ClickException("--max-turns must be 1 or greater")
-        config_mod.CONFIG.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, max_turns)
+        runtime_config.set(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, max_turns)
 
 
 def _run_async(coro):
@@ -157,69 +177,68 @@ def simulate(
     if not render.RICH_AVAILABLE:
         raise ClickException("The 'rich' library is required for this command")
 
-    _load_config(config)
-    _apply_simulation_overrides(runs=runs, max_turns=max_turns)
-    batch_runs, _ = _validate_batch_config()
-    update_logger_level()
-    log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
-    if not verbose and not log_turns:
-        logger.setLevel(CRITICAL)
+    with _command_runtime(config, runs=runs, max_turns=max_turns):
+        batch_runs, _ = _validate_batch_config()
+        update_logger_level()
+        log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
+        if not verbose and not log_turns:
+            logger.setLevel(CRITICAL)
 
-    _run_async(ping_ollama())
+        _run_async(ping_ollama())
 
-    from .simulation import run_batch, summarize_batch_csv
+        from .simulation import run_batch, summarize_batch_csv
 
-    progress_cb = None
-    if verbose:
-        from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
+        progress_cb = None
+        if verbose:
+            from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn
 
-        console = render.Console()
-        progress = Progress(
-            TextColumn("Simulating"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        )
+            console = render.Console()
+            progress = Progress(
+                TextColumn("Simulating"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            )
 
-        def update(done: int, total: int) -> None:
-            if not progress.tasks:
-                progress.add_task("runs", total=total)
-            progress.update(0, completed=done)
+            def update(done: int, total: int) -> None:
+                if not progress.tasks:
+                    progress.add_task("runs", total=total)
+                progress.update(0, completed=done)
 
-        progress_cb = update
-        with progress:
+            progress_cb = update
+            with progress:
+                path = _run_async(
+                    run_batch(
+                        output_csv,
+                        fighter_a_section=fighter_a,
+                        fighter_b_section=fighter_b,
+                        progress=progress_cb,
+                    )
+                )
+        else:
             path = _run_async(
                 run_batch(
                     output_csv,
                     fighter_a_section=fighter_a,
                     fighter_b_section=fighter_b,
-                    progress=progress_cb,
                 )
             )
-    else:
-        path = _run_async(
-            run_batch(
-                output_csv,
-                fighter_a_section=fighter_a,
-                fighter_b_section=fighter_b,
-            )
-        )
 
-    summary = summarize_batch_csv(path, total_runs=batch_runs)
+        summary = summarize_batch_csv(path, total_runs=batch_runs)
 
-    if verbose:
-        import csv
+        if verbose:
+            import csv
 
-        with open(path, newline="") as fp:
-            rows = list(csv.DictReader(fp))
-        table = render.make_summary_table(rows, total_runs=summary.total_runs)
-        console.print(table)
+            with open(path, newline="") as fp:
+                rows = list(csv.DictReader(fp))
+            table = render.make_summary_table(rows, total_runs=summary.total_runs)
+            console.print(table)
 
-    typer.echo(f"Simulation saved to {path}")
-    if summary.has_errors:
-        typer.echo(_batch_error_warning(summary))
-        if not continue_on_error:
-            raise typer.Exit(1)
+        typer.echo(f"Simulation saved to {path}")
+        if summary.has_errors:
+            typer.echo(_batch_error_warning(summary))
+            if not continue_on_error:
+                raise typer.Exit(1)
 
 
 @app.command()
@@ -267,86 +286,85 @@ def play(
     if not render.RICH_AVAILABLE and not simple_output:
         raise ClickException("The 'rich' library is required for this command")
 
-    _load_config(config)
-    _apply_simulation_overrides(max_turns=max_turns)
-    update_logger_level()
-    if not verbose:
-        logger.setLevel(CRITICAL)
+    with _command_runtime(config, max_turns=max_turns):
+        update_logger_level()
+        if not verbose:
+            logger.setLevel(CRITICAL)
 
-    _run_async(ping_ollama())
+        _run_async(ping_ollama())
 
-    console = render.Console()
-    rendered_turns: set[int] = set()
-    token_metadata: list[dict] = []
-    fighter_display_names: dict[str, str] = {}
+        console = render.Console()
+        rendered_turns: set[int] = set()
+        token_metadata: list[dict] = []
+        fighter_display_names: dict[str, str] = {}
 
-    def handle_event(event) -> None:
-        if event.name == C.FIGHT_EVENT_TOKEN_METADATA:
-            metadata = event.data.get("metadata", {})
-            if metadata:
-                token_metadata.append(metadata)
-            return
-        if event.name == C.FIGHT_EVENT_FIGHTERS_READY:
-            fighters = event.data.get("fighters", {})
-            for fighter_id, state in fighters.items():
-                if isinstance(state, dict):
-                    display_name = str(state.get(C.DISPLAY_NAME, "")).strip()
-                    if display_name:
-                        fighter_display_names[fighter_id] = display_name
-            console.print(render.make_fighter_design_view(fighters, simple=simple_output))
-            return
-        if event.name == C.FIGHT_EVENT_TURN_COMPLETE:
-            turn = event.data.get("turn")
-            if turn is not None:
-                rendered_turns.add(turn.turn)
-                console.print(render.make_turn_table(turn, simple=simple_output))
-            return
-        if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
-            return
+        def handle_event(event) -> None:
+            if event.name == C.FIGHT_EVENT_TOKEN_METADATA:
+                metadata = event.data.get("metadata", {})
+                if metadata:
+                    token_metadata.append(metadata)
+                return
+            if event.name == C.FIGHT_EVENT_FIGHTERS_READY:
+                fighters = event.data.get("fighters", {})
+                for fighter_id, state in fighters.items():
+                    if isinstance(state, dict):
+                        display_name = str(state.get(C.DISPLAY_NAME, "")).strip()
+                        if display_name:
+                            fighter_display_names[fighter_id] = display_name
+                console.print(render.make_fighter_design_view(fighters, simple=simple_output))
+                return
+            if event.name == C.FIGHT_EVENT_TURN_COMPLETE:
+                turn = event.data.get("turn")
+                if turn is not None:
+                    rendered_turns.add(turn.turn)
+                    console.print(render.make_turn_table(turn, simple=simple_output))
+                return
+            if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
+                return
+            if simple_output:
+                console.print(render.format_fight_event_status(event))
+
+        from .simulation import _single_fight
+
         if simple_output:
-            console.print(render.format_fight_event_status(event))
-
-    from .simulation import _single_fight
-
-    if simple_output:
-        result, log = _run_async(
-            _single_fight(
-                fighter_a_section=fighter_a,
-                fighter_b_section=fighter_b,
-                return_log=True,
-                on_event=handle_event,
-            )
-        )
-    else:
-        with console.status("Starting fight...", spinner="dots") as status:
-
-            def rich_event_handler(event) -> None:
-                if event.name in {
-                    C.FIGHT_EVENT_TOKEN_METADATA,
-                    C.FIGHT_EVENT_FIGHTERS_READY,
-                    C.FIGHT_EVENT_TURN_COMPLETE,
-                    C.FIGHT_EVENT_FIGHT_COMPLETE,
-                }:
-                    handle_event(event)
-                    if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
-                        status.update("Fight complete")
-                    return
-                status.update(render.format_fight_event_status(event))
-
             result, log = _run_async(
                 _single_fight(
                     fighter_a_section=fighter_a,
                     fighter_b_section=fighter_b,
                     return_log=True,
-                    on_event=rich_event_handler,
+                    on_event=handle_event,
                 )
             )
+        else:
+            with console.status("Starting fight...", spinner="dots") as status:
 
-    for turn in log.turns:
-        if turn.turn not in rendered_turns:
-            console.print(render.make_turn_table(turn, simple=simple_output))
+                def rich_event_handler(event) -> None:
+                    if event.name in {
+                        C.FIGHT_EVENT_TOKEN_METADATA,
+                        C.FIGHT_EVENT_FIGHTERS_READY,
+                        C.FIGHT_EVENT_TURN_COMPLETE,
+                        C.FIGHT_EVENT_FIGHT_COMPLETE,
+                    }:
+                        handle_event(event)
+                        if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
+                            status.update("Fight complete")
+                        return
+                    status.update(render.format_fight_event_status(event))
 
-    if token_metadata:
-        console.print(render.format_token_summary(token_metadata))
+                result, log = _run_async(
+                    _single_fight(
+                        fighter_a_section=fighter_a,
+                        fighter_b_section=fighter_b,
+                        return_log=True,
+                        on_event=rich_event_handler,
+                    )
+                )
 
-    typer.echo(f"Winner: {_format_winner_label(result, fighter_display_names)}")
+        for turn in log.turns:
+            if turn.turn not in rendered_turns:
+                console.print(render.make_turn_table(turn, simple=simple_output))
+
+        if token_metadata:
+            console.print(render.format_token_summary(token_metadata))
+
+        typer.echo(f"Winner: {_format_winner_label(result, fighter_display_names)}")
