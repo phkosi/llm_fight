@@ -148,14 +148,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-012: Prompt payloads can leak through error logs and proxies
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Transport Privacy And Endpoint Mode Safety
 - Source: codebase review
 - Area: Security, privacy
-- Evidence: `_post_json()` logs `Payload: {payload}` on retry/failure paths in `src/llm_fight/agents.py:147`, `154`, `159`, `166`, and `169`; `ClientSession(trust_env=True)` is used for chat and ping in `src/llm_fight/agents.py:111` and `242`.
+- Evidence: `_post_json()` previously logged `Payload: {payload}` on retry/failure paths in `src/llm_fight/agents.py`; chat and ping previously used unconditional `ClientSession(trust_env=True)`. Resolved by redacted transport log metadata, endpoint-aware proxy policy, shared chat/ping endpoint resolution, and default loopback `trust_env=False` unless `ollama_proxy_mode = enabled`.
 - Impact: Transient API failures can dump prompts, combat state, and user scenario text into logs. Local-first users with `HTTP_PROXY` and no `NO_PROXY` can also send prompt bodies through environment proxies.
 - Suggested fix: Redact logs to endpoint/model/message counts/token sizes/request id. Default `trust_env=False` for loopback/local endpoints and add explicit proxy opt-in.
-- Tests: Force client/server/unexpected failures with sentinel secrets and assert logs do not contain raw messages. Test proxy env with localhost keeps proxy trust disabled unless opted in.
+- Tests: Added transport failure coverage for 5xx, client error, timeout, and unexpected exception with sentinel prompt text; captured logs omit raw messages, payloads, userinfo, and query strings. Added proxy-mode tests for localhost, `127.x.x.x`, `[::1]`, remote auto, explicit enabled, explicit disabled, and chat/ping `ClientSession(trust_env=...)`.
 
 ## P2
 
@@ -361,14 +361,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-031: OpenAI-compatible endpoint support conflicts with native Ollama assumptions
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Transport Privacy And Endpoint Mode Safety
 - Source: codebase review
 - Area: Transport, docs
-- Evidence: `get_ollama_url()` accepts `/v1/chat/completions` in `src/llm_fight/agents.py:14`, but `ping_ollama()` always checks `/api/tags` in `src/llm_fight/agents.py:238`; `/v1` payloads omit native `num_ctx`/`keep_alive` in `src/llm_fight/agents.py:199`.
+- Evidence: `get_ollama_url()` accepted `/v1/chat/completions`, but `ping_ollama()` always checked `/api/tags`; `/v1` payloads necessarily omitted native `num_ctx`/`keep_alive` without surfacing that mode split. Resolved by endpoint mode detection, `/v1/models` health checks for OpenAI-compatible endpoints, native `/api/tags` health checks for native Ollama, and a once-per-endpoint warning when `/v1` ignores native Ollama settings.
 - Impact: A compatible `/v1` endpoint can be rejected by CLI health checks or lose context/residency controls.
 - Suggested fix: Split native and OpenAI-compatible health checks. Warn when `/v1` is used with native-only settings.
-- Tests: `/v1/chat/completions` URL without `/api/tags` should not fail native-only health check; payload warning tests for ignored native options.
+- Tests: Added `/v1/chat/completions` ping coverage proving the health probe uses `/v1/models`; added OpenAI-compatible payload tests proving native `options.num_ctx`, `keep_alive`, `think`, `stream`, and native `format` are omitted and the ignored-native-settings warning is emitted only once.
 
 ### ISSUE-032: Live/perf test gating and docs are inconsistent
 

@@ -1,10 +1,12 @@
 import pytest
 import asyncio
 import aiohttp
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
 from llm_fight.agents import chat, chat_with_metadata, get_ollama_url
+from llm_fight import agents as agents_module
 from llm_fight.engine import constants as C
 from llm_fight.config import CONFIG  # To access config values for assertions
 from llm_fight.config import Config
@@ -150,7 +152,7 @@ async def test_chat_best_of_n_calls_success():
 
 
 @pytest.mark.asyncio
-async def test_chat_openai_compat_payload_and_response_format():
+async def test_chat_openai_compat_payload_and_response_format(caplog):
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
     schema = {"type": "object"}
     openai_url = "http://localhost:11434/v1/chat/completions"
@@ -170,11 +172,12 @@ async def test_chat_openai_compat_payload_and_response_format():
     mock_session_instance.close = AsyncMock()
     mock_session_instance.post = MagicMock(return_value=mock_post_context_manager)
 
-    with (
-        patch("aiohttp.ClientSession", return_value=mock_session_instance),
-        patch.dict(os.environ, {"API_URL": openai_url}),
-    ):
-        responses = await chat(messages=messages, max_tokens=12, best_of=1, schema=schema)
+    agents_module._OPENAI_COMPAT_WARNING_ENDPOINTS.clear()
+    caplog.set_level(logging.WARNING, logger="llm_fight_engine")
+    with patch.dict(os.environ, {"API_URL": openai_url}):
+        responses = await chat(
+            messages=messages, max_tokens=12, best_of=1, schema=schema, session=mock_session_instance
+        )
 
     assert responses == ["compat ok"]
     mock_session_instance.post.assert_called_once_with(
@@ -195,6 +198,28 @@ async def test_chat_openai_compat_payload_and_response_format():
         headers={C.CONTENT_TYPE: C.APPLICATION_JSON},
         timeout=300,
     )
+    payload = mock_session_instance.post.call_args.kwargs["json"]
+    assert C.AGENT_OPTIONS not in payload
+    assert C.AGENT_KEEP_ALIVE not in payload
+    assert C.AGENT_THINK not in payload
+    assert C.AGENT_STREAM not in payload
+    assert C.AGENT_FORMAT not in payload
+    assert caplog.text.count("OpenAI-compatible endpoint mode ignores native Ollama settings") == 1
+
+    mock_second_response = AsyncMock()
+    mock_second_response.json = AsyncMock(
+        return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "compat ok 2"}}]}
+    )
+    mock_second_response.status = 200
+    mock_second_response.raise_for_status = MagicMock()
+    mock_second_context = AsyncMock()
+    mock_second_context.__aenter__.return_value = mock_second_response
+    mock_session_instance.post = MagicMock(return_value=mock_second_context)
+
+    with patch.dict(os.environ, {"API_URL": openai_url}):
+        await chat(messages=messages, max_tokens=12, best_of=1, schema=schema, session=mock_session_instance)
+
+    assert caplog.text.count("OpenAI-compatible endpoint mode ignores native Ollama settings") == 1
 
 
 @pytest.mark.asyncio
@@ -494,6 +519,69 @@ async def test_chat_unexpected_error_raises_exception():
             await chat(messages=messages, max_tokens=max_tokens, best_of=1)
 
 
+def _session_with_post_failure(failure):
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(side_effect=failure)
+    return session
+
+
+def _session_with_status(status):
+    mock_resp = AsyncMock()
+    mock_resp.status = status
+    mock_resp.request_info = MagicMock()
+    mock_resp.history = ()
+    mock_resp.headers = {}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+    return session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("session_factory", "expected_error"),
+    [
+        (lambda sentinel: _session_with_status(500), aiohttp.ClientResponseError),
+        (
+            lambda sentinel: _session_with_post_failure(aiohttp.ClientConnectionError(f"boom {sentinel}")),
+            aiohttp.ClientConnectionError,
+        ),
+        (
+            lambda sentinel: _session_with_post_failure(asyncio.TimeoutError(f"timeout {sentinel}")),
+            asyncio.TimeoutError,
+        ),
+        (lambda sentinel: _session_with_post_failure(ValueError(f"unexpected {sentinel}")), ValueError),
+    ],
+)
+async def test_transport_failure_logs_redact_payload_and_prompt(caplog, session_factory, expected_error):
+    sentinel = "SENTINEL_PROMPT_SECRET"
+    api_url = "http://user:pass@localhost:11434/api/chat?token=secret_query"
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: sentinel}]
+    session = session_factory(sentinel)
+    caplog.set_level(logging.WARNING, logger="llm_fight_engine")
+
+    with patch.dict(os.environ, {"API_URL": api_url}):
+        with pytest.raises(expected_error):
+            await chat(messages=messages, max_tokens=10, session=session, retries=0)
+
+    log_text = caplog.text
+    assert sentinel not in log_text
+    assert "Payload:" not in log_text
+    assert "messages" not in log_text
+    assert "user:pass" not in log_text
+    assert "secret_query" not in log_text
+    assert "message_count=1" in log_text
+    assert "message_chars=" in log_text
+
+
 def test_get_ollama_url_no_env(monkeypatch):
     """When API_URL is unset, default config fallback is used."""
     monkeypatch.delenv("API_URL", raising=False)
@@ -520,6 +608,12 @@ def test_get_ollama_url_complete(monkeypatch):
     assert get_ollama_url() == complete
 
 
+def test_get_ollama_url_normalizes_v1_base(monkeypatch):
+    monkeypatch.setenv("API_URL", "http://host:1234/v1")
+
+    assert get_ollama_url() == "http://host:1234/v1/chat/completions"
+
+
 def test_get_ollama_url_from_env():
     custom_base = "https://example.com"
     with patch.dict(os.environ, {"API_URL": custom_base}):
@@ -535,6 +629,52 @@ def test_get_ollama_url_from_config():
             assert get_ollama_url() == new_url
     finally:
         CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, old)
+
+
+def test_resolve_endpoint_proxy_auto_loopback_and_remote(monkeypatch):
+    old_proxy_mode = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str)
+    try:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, C.OLLAMA_PROXY_AUTO)
+        monkeypatch.setenv("API_URL", "http://LOCALHOST:11434/api/chat")
+        endpoint = agents_module.resolve_endpoint()
+        assert endpoint.is_loopback is True
+        assert endpoint.trust_env is False
+
+        monkeypatch.setenv("API_URL", "http://127.42.0.1:11434/api/chat")
+        assert agents_module.resolve_endpoint().trust_env is False
+
+        monkeypatch.setenv("API_URL", "http://[::1]:11434/api/chat")
+        assert agents_module.resolve_endpoint().trust_env is False
+
+        monkeypatch.setenv("API_URL", "https://example.com/api/chat")
+        assert agents_module.resolve_endpoint().trust_env is True
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, old_proxy_mode)
+
+
+def test_resolve_endpoint_proxy_enabled_and_disabled(monkeypatch):
+    old_proxy_mode = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str)
+    try:
+        monkeypatch.setenv("API_URL", "http://localhost:11434/api/chat")
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, C.OLLAMA_PROXY_ENABLED)
+        assert agents_module.resolve_endpoint().trust_env is True
+
+        monkeypatch.setenv("API_URL", "https://example.com/api/chat")
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, C.OLLAMA_PROXY_DISABLED)
+        assert agents_module.resolve_endpoint().trust_env is False
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, old_proxy_mode)
+
+
+def test_resolve_endpoint_rejects_invalid_proxy_mode(monkeypatch):
+    old_proxy_mode = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str)
+    try:
+        monkeypatch.setenv("API_URL", "http://localhost:11434/api/chat")
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, "surprise")
+        with pytest.raises(ValueError, match=C.CONFIG_OLLAMA_PROXY_MODE):
+            agents_module.resolve_endpoint()
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, old_proxy_mode)
 
 
 @pytest.mark.asyncio
@@ -564,6 +704,64 @@ async def test_chat_uses_provided_session():
 
 
 @pytest.mark.asyncio
+async def test_chat_internal_session_uses_loopback_proxy_default(monkeypatch):
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+    old_proxy_mode = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str)
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "Hi"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    try:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, C.OLLAMA_PROXY_AUTO)
+        monkeypatch.setenv("API_URL", "http://localhost:11434/api/chat")
+        with patch("aiohttp.ClientSession", return_value=session) as mock_ctor:
+            await chat(messages=messages, max_tokens=5)
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, old_proxy_mode)
+
+    mock_ctor.assert_called_once_with(trust_env=False)
+
+
+@pytest.mark.asyncio
+async def test_chat_internal_session_proxy_enabled_overrides_loopback(monkeypatch):
+    messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}]
+    old_proxy_mode = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str)
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "Hi"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    try:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, C.OLLAMA_PROXY_ENABLED)
+        monkeypatch.setenv("API_URL", "http://localhost:11434/api/chat")
+        with patch("aiohttp.ClientSession", return_value=session) as mock_ctor:
+            await chat(messages=messages, max_tokens=5)
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, old_proxy_mode)
+
+    mock_ctor.assert_called_once_with(trust_env=True)
+
+
+@pytest.mark.asyncio
 async def test_chat_retries_on_failure(monkeypatch):
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Retry"}]
     max_tokens = 5
@@ -589,3 +787,32 @@ async def test_chat_retries_on_failure(monkeypatch):
     assert responses == ["ok"]
     assert session.post.call_count == 2
     mock_sleep.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_ping_openai_compat_uses_models_health_and_shared_proxy(monkeypatch):
+    old_proxy_mode = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str)
+
+    mock_resp = AsyncMock()
+    mock_resp.raise_for_status = MagicMock()
+
+    get_cm = AsyncMock()
+    get_cm.__aenter__.return_value = mock_resp
+
+    session = MagicMock()
+    session.get = MagicMock(return_value=get_cm)
+
+    session_cm = AsyncMock()
+    session_cm.__aenter__.return_value = session
+
+    try:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, C.OLLAMA_PROXY_AUTO)
+        monkeypatch.setenv("API_URL", "http://localhost:11434/v1/chat/completions")
+        with patch("aiohttp.ClientSession", return_value=session_cm) as mock_ctor:
+            await agents_module.ping_ollama(timeout=7)
+    finally:
+        CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, old_proxy_mode)
+
+    mock_ctor.assert_called_once_with(trust_env=False)
+    session.get.assert_called_once_with("http://localhost:11434/v1/models", timeout=7)
+    assert "/api/tags" not in session.get.call_args.args[0]

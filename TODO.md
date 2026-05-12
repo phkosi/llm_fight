@@ -422,15 +422,19 @@ Required tests:
 
 Addresses: ISSUE-012, ISSUE-031
 
-- [ ] Redact transport logs, make proxy use explicit for local endpoints, and split native Ollama behavior from OpenAI-compatible endpoint behavior.
+- [x] Redact transport logs, make proxy use explicit for local endpoints, and split native Ollama behavior from OpenAI-compatible endpoint behavior.
 
 Acceptance goals:
 
 - Retry/error logs do not contain raw prompt payloads or sentinel secrets.
 - Localhost, `127.0.0.1`, and `::1` endpoints do not honor `HTTP_PROXY`/`HTTPS_PROXY` unless explicitly opted in.
 - Remote endpoint proxy behavior is documented and configurable.
+- Add `[General] ollama_proxy_mode = auto | disabled | enabled`, defaulting to `auto`. In `auto`, environment proxies are ignored for loopback endpoints (`localhost`, `127.0.0.0/8`, and `::1`) and honored for remote endpoints. `disabled` always uses `trust_env=False`; `enabled` always uses `trust_env=True`, including loopback.
 - `/v1/chat/completions` endpoints are not rejected just because `/api/tags` is unavailable.
+- OpenAI-compatible health checks use `GET <base>/v1/models`; do not skip health checks and do not use a chat completion as a health probe.
 - Native-only options are sent only to native Ollama and produce one clear warning/doc note in OpenAI-compatible mode.
+- Endpoint resolution and proxy policy are shared by chat sessions and `ping_ollama()`, with URL parsing for loopback detection rather than substring matching.
+- Transport retry/error logs are redacted separately from opt-in transcripts: logs may include request id, redacted endpoint, endpoint mode, model, message count, message character/token estimate, requested completion cap, native `num_ctx`, and schema-present boolean, but never raw `messages`, raw schema, response text, prompt text, userinfo, query strings, or raw payload repr.
 - README, docs, and `llmfight.ini.example` document endpoint modes and proxy opt-in.
 
 Required tests:
@@ -438,8 +442,16 @@ Required tests:
 - Force 5xx, client error, timeout, and unexpected exception with sentinel prompt text; captured logs omit the sentinel and raw `messages`.
 - `ClientSession` receives `trust_env=False` for loopback by default.
 - Explicit proxy opt-in flips `trust_env=True`.
+- Remote `auto`, explicit `disabled`, localhost, `127.x.x.x`, and bracketed IPv6 `[::1]` proxy-resolution cases are tested.
 - Mock `/v1/chat/completions` plus missing `/api/tags`; `ping_ollama()` succeeds through the compatible health path.
 - `/v1` payloads omit native `options.num_ctx`/`keep_alive` and emit the expected warning.
+- Invalid `ollama_proxy_mode` raises a clear error.
+
+Verification:
+
+- `uv run pytest -q tests/test_agents.py tests/test_config.py tests/test_simulation.py` -> 82 passed.
+- `uv run black --check src/llm_fight/agents.py tests/test_agents.py tests/test_config.py tests/test_simulation.py` -> passed.
+- Full gate: `uv run black --check .` -> passed; `uv run flake8` -> passed; `uv run pytest -q` -> 369 passed, 6 skipped, 1 warning; `git diff --check` -> passed.
 
 ## P2 Target Validation Gate
 

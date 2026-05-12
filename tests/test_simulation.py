@@ -764,7 +764,7 @@ async def test_single_fight_uses_one_fixed_ollama_context_for_all_native_calls()
             }
         )
 
-    async def fake_post_json_result(session, payload, retries=0):
+    async def fake_post_json_result(session, payload, retries=0, endpoint=None):
         return ChatResult(content=await fake_post_json(session, payload, retries=retries), metadata={})
 
     try:

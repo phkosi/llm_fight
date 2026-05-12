@@ -94,7 +94,12 @@ Native Ollama requests use:
 - top-level `keep_alive` for model residency between turn requests.
 - `stream: false`.
 
-OpenAI-compatible `/v1/chat/completions` endpoints remain supported and use `response_format`.
+OpenAI-compatible `/v1/chat/completions` endpoints remain supported and use
+`response_format`. In `/v1` mode, native Ollama-only controls such as
+`keep_alive`, `options.num_ctx`, `think`, `stream`, and native `format` are not
+sent; the app logs one warning that those native settings are ignored. Native
+health checks use `/api/tags`, while OpenAI-compatible health checks use
+`/v1/models`.
 
 ## 7. Configuration
 
@@ -108,6 +113,7 @@ ollama_default_model = llama3.2:3b
 ollama_api_url = http://localhost:11434/api/chat
 ollama_keep_alive = 10m
 ollama_num_ctx = 32768
+ollama_proxy_mode = auto
 max_tokens_fighter = 512
 max_tokens_judge = 4096
 ollama_temperature = 0.4
@@ -128,6 +134,10 @@ seed = 42
 concurrent_runs = 1
 max_turns = 2
 ```
+
+`ollama_proxy_mode = auto` disables environment proxy use for loopback endpoints
+and enables it for remote endpoints. `disabled` always uses direct connections;
+`enabled` always honors environment proxies, including loopback.
 
 Prompt budgeting is enforced before transport. Fighter actions, Judge Phase 1,
 Judge Phase 2, Judge Phase 2 repair, and generated profile calls reserve

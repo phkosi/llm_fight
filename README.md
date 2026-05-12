@@ -182,6 +182,28 @@ The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endp
 
 For native Ollama, `ollama_keep_alive` is sent with each chat request so the model can stay resident between fighter and judge calls during local playtests. `ollama_num_ctx` is the fixed context window sent to every fighter and judge call in a run; keep it stable to avoid runner reloads caused by alternating context sizes. Increase `ollama_keep_alive` for long runs if you want the model resident after the CLI exits, and lower it if you want VRAM freed sooner.
 
+For OpenAI-compatible `/v1/chat/completions` endpoints, the transport sends
+only compatible fields such as `model`, `messages`, `temperature`,
+`max_tokens`, and `response_format`. Native Ollama controls such as
+`ollama_num_ctx`, `ollama_keep_alive`, `think`, `stream`, and native `format`
+are not sent in `/v1` mode; the app logs one warning for that endpoint mode.
+Health checks use `/api/tags` for native Ollama and `/v1/models` for
+OpenAI-compatible endpoints.
+
+Proxy handling is controlled by `[General] ollama_proxy_mode`:
+
+- `auto` (default): ignore environment proxies for loopback endpoints
+  (`localhost`, `127.x.x.x`, and `::1`) and honor them for remote endpoints.
+- `disabled`: always ignore environment proxies.
+- `enabled`: always honor environment proxies, including loopback.
+
+Transport retry/error logs are redacted. They include operational metadata such
+as request id, endpoint mode, redacted URL, model, message count, message
+character count, completion cap, and schema-present status, but not raw prompts,
+schemas, responses, userinfo, query strings, or payload dumps. Opt-in
+transcripts are separate and still record prompt/response exchanges for
+debugging when `save_transcripts = true`.
+
 Prompt budgeting is strict. Fighter actions, Judge Phase 1, Judge Phase 2,
 Judge Phase 2 repair, and generated fighter profiles reserve phase-specific
 completion space before contacting the model. Long `recent_combat_log` payloads
@@ -269,7 +291,7 @@ For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
 
 ## Troubleshooting
 
-- `Cannot reach Ollama server`: start Ollama and confirm `http://localhost:11434/api/tags` responds.
+- `Cannot reach Ollama server`: start Ollama and confirm the configured health endpoint responds. Native `/api/chat` uses `/api/tags`; OpenAI-compatible `/v1/chat/completions` uses `/v1/models`.
 - `model not found`: run `ollama pull llama3.2:3b` or set `ollama_default_model` to a model you have locally.
 - `LLM output could not be parsed`: try a stronger model, increase `max_tokens_judge`, or increase `max_retries`.
 - `uv sync` cannot find Python 3.14: run `uv python install 3.14`.

@@ -182,6 +182,10 @@ def test_default_ollama_num_ctx_loaded(temp_config_instance):
     assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 32768
 
 
+def test_default_ollama_proxy_mode_loaded(temp_config_instance):
+    assert temp_config_instance.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_PROXY_MODE, str) == C.OLLAMA_PROXY_AUTO
+
+
 def test_default_fighter_creation_mode_loaded(temp_config_instance):
     assert temp_config_instance.get_fighter_creation_mode() == C.FIGHTER_CREATION_MODE_CONFIGURED
 
