@@ -27,6 +27,8 @@ def test_fighter_prompt_does_not_add_article_before_environment():
         exhaustion_desc="fully rested",
         heat_desc="normal body temperature",
         effects_list="none",
+        own_target_parts="head, torso",
+        opponent_target_parts="left_wing, tail",
         temporary_effect_instruction="No temporary effects are active right now.",
         turn_window=0,
         recent_log="",
@@ -48,6 +50,8 @@ def test_fighter_prompt_forbids_inventing_environment_features():
         exhaustion_desc="fully rested",
         heat_desc="normal body temperature",
         effects_list="none",
+        own_target_parts="head, torso",
+        opponent_target_parts="left_wing, tail",
         temporary_effect_instruction="No temporary effects are active right now.",
         turn_window=0,
         recent_log="",
@@ -62,6 +66,8 @@ def test_fighter_prompt_forbids_inventing_environment_features():
         in rendered
     )
     assert "Current state reminder: active effects right now are none." in rendered
+    assert "Your valid target parts: head, torso" in rendered
+    assert "Opponent valid target parts: left_wing, tail" in rendered
     assert (
         "Use only the current environment, active effects, equipment, and durable changes established above."
         in rendered
@@ -79,6 +85,8 @@ def test_fighter_prompt_repeats_active_effects_after_recent_log():
         exhaustion_desc="fully rested",
         heat_desc="normal body temperature",
         effects_list="none",
+        own_target_parts="head, torso",
+        opponent_target_parts="left_wing, tail",
         temporary_effect_instruction="No temporary effects are active right now.",
         turn_window=1,
         recent_log=recent_log,

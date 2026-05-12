@@ -4,6 +4,8 @@ FIGHTER_SYSTEM_PROMPT = """
 You are {name}, a {class_} currently fighting inside {environment}.
 Pain: {pain_desc}   Exhaustion: {exhaustion_desc}   Heat: {heat_desc}
 Active effects: {effects_list}
+Your valid target parts: {own_target_parts}
+Opponent valid target parts: {opponent_target_parts}
 Last {turn_window} turns:
 {recent_log}
 Current state reminder: active effects right now are {effects_list}. Older temporary effects not listed here have ended.

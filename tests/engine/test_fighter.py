@@ -6,6 +6,7 @@ from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.engine.prompts import FIGHTER_SYSTEM_PROMPT  # To verify prompt formatting
 from llm_fight.engine import constants as C
 from llm_fight.state import FighterState, Effect  # For creating mock states
+from llm_fight.anatomy import BodyPart, TissueLayer
 
 
 # Tests for describe_pain
@@ -186,6 +187,8 @@ async def test_get_fighter_attempt_basic_call(mock_fighter_state, mock_opponent_
             exhaustion_desc=expected_exhaustion_desc,
             heat_desc=expected_heat_desc,
             effects_list=expected_effects_list,
+            own_target_parts=", ".join(sorted(mock_fighter_state.parts.keys())) or "none",
+            opponent_target_parts=", ".join(sorted(mock_opponent_state.parts.keys())) or "none",
             temporary_effect_instruction=_temporary_effect_instruction(expected_effects_list),
             turn_window=turn_window_input,
             recent_log=recent_log_input,
@@ -494,3 +497,42 @@ async def test_rejected_effect_text_absent_from_fighter_prompt(mock_opponent_sta
     prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
     assert "PromptTrap" not in prompt_text
     assert rejected_text not in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_fighter_prompt_includes_custom_target_parts():
+    fighter = FighterState(
+        id="A",
+        parts={
+            "second_head": BodyPart("second head", [TissueLayer("bone", 10)], is_vital=True),
+            "left_wing": BodyPart("left wing", [TissueLayer("feathers", 8)], can_be_severed=True),
+        },
+    )
+    opponent = FighterState(
+        id="B",
+        parts={
+            "tentacle_1": BodyPart("tentacle 1", [TissueLayer("muscle", 10)], can_be_severed=True),
+            "core": BodyPart("core", [TissueLayer("organ", 10)], is_vital=True),
+        },
+    )
+
+    mock_config_get = MagicMock()
+
+    def config_get_side_effect(section, key, cast_type, fallback=None):
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_MAX_TOKENS_FIGHTER:
+            return 64
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_BEST_OF_FIGHTER:
+            return 1
+        return fallback
+
+    mock_config_get.side_effect = config_get_side_effect
+
+    with (
+        patch("llm_fight.engine.fighter.chat", new_callable=AsyncMock, return_value=["I strike."]) as mock_chat_func,
+        patch("llm_fight.engine.fighter.config_mod.CONFIG.get", mock_config_get),
+    ):
+        await get_fighter_attempt(fighter, opponent, combat_log="", turn_window=0)
+
+    prompt_text = mock_chat_func.call_args[0][0][0][C.AGENT_CONTENT]
+    assert "Your valid target parts: left_wing, second_head" in prompt_text
+    assert "Opponent valid target parts: core, tentacle_1" in prompt_text

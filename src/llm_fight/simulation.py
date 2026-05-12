@@ -236,8 +236,8 @@ async def _single_fight(
     if fighter_b_section is None:
         fighter_b_section = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_B_SECTION, str, fallback="B")
 
-    A = FighterState.from_preset("A", "humanoid", config_section=fighter_a_section)
-    B = FighterState.from_preset("B", "humanoid", config_section=fighter_b_section)
+    A = FighterState.from_config("A", config_section=fighter_a_section)
+    B = FighterState.from_config("B", config_section=fighter_b_section)
     turn = 0
     outcome = None
     combat_log = CombatLog()

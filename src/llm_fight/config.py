@@ -64,6 +64,7 @@ class Config:
     def __init__(self, path: Path | str = "llmfight.ini"):
         self.path = Path(path)
         self.cp = configparser.ConfigParser()
+        self._explicit_cp = configparser.ConfigParser()
 
         # Load DEFAULTS first using read_dict.
         self.cp.read_dict(DEFAULTS)
@@ -71,6 +72,7 @@ class Config:
         # Then, load the user's file if it exists.
         # According to docs, values from files read later should take precedence.
         if self.path.exists():
+            self._explicit_cp.read(self.path, encoding="utf-8-sig")
             self.cp.read(self.path, encoding="utf-8-sig")
             self._migrate_old_keys()
 
@@ -81,11 +83,12 @@ class Config:
             (C.CONFIG_GENERAL, "temperature"): C.CONFIG_LLAMA_TEMPERATURE,
         }
 
-        for (section, old_key), new_key in aliases.items():
-            if self.cp.has_option(section, old_key):
-                value = self.cp.get(section, old_key)
-                self.cp.set(section, new_key, value)
-                self.cp.remove_option(section, old_key)
+        for parser in (self.cp, self._explicit_cp):
+            for (section, old_key), new_key in aliases.items():
+                if parser.has_option(section, old_key):
+                    value = parser.get(section, old_key)
+                    parser.set(section, new_key, value)
+                    parser.remove_option(section, old_key)
 
     # --- public API -----------------------------------------------------
     def save(self):
@@ -157,27 +160,69 @@ class Config:
         if not self.cp.has_section(section):
             self.cp.add_section(section)
         self.cp[section][key] = str(value)
+        if not self._explicit_cp.has_section(section):
+            self._explicit_cp.add_section(section)
+        self._explicit_cp[section][key] = str(value)
 
-    def get_fighter_settings(self, fighter_id: str) -> dict:
+    def _explicit_section_value(self, section: str, key: str) -> str | None:
+        """Return a user-authored/runtime value set directly on ``section``."""
+        if not self._explicit_cp.has_section(section):
+            return None
+        if not self._explicit_cp.has_option(section, key):
+            return None
+        return self._explicit_cp.get(section, key)
+
+    def get_fighter_profile_reference(self, fighter_id: str) -> str | None:
+        """Return the optional custom anatomy profile reference for a fighter."""
+        anatomy_profile = self._explicit_section_value(fighter_id, C.CONFIG_FIGHTER_ANATOMY_PROFILE)
+        profile_alias = self._explicit_section_value(fighter_id, C.CONFIG_FIGHTER_PROFILE)
+
+        anatomy_value = (anatomy_profile or "").strip()
+        alias_value = (profile_alias or "").strip()
+        if anatomy_value and alias_value and anatomy_value != alias_value:
+            raise ValueError(
+                f"Fighter section '{fighter_id}' defines both anatomy_profile and profile with different values."
+            )
+        return anatomy_value or alias_value or None
+
+    def _fighter_setting(self, fighter_id: str, key: str, *, profile_default: str | None, fallback: str) -> str:
+        explicit_value = self._explicit_section_value(fighter_id, key)
+        if explicit_value is not None:
+            return explicit_value
+        if profile_default:
+            return profile_default
+        return self.get(fighter_id, key, str, fallback=fallback)
+
+    def get_fighter_settings(self, fighter_id: str, profile_defaults: dict | None = None) -> dict:
         """Return class, loadout, and environment for a fighter."""
+        profile_defaults = profile_defaults or {}
+        default_class = self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str)
+        default_loadout = self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str)
+        default_environment = self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_ENVIRONMENT, str)
         return {
-            "class_": self.get(
+            "class_": self._fighter_setting(
                 fighter_id,
                 C.CONFIG_FIGHTER_CLASS,
-                str,
-                fallback=self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_CLASS, str),
+                profile_default=profile_defaults.get("class_"),
+                fallback=default_class,
             ),
-            "loadout": self.get(
+            "theme": self._fighter_setting(
+                fighter_id,
+                C.CONFIG_FIGHTER_THEME,
+                profile_default=profile_defaults.get(C.THEME),
+                fallback=profile_defaults.get(C.THEME) or "",
+            ),
+            "loadout": self._fighter_setting(
                 fighter_id,
                 C.CONFIG_FIGHTER_LOADOUT,
-                str,
-                fallback=self.get(C.CONFIG_DEFAULT_FIGHTER, C.CONFIG_FIGHTER_LOADOUT, str),
+                profile_default=profile_defaults.get("loadout"),
+                fallback=default_loadout,
             ),
-            "environment": self.get(
+            "environment": self._fighter_setting(
                 fighter_id,
                 C.CONFIG_FIGHTER_ENVIRONMENT,
-                str,
-                fallback=self.get(C.CONFIG_DEFAULTS, C.CONFIG_FIGHTER_ENVIRONMENT, str),
+                profile_default=profile_defaults.get("environment"),
+                fallback=default_environment,
             ),
         }
 

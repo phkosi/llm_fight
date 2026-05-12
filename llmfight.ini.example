@@ -39,8 +39,13 @@ loadout = their bare fists and wits
 name = Sir Galant
 class = Veteran Knight
 loadout = longsword and tower shield
+# Optional custom anatomy profile JSON. Omit, leave empty, or set to humanoid
+# to use the default humanoid body plan.
+# anatomy_profile = humanoid
 
 [B]
 name = Shade
 class = Cunning Assassin
 loadout = poison dagger and smoke bombs
+# profile is accepted as an alias for anatomy_profile.
+# profile = humanoid

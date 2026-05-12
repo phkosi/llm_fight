@@ -126,6 +126,43 @@ runs = 1
 max_turns = 2
 ```
 
+Fighter sections can optionally point to a custom anatomy JSON profile. Omit
+the key, leave it empty, or set it to `humanoid` to keep the default body plan.
+Relative JSON paths are resolved from the active config file directory first,
+then the current working directory.
+
+```ini
+[A]
+class = Winged Duelist
+loadout = hook blades
+anatomy_profile = profiles/winged_duelist.json
+
+[B]
+profile = humanoid
+```
+
+Profile files use canonical part ids:
+
+```json
+{
+  "class": "Winged Duelist",
+  "loadout": "hook blades and wing spurs",
+  "environment": "an open arena",
+  "body_parts": [
+    {
+      "id": "second_head",
+      "is_vital": true,
+      "layers": [{"name": "bone", "max_hp": 10}]
+    },
+    {
+      "id": "left_wing",
+      "can_be_severed": true,
+      "layers": [{"name": "feathers", "max_hp": 8}]
+    }
+  ]
+}
+```
+
 The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endpoints are also supported:
 
 For native Ollama, `ollama_keep_alive` is sent with each chat request so the model can stay resident between fighter and judge calls during local playtests. `ollama_num_ctx` is the fixed context window sent to every fighter and judge call in a run; keep it stable to avoid runner reloads caused by alternating context sizes. Increase `ollama_keep_alive` for long runs if you want the model resident after the CLI exits, and lower it if you want VRAM freed sooner.

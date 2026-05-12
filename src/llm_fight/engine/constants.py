@@ -31,6 +31,10 @@ BODY_PARTS = "body_parts"
 TISSUE_LAYERS = "tissue_layers"
 BLEED_RATE = "bleed_rate"
 BURN_RATE = "burn_rate"
+ANATOMY = "anatomy"
+ANATOMY_PROFILE = "anatomy_profile"
+PROFILE = "profile"
+THEME = "theme"
 
 # Statuses
 
@@ -131,6 +135,8 @@ SCHEMA_MIN_PROPERTIES = "minProperties"
 SCHEMA_MAX_PROPERTIES = "maxProperties"
 SCHEMA_MIN_LENGTH = "minLength"
 SCHEMA_MAX_LENGTH = "maxLength"
+SCHEMA_MIN_ITEMS = "minItems"
+SCHEMA_MAX_ITEMS = "maxItems"
 SCHEMA_ONE_OF = "oneOf"
 SCHEMA_NOT = "not"
 SCHEMA_CONST = "const"
@@ -188,6 +194,9 @@ CONFIG_DEFAULTS = "DEFAULTS"  # For configparser default section
 CONFIG_FIGHTER_CLASS = "class"  # Per-fighter class
 CONFIG_FIGHTER_LOADOUT = "loadout"  # Per-fighter starting gear
 CONFIG_FIGHTER_ENVIRONMENT = "environment"  # Fighting environment
+CONFIG_FIGHTER_ANATOMY_PROFILE = ANATOMY_PROFILE  # Optional per-fighter anatomy profile JSON path
+CONFIG_FIGHTER_PROFILE = PROFILE  # Legacy/alias per-fighter anatomy profile JSON path
+CONFIG_FIGHTER_THEME = THEME  # Optional per-fighter generated/profile theme
 CONFIG_FIGHTER_SENTENCE_LIMIT = "fighter_sentence_limit"
 CONFIG_FIGHTER_WORD_LIMIT = "fighter_word_limit"
 CONFIG_FIGHTER_A_SECTION = "fighter_A"  # Config section for fighter A settings

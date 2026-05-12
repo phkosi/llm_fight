@@ -37,6 +37,10 @@ def _temporary_effect_instruction(effects_list: str) -> str:
     )
 
 
+def _valid_target_parts_text(fighter: FighterState) -> str:
+    return ", ".join(sorted(fighter.parts.keys())) or "none"
+
+
 def describe_pain(pain_level: int) -> str:
     if pain_level <= 0:
         return "no pain"
@@ -133,6 +137,8 @@ async def get_fighter_attempt(
         exhaustion_desc=exhaustion_desc,
         heat_desc=heat_desc,
         effects_list=effects_list,
+        own_target_parts=_valid_target_parts_text(fighter),
+        opponent_target_parts=_valid_target_parts_text(opponent),
         temporary_effect_instruction=_temporary_effect_instruction(effects_list),
         turn_window=turn_window,
         recent_log=current_recent_log,

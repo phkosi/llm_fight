@@ -100,7 +100,7 @@ Successful rich play streak after fixes:
 
 Addresses: ISSUE-001
 
-- [ ] Add profile-backed custom fighter anatomy while preserving the current humanoid default. Config or test-authored fighter profiles should be able to define canonical non-humanoid body parts such as `left_wing`, `tail`, `second_head`, `tentacle_1`, or `third_arm`, and the simulation should create `FighterState` objects from those profiles instead of always hard-coding the humanoid preset.
+- [x] Add profile-backed custom fighter anatomy while preserving the current humanoid default. Config or test-authored fighter profiles should be able to define canonical non-humanoid body parts such as `left_wing`, `tail`, `second_head`, `tentacle_1`, or `third_arm`, and the simulation should create `FighterState` objects from those profiles instead of always hard-coding the humanoid preset.
 
 Acceptance goals:
 
@@ -127,6 +127,8 @@ Required tests:
 - A temp config with fighter-specific profile paths causes `_single_fight()` to build A/B from those profiles and pass their custom `valid_target_parts` into Judge Phase 1 and Phase 2.
 - Fighter prompts include own/opponent valid custom target parts without relying on old narration.
 - Transcript/combat-log state snapshots preserve custom parts.
+
+Verification: `uv run pytest -q tests/test_profiles.py tests/test_config.py tests/test_state.py tests/test_simulation.py tests/test_simulation_integration.py tests/engine/test_fighter.py tests/engine/test_judge.py tests/engine/test_prompts.py tests/test_validation.py` -> 232 passed; `uv run black --check .`; `uv run flake8`; `uv run pytest -q` -> 312 passed, 6 skipped; `git diff --check`; 2 implementation reviewers passed.
 
 ## Declarative Dynamic Effect Mechanics
 

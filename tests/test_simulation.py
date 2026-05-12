@@ -10,11 +10,36 @@ from llm_fight.state import FighterState  # Keep for spec
 
 # from llm_fight.anatomy import PRESETS as ANATOMY_PRESETS # No longer needed for this test's mocking strategy
 from llm_fight.engine import constants as C
-from llm_fight.config import CONFIG
+from llm_fight.config import CONFIG, Config
 
 
 def _source_value(source=C.FIGHTER_A, value=1):
     return {C.SOURCE: source, C.VALUE: value}
+
+
+def _custom_profile(part_id: str, vital: bool = True):
+    return {
+        C.CONFIG_FIGHTER_CLASS: f"{part_id} fighter",
+        C.LOADOUT: "profile weapon",
+        "environment": "profile arena",
+        C.BODY_PARTS: [
+            {
+                "id": part_id,
+                "is_vital": vital,
+                "layers": [{C.NAME: "core", C.MAX_HP: 12}],
+            },
+            {
+                "id": f"{part_id}_limb",
+                "can_be_severed": True,
+                "layers": [{C.NAME: "muscle", C.MAX_HP: 8}],
+            },
+        ],
+    }
+
+
+def _write_profile(path, profile):
+    path.write_text(json.dumps(profile), encoding="utf-8")
+    return path
 
 
 def _patch_batch_config(runs: int, concurrency: int, seed_value: int = 42):
@@ -152,6 +177,77 @@ async def test_single_fight_uses_fight_rng_for_success_rolls():
     assert result[C.WINNER] == C.FIGHTER_A
     assert fight_rng.random.call_count == 2
     mock_rand.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_single_fight_uses_configured_custom_anatomy_profiles(tmp_path):
+    profile_a = _write_profile(tmp_path / "a_profile.json", _custom_profile("left_wing"))
+    profile_b = _write_profile(tmp_path / "b_profile.json", _custom_profile("tentacle_1"))
+    config_path = tmp_path / "game.ini"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "fighter_A = A",
+                "fighter_B = B",
+                "",
+                "[SIMULATION]",
+                "max_turns = 1",
+                "",
+                "[A]",
+                f"anatomy_profile = {profile_a.name}",
+                "",
+                "[B]",
+                f"profile = {profile_b.name}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    p1_states = []
+    p2_inputs = []
+
+    async def fake_get_attempt(*args, **kwargs):
+        return "attack"
+
+    async def fake_judge_p1(state, *args, **kwargs):
+        p1_states.append(state)
+        return {
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
+            f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+            "judgement_text": "Both actions miss.",
+            "explanation": "",
+        }
+
+    async def fake_judge_p2(p2_input, *args, **kwargs):
+        p2_inputs.append(p2_input)
+        return {
+            C.NARRATION: "They circle.",
+            C.DELTA: {},
+            C.FIGHT_END: False,
+            C.WINNER: None,
+        }
+
+    old_config = sim_module.config_mod.CONFIG
+    sim_module.config_mod.CONFIG = Config(config_path)
+    try:
+        with (
+            patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
+            patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
+            patch.object(sim_module, "judge_phase2", new=AsyncMock(side_effect=fake_judge_p2)),
+        ):
+            result, combat_log = await sim_module._single_fight(return_log=True)
+    finally:
+        sim_module.config_mod.CONFIG = old_config
+
+    assert result[C.WINNER] == C.DRAW
+    assert "left_wing" in p1_states[0][C.FIGHTER_A]["parts"]
+    assert "tentacle_1" in p1_states[0][C.FIGHTER_B]["parts"]
+    assert "left_wing" in p2_inputs[0]["valid_target_parts"][C.FIGHTER_A]
+    assert "tentacle_1" in p2_inputs[0]["valid_target_parts"][C.FIGHTER_B]
+    assert "left_wing" in combat_log.turns[0].state_A_before["parts"]
+    assert "tentacle_1" in combat_log.turns[0].state_B_after["parts"]
 
 
 @pytest.mark.asyncio

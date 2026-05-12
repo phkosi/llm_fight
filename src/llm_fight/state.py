@@ -15,6 +15,7 @@ from .anatomy import BodyPart, PRESETS
 from .engine import constants as C
 from .engine.logger import logger
 from . import config as config_mod
+from .profiles import FighterProfile, resolve_fighter_profile
 from .validation import EffectSchema
 
 PART_ALIASES = {
@@ -133,11 +134,18 @@ class FighterState:
     debuffs: List[Effect] = field(default_factory=list)
     status: C.FighterStatus = C.FighterStatus.FIGHTING
     class_: str = "Generic Fighter"
+    theme: str = ""
     loadout: str = "their bare fists and wits"
     environment: str = "an open arena"
 
     @classmethod
-    def from_preset(cls, id_: str, preset_name: str, config_section: str | None = None) -> FighterState:
+    def from_preset(
+        cls,
+        id_: str,
+        preset_name: str,
+        config_section: str | None = None,
+        config=None,
+    ) -> FighterState:
         """Creates a FighterState instance from a predefined anatomical preset.
 
         ``config_section`` specifies which INI section to pull fighter settings
@@ -148,15 +156,56 @@ class FighterState:
         parts_copy = copy.deepcopy(preset.parts)
 
         section = config_section or id_
-        settings = config_mod.CONFIG.get_fighter_settings(section)
+        cfg = config or config_mod.CONFIG
+        settings = cfg.get_fighter_settings(section)
 
         return cls(
             id=id_,
             parts=parts_copy,
             class_=settings["class_"],
+            theme=settings.get(C.THEME, ""),
             loadout=settings["loadout"],
             environment=settings["environment"],
         )
+
+    @classmethod
+    def from_profile(
+        cls,
+        id_: str,
+        profile: FighterProfile,
+        config_section: str | None = None,
+        config=None,
+    ) -> FighterState:
+        """Create fighter state from a validated custom profile."""
+        section = config_section or id_
+        cfg = config or config_mod.CONFIG
+        profile_defaults = {
+            "class_": profile.class_,
+            C.THEME: profile.theme,
+            "loadout": profile.loadout,
+            "environment": profile.environment,
+        }
+        settings = cfg.get_fighter_settings(section, profile_defaults=profile_defaults)
+        return cls(
+            id=id_,
+            parts=copy.deepcopy(profile.parts),
+            class_=settings["class_"],
+            theme=settings.get(C.THEME, ""),
+            loadout=settings["loadout"],
+            environment=settings["environment"],
+        )
+
+    @classmethod
+    def from_config(cls, id_: str, config_section: str | None = None, config=None) -> FighterState:
+        """Create fighter state from the active config's profile or humanoid fallback."""
+        section = config_section or id_
+        cfg = config or config_mod.CONFIG
+        profile = resolve_fighter_profile(section, config=cfg)
+        if profile is not None:
+            return cls.from_profile(id_, profile, config_section=section, config=cfg)
+        if config is None:
+            return cls.from_preset(id_, "humanoid", config_section=section)
+        return cls.from_preset(id_, "humanoid", config_section=section, config=cfg)
 
     # ------------------ utilities --------------------------------------
     def to_json(self) -> Dict[str, Any]:

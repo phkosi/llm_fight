@@ -67,6 +67,82 @@ EffectTextSchema = {
     C.SCHEMA_PATTERN: C.EFFECT_SAFE_TEXT_PATTERN,
 }
 
+ProfileIdentifierSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_STRING,
+    C.SCHEMA_MIN_LENGTH: 1,
+    C.SCHEMA_MAX_LENGTH: C.EFFECT_METADATA_VALUE_MAX_LENGTH,
+    C.SCHEMA_PATTERN: C.EFFECT_SAFE_NAME_PATTERN,
+}
+
+TissueLayerSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        C.NAME: ProfileIdentifierSchema,
+        C.MAX_HP: {
+            C.SCHEMA_TYPE: C.SCHEMA_INTEGER,
+            C.SCHEMA_MINIMUM: 1,
+            C.SCHEMA_MAXIMUM: 500,
+        },
+    },
+    C.SCHEMA_REQUIRED: [C.NAME, C.MAX_HP],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
+BodyPartSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        "id": ProfileIdentifierSchema,
+        C.NAME: ProfileIdentifierSchema,
+        "layers": {
+            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
+            C.SCHEMA_ITEMS: TissueLayerSchema,
+            C.SCHEMA_MIN_ITEMS: 1,
+            C.SCHEMA_MAX_ITEMS: 8,
+        },
+        "is_vital": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
+        "can_be_severed": {C.SCHEMA_TYPE: C.SCHEMA_BOOLEAN},
+        C.BLEED_RATE: {
+            C.SCHEMA_TYPE: C.SCHEMA_INTEGER,
+            C.SCHEMA_MINIMUM: 0,
+            C.SCHEMA_MAXIMUM: 50,
+        },
+        C.BURN_RATE: {
+            C.SCHEMA_TYPE: C.SCHEMA_INTEGER,
+            C.SCHEMA_MINIMUM: 0,
+            C.SCHEMA_MAXIMUM: 50,
+        },
+    },
+    C.SCHEMA_REQUIRED: ["id", "layers"],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
+FighterProfileSchema = {
+    C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+    C.SCHEMA_PROPERTIES: {
+        C.CONFIG_FIGHTER_CLASS: EffectTextSchema,
+        C.THEME: ProfileIdentifierSchema,
+        C.LOADOUT: EffectTextSchema,
+        "environment": EffectTextSchema,
+        C.BODY_PARTS: {
+            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
+            C.SCHEMA_ITEMS: BodyPartSchema,
+            C.SCHEMA_MIN_ITEMS: 1,
+            C.SCHEMA_MAX_ITEMS: 32,
+        },
+        C.ANATOMY: {
+            C.SCHEMA_TYPE: C.SCHEMA_ARRAY,
+            C.SCHEMA_ITEMS: BodyPartSchema,
+            C.SCHEMA_MIN_ITEMS: 1,
+            C.SCHEMA_MAX_ITEMS: 32,
+        },
+    },
+    C.SCHEMA_ONE_OF: [
+        {C.SCHEMA_REQUIRED: [C.BODY_PARTS], C.SCHEMA_NOT: {C.SCHEMA_REQUIRED: [C.ANATOMY]}},
+        {C.SCHEMA_REQUIRED: [C.ANATOMY], C.SCHEMA_NOT: {C.SCHEMA_REQUIRED: [C.BODY_PARTS]}},
+    ],
+    C.SCHEMA_ADDITIONAL_PROPERTIES: False,
+}
+
 EffectSchema = {
     C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
     C.SCHEMA_PROPERTIES: {
