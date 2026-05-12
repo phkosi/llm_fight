@@ -896,11 +896,11 @@ Verification:
 
 Addresses: ISSUE-033
 
-- [ ] Document the current runtime contracts honestly until the larger gameplay/UX tasks land: fixed humanoid anatomy, mostly prose non-humanoid concepts, post-fight `play` output until streaming progress is implemented, and capped Judge Phase 2 no-op fallback behavior.
+- [x] Document the current runtime contracts honestly: custom anatomy is mechanical only through configured/generated profiles, prose-only non-humanoid concepts do not create targetable parts, `play` streams phase/completed-turn progress but not raw model tokens, and Judge Phase 2 retry exhaustion is capped with fail-open no-op or fail-closed error behavior.
 
 Acceptance goals:
 
-- New users are not led to expect custom anatomy, live turn streaming, or unlimited retry recovery.
+- New users are not led to expect prose-only custom anatomy, raw token streaming, or unlimited retry recovery.
 - Troubleshooting distinguishes stronger-model/token advice from capped Phase 2 fallback behavior.
 - Docs remain easy to update once the corresponding TODO items are implemented.
 
@@ -909,6 +909,12 @@ Required tests:
 - README Known Limitations and Troubleshooting updates.
 - `docs/Design_doc.md` current-contract note.
 - Optional docs consistency check for referenced commands/config keys.
+
+Verification:
+
+- Updated README Known Limitations to reflect the current implemented contract: custom anatomy is real only through configured or generated profiles, prose-only concepts do not create targetable parts, `play` streams phase/completed-turn progress rather than raw model tokens, and Phase 2 fail-open retries degrade to marked no-op turns.
+- Updated README Troubleshooting to separate stronger-model/token/context advice from the capped Judge Phase 2 fallback/fail-closed behavior.
+- Added a `docs/Design_doc.md` current gameplay contract note with the same anatomy, progress, and retry boundaries.
 
 ## Library-Friendly Logger Setup
 

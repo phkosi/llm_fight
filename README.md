@@ -350,13 +350,26 @@ For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
 - Combat balance and judge consistency are still evolving.
 - Output quality depends heavily on the local model.
 - Small models may occasionally fail strict JSON output even with retries.
+- Custom anatomy is authoritative only when supplied through `anatomy_profile`,
+  `profile`, or generated fighter profiles. A prose-only class such as
+  "dragon" or "tentacle horror" does not create new targetable parts unless a
+  profile or generated profile defines them.
+- `play` shows live phase status and renders each completed turn, but it does
+  not stream partial model tokens or unfinished fighter/judge responses.
+- Judge Phase 2 parse recovery is deliberately capped. Under the default
+  `judge_phase2_failure_policy = fail_open`, exhausted Phase 2 retries become
+  marked no-op turns; `fail_closed` turns the same condition into a hard error.
 - Formal releases are not established yet; `main` is the current development line.
 
 ## Troubleshooting
 
 - `Cannot reach Ollama server`: start Ollama and confirm the configured health endpoint responds. Native `/api/chat` uses `/api/tags`; OpenAI-compatible `/v1/chat/completions` uses `/v1/models`.
 - `model not found`: run `ollama pull llama3.2:3b` or set `ollama_default_model` to a model you have locally.
-- `LLM output could not be parsed`: try a stronger model, increase `max_tokens_judge`, or increase `max_retries`.
+- `LLM output could not be parsed`: try a stronger model, increase
+  `max_tokens_judge`, increase `ollama_num_ctx`, or reduce temperature. General
+  fighter/Judge Phase 1 calls also honor higher `max_retries`; Judge Phase 2
+  parsing is capped and will either create a marked no-op turn in fail-open mode
+  or stop the fight in fail-closed mode.
 - `uv sync` cannot find Python 3.14: run `uv python install 3.14`.
 
 ## Contributing And Support
