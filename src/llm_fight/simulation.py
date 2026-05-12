@@ -2,6 +2,7 @@
 
 import asyncio
 import csv
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Callable
 
@@ -13,6 +14,54 @@ from .engine.fighter import get_fighter_attempt
 from .engine import constants as C
 from .engine.logger import logger
 from .engine.combat_log import CombatLog, CombatTurn
+
+
+@dataclass(frozen=True)
+class BatchSummary:
+    """Summary of rows written by a batch simulation CSV."""
+
+    path: Path
+    total_runs: int
+    total_rows: int
+    completed_rows: int
+    error_rows: int
+
+    @property
+    def has_errors(self) -> bool:
+        return self.error_rows > 0
+
+
+def validate_batch_settings() -> tuple[int, int]:
+    """Return validated ``(runs, concurrency)`` from the current config."""
+    runs = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
+    concurrency = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
+
+    if runs < 0:
+        raise ValueError("[SIMULATION] runs must be 0 or greater")
+    if concurrency < 1:
+        raise ValueError("[SIMULATION] concurrent_runs must be 1 or greater")
+    return runs, concurrency
+
+
+def summarize_batch_csv(output_csv: str | Path, total_runs: int | None = None) -> BatchSummary:
+    """Read a batch CSV and summarize successful and failed rows."""
+    csv_path = Path(output_csv)
+    with csv_path.open(newline="") as fp:
+        rows = list(csv.DictReader(fp))
+
+    total_rows = len(rows)
+    error_rows = sum(1 for row in rows if row.get(C.WINNER) == C.BATCH_ERROR_WINNER)
+    completed_rows = total_rows - error_rows
+    if total_runs is None:
+        total_runs = total_rows
+
+    return BatchSummary(
+        path=csv_path,
+        total_runs=total_runs,
+        total_rows=total_rows,
+        completed_rows=completed_rows,
+        error_rows=error_rows,
+    )
 
 
 def _status_outcome(A: FighterState, B: FighterState) -> str | None:
@@ -240,10 +289,8 @@ async def run_batch(
     Path
         Path object for the created CSV file.
     """
+    runs, concurrency = validate_batch_settings()
     seed(config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int))
-
-    runs = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_RUNS, int)
-    concurrency = config_mod.CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_CONCURRENT_RUNS, int, fallback=1)
 
     sem = asyncio.Semaphore(concurrency)
 
@@ -256,7 +303,7 @@ async def run_batch(
                 )
             except Exception:
                 logger.exception("_single_fight failed")
-                return {C.WINNER: "error", C.LOG_TURN: "0"}
+                return {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"}
 
     csv_path = Path(output_csv)
     with csv_path.open("w", newline="") as fp:

@@ -256,23 +256,26 @@ Required tests:
 
 Addresses: ISSUE-010, ISSUE-025
 
-- [ ] Fail fast on invalid batch settings and make simulation error rows affect CLI exit status unless the user explicitly opts into continuing with an error-producing CSV.
+- [x] Fail fast on invalid batch settings and make simulation error rows affect CLI exit status unless the user explicitly opts into continuing with an error-producing CSV.
 
 Acceptance goals:
 
 - `concurrent_runs=0` and negative concurrency fail immediately with a clear config or CLI error.
 - Negative `runs` fails at config/runtime boundaries as well as the existing CLI override guard.
+- `llmfight simulate` validates batch settings after CLI overrides and before contacting Ollama, and `run_batch()` validates again before opening the CSV, creating the semaphore, or starting `_single_fight` tasks.
 - Batch CSV writing remains incremental for completed runs.
-- A batch with all failed rows does not print only `Simulation saved` and exit 0.
+- After the CSV is written, `llmfight simulate` exits nonzero if `error_rows > 0` unless `--continue-on-error` is set. This applies to both all-error and mixed success/error batches. `runs=0` has `error_rows=0` and exits 0.
+- Add a shared batch-summary path: either have `run_batch()` return a `BatchResult(path, total_runs, completed_rows, error_rows)`, or keep `run_batch()` returning `Path` and add a CSV summary helper used by both verbose output and exit-code handling. Define `completed_rows` as rows where `winner != "error"`.
 - Add an explicit opt-in such as `--continue-on-error` for CI/playtest cases that want a CSV even with error rows.
 - Verbose summary output includes total runs, completed rows, and error rows.
+- Update README/docs to document `--continue-on-error` and the default nonzero exit when batch error rows are produced.
 
 Required tests:
 
 - `run_batch()` with `concurrent_runs=0` and `-1` raises quickly and does not hang or start `_single_fight`.
 - `runs=0` still writes a header-only CSV and exits successfully.
 - CLI simulate exits nonzero when every mocked fight fails.
-- CLI simulate behavior with mixed success/error rows is covered.
+- CLI simulate exits nonzero for mixed success/error rows unless `--continue-on-error` is set.
 - `--continue-on-error` exits 0 but prints an error-row warning.
 
 ## Transport Privacy And Endpoint Mode Safety

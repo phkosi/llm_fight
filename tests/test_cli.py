@@ -1,3 +1,4 @@
+import csv
 from typer.testing import CliRunner
 
 from llm_fight.cli import app
@@ -7,6 +8,13 @@ from click import ClickException
 from logging import CRITICAL
 from llm_fight.engine import constants as C
 from llm_fight.engine.combat_log import CombatLog, CombatTurn
+
+
+def _write_batch_csv(path, rows):
+    with path.open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def test_cli_help():
@@ -175,6 +183,7 @@ def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_
 def test_cli_simulate(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
+    _write_batch_csv(dummy, [{C.WINNER: "A", C.LOG_TURN: "1"}])
     with (
         patch("llm_fight.simulation.run_batch", new=AsyncMock(return_value=dummy)) as mock_run_batch,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
@@ -254,7 +263,9 @@ def test_cli_simulate_with_config(tmp_path):
 
         assert CONFIG.path == cfg
         assert CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_SEED, int) == 77
-        return Path("dummy.csv")
+        dummy = tmp_path / "dummy.csv"
+        _write_batch_csv(dummy, [{C.WINNER: "A", C.LOG_TURN: "1"}])
+        return dummy
 
     from llm_fight import config as config_mod
 
@@ -335,6 +346,7 @@ def test_cli_fighter_options():
 def test_cli_simulate_fighter_options(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
+    _write_batch_csv(dummy, [{C.WINNER: "A", C.LOG_TURN: "1"}])
     with (
         patch(
             "llm_fight.simulation.run_batch",
@@ -350,6 +362,7 @@ def test_cli_simulate_fighter_options(tmp_path):
 def test_cli_simulate_smoke_overrides(tmp_path):
     runner = CliRunner()
     dummy = tmp_path / "dummy.csv"
+    _write_batch_csv(dummy, [{C.WINNER: "A", C.LOG_TURN: "1"}])
 
     async def fake_run_batch(output_csv, fighter_a_section=None, fighter_b_section=None):
         from llm_fight.config import CONFIG
@@ -369,6 +382,108 @@ def test_cli_simulate_smoke_overrides(tmp_path):
 
     assert result.exit_code == 0
     config_mod.CONFIG = original
+
+
+def test_cli_simulate_exits_nonzero_for_all_error_rows(tmp_path):
+    runner = CliRunner()
+    dummy = tmp_path / "errors.csv"
+    _write_batch_csv(
+        dummy,
+        [
+            {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"},
+            {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"},
+        ],
+    )
+
+    with (
+        patch("llm_fight.simulation.run_batch", new=AsyncMock(return_value=dummy)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["simulate", "--runs", "2"])
+
+    assert result.exit_code == 1
+    assert "Simulation saved to" in result.output
+    assert "2 error row(s)" in result.output
+
+
+def test_cli_simulate_exits_nonzero_for_mixed_error_rows(tmp_path):
+    runner = CliRunner()
+    dummy = tmp_path / "mixed.csv"
+    _write_batch_csv(
+        dummy,
+        [
+            {C.WINNER: "A", C.LOG_TURN: "1"},
+            {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"},
+        ],
+    )
+
+    with (
+        patch("llm_fight.simulation.run_batch", new=AsyncMock(return_value=dummy)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["simulate", "--runs", "2"])
+
+    assert result.exit_code == 1
+    assert "1 error row(s)" in result.output
+    assert "1 completed successfully" in result.output
+
+
+def test_cli_simulate_continue_on_error_exits_zero_with_warning(tmp_path):
+    runner = CliRunner()
+    dummy = tmp_path / "mixed.csv"
+    _write_batch_csv(
+        dummy,
+        [
+            {C.WINNER: "A", C.LOG_TURN: "1"},
+            {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"},
+        ],
+    )
+
+    with (
+        patch("llm_fight.simulation.run_batch", new=AsyncMock(return_value=dummy)),
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+    ):
+        result = runner.invoke(app, ["simulate", "--runs", "2", "--continue-on-error"])
+
+    assert result.exit_code == 0
+    assert "1 error row(s)" in result.output
+
+
+def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "bad_batch.ini"
+    cfg.write_text("[SIMULATION]\nconcurrent_runs = 0\n")
+
+    from llm_fight import config as config_mod
+
+    original = config_mod.CONFIG
+    ping = AsyncMock()
+    run_batch = AsyncMock()
+    try:
+        with (
+            patch("llm_fight.cli.ping_ollama", new=ping),
+            patch("llm_fight.simulation.run_batch", new=run_batch),
+        ):
+            result = runner.invoke(app, ["simulate", "--config", str(cfg)])
+    finally:
+        config_mod.CONFIG = original
+
+    assert result.exit_code != 0
+    assert "concurrent_runs" in result.output
+    ping.assert_not_awaited()
+    run_batch.assert_not_awaited()
+
+
+def test_cli_simulate_negative_runs_override_fails_before_ping():
+    runner = CliRunner()
+    ping = AsyncMock()
+
+    with patch("llm_fight.cli.ping_ollama", new=ping):
+        result = runner.invoke(app, ["simulate", "--runs", "-1"])
+
+    assert result.exit_code != 0
+    assert "--runs must be 0 or greater" in result.output
+    ping.assert_not_awaited()
 
 
 def test_cli_ollama_unreachable():

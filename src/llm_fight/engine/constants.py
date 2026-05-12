@@ -96,6 +96,7 @@ NARRATION = "narration"
 DELTA = "delta"
 FIGHT_END = "fight_end"
 WINNER = "winner"
+BATCH_ERROR_WINNER = "error"
 FIGHTER_A = "A"
 FIGHTER_B = "B"
 

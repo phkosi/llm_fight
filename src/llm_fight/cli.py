@@ -49,6 +49,8 @@ def _apply_simulation_overrides(runs: Optional[int] = None, max_turns: Optional[
 def _run_async(coro):
     try:
         return asyncio.run(coro)
+    except ValueError as exc:
+        raise ClickException(str(exc)) from exc
     except ConnectionError as exc:
         raise ClickException(str(exc)) from exc
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
@@ -63,6 +65,23 @@ def _run_async(coro):
                 "Try a stronger model, increasing max_tokens_judge, or increasing max_retries."
             ) from exc
         raise
+
+
+def _validate_batch_config() -> tuple[int, int]:
+    from .simulation import validate_batch_settings
+
+    try:
+        return validate_batch_settings()
+    except ValueError as exc:
+        raise ClickException(str(exc)) from exc
+
+
+def _batch_error_warning(summary) -> str:
+    return (
+        f"Batch produced {summary.error_rows} error row(s) out of {summary.total_rows} written row(s); "
+        f"{summary.completed_rows} completed successfully. Use --continue-on-error to keep exit code 0 "
+        "while preserving the CSV."
+    )
 
 
 @app.command()
@@ -107,6 +126,11 @@ def simulate(
         "-v",
         help="Show progress bar and summary table",
     ),
+    continue_on_error: bool = typer.Option(
+        False,
+        "--continue-on-error",
+        help="Exit 0 even when batch simulations write winner=error rows",
+    ),
 ):
     """Run self-play batch using llmfight.ini parameters."""
     from logging import CRITICAL
@@ -118,6 +142,7 @@ def simulate(
 
     _load_config(config)
     _apply_simulation_overrides(runs=runs, max_turns=max_turns)
+    batch_runs, _ = _validate_batch_config()
     update_logger_level()
     log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
     if not verbose and not log_turns:
@@ -125,7 +150,7 @@ def simulate(
 
     _run_async(ping_ollama())
 
-    from .simulation import run_batch
+    from .simulation import run_batch, summarize_batch_csv
 
     progress_cb = None
     if verbose:
@@ -163,15 +188,21 @@ def simulate(
             )
         )
 
+    summary = summarize_batch_csv(path, total_runs=batch_runs)
+
     if verbose:
         import csv
 
         with open(path, newline="") as fp:
             rows = list(csv.DictReader(fp))
-        table = render.make_summary_table(rows)
+        table = render.make_summary_table(rows, total_runs=summary.total_runs)
         console.print(table)
 
     typer.echo(f"Simulation saved to {path}")
+    if summary.has_errors:
+        typer.echo(_batch_error_warning(summary))
+        if not continue_on_error:
+            raise typer.Exit(1)
 
 
 @app.command()

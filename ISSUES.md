@@ -126,14 +126,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-010: Invalid batch concurrency can hang forever
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Batch Config Validation And Failure Exit Semantics
 - Source: codebase review
 - Area: CLI/config reliability
 - Evidence: `run_batch()` reads `concurrent_runs` in `src/llm_fight/simulation.py:245` and constructs `asyncio.Semaphore(concurrency)` at line 248. With `0`, tasks block forever.
 - Impact: A single bad config can make `llmfight simulate` appear frozen.
 - Suggested fix: Validate `runs >= 0` and `concurrent_runs >= 1` in `run_batch()` and at the CLI boundary.
-- Tests: Config values `concurrent_runs=0` and `-1` should fail fast with a clear exception, not hang.
+- Tests: Config values `concurrent_runs=0` and `-1` fail fast with a clear exception and do not start `_single_fight`. CLI config validation now happens before `ping_ollama()`. Verified with `uv run pytest -q tests/test_cli.py tests/test_simulation.py tests/test_simulation_failures.py tests/test_render.py` and `uv run pytest -q`.
 
 ### ISSUE-011: `llmfight play` is silent until the whole fight finishes
 
@@ -293,14 +293,14 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-025: Batch simulations can hide total failure behind exit 0
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Batch Config Validation And Failure Exit Semantics
 - Source: codebase review
 - Area: CLI reliability
 - Evidence: `run_batch()` catches exceptions and returns `{winner: "error"}` in `src/llm_fight/simulation.py:252`; CLI prints `Simulation saved to ...` in `src/llm_fight/cli.py:174`.
 - Impact: CI/scripts can treat a fully failed batch as success unless they parse the CSV.
 - Suggested fix: Track error rows and return nonzero from CLI unless `--continue-on-error` is set.
-- Tests: `_single_fight` raises for every run; assert CLI exits nonzero with an actionable summary.
+- Tests: `_single_fight` raises for every run; CLI exits nonzero with an actionable summary. Mixed success/error rows also exit nonzero unless `--continue-on-error` is set. Verified with `uv run pytest -q tests/test_cli.py tests/test_simulation.py tests/test_simulation_failures.py tests/test_render.py` and `uv run pytest -q`.
 
 ### ISSUE-026: Transcripts are raw exchange fragments, not fight traces
 

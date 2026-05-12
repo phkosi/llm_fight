@@ -363,6 +363,77 @@ async def test_run_batch_zero_runs(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("concurrency", [0, -1])
+async def test_run_batch_invalid_concurrency_raises_without_starting_fight(tmp_path, concurrency):
+    out_file = tmp_path / "invalid_concurrency.csv"
+    mock_fight = AsyncMock(return_value={C.WINNER: "A", C.LOG_TURN: "1"})
+    orig_get = sim_module.config_mod.CONFIG.get
+
+    def fake_get(section, key, cast=str, fallback=None):
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+            return 1
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+            return concurrency
+        return orig_get(section, key, cast, fallback)
+
+    with (
+        patch.object(sim_module, "_single_fight", new=mock_fight),
+        patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
+    ):
+        with pytest.raises(ValueError, match="concurrent_runs"):
+            await asyncio.wait_for(sim_module.run_batch(out_file), timeout=0.1)
+
+    assert not out_file.exists()
+    mock_fight.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_batch_negative_runs_raises_without_starting_fight(tmp_path):
+    out_file = tmp_path / "negative_runs.csv"
+    mock_fight = AsyncMock(return_value={C.WINNER: "A", C.LOG_TURN: "1"})
+    orig_get = sim_module.config_mod.CONFIG.get
+
+    def fake_get(section, key, cast=str, fallback=None):
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_RUNS:
+            return -1
+        if section == C.CONFIG_SIMULATION and key == C.CONFIG_CONCURRENT_RUNS:
+            return 1
+        return orig_get(section, key, cast, fallback)
+
+    with (
+        patch.object(sim_module, "_single_fight", new=mock_fight),
+        patch.object(sim_module.config_mod.CONFIG, "get", side_effect=fake_get),
+    ):
+        with pytest.raises(ValueError, match="runs"):
+            await asyncio.wait_for(sim_module.run_batch(out_file), timeout=0.1)
+
+    assert not out_file.exists()
+    mock_fight.assert_not_awaited()
+
+
+def test_summarize_batch_csv_counts_error_rows(tmp_path):
+    out_file = tmp_path / "summary.csv"
+    with out_file.open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=[C.WINNER, C.LOG_TURN])
+        writer.writeheader()
+        writer.writerows(
+            [
+                {C.WINNER: "A", C.LOG_TURN: "1"},
+                {C.WINNER: C.BATCH_ERROR_WINNER, C.LOG_TURN: "0"},
+            ]
+        )
+
+    summary = sim_module.summarize_batch_csv(out_file, total_runs=3)
+
+    assert summary.path == out_file
+    assert summary.total_runs == 3
+    assert summary.total_rows == 2
+    assert summary.completed_rows == 1
+    assert summary.error_rows == 1
+    assert summary.has_errors
+
+
+@pytest.mark.asyncio
 async def test_turn_logging_respects_setting():
     async def fake_attempt(*args, **kwargs):
         return "attack"

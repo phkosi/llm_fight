@@ -52,20 +52,32 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> "Table | str":
     return table
 
 
-def make_summary_table(results: Iterable[dict[str, str]]) -> "Table | str":
+def make_summary_table(results: Iterable[dict[str, str]], total_runs: int | None = None) -> "Table | str":
     """Create a summary table from simulation ``results``."""
     data = list(results)
+    if total_runs is None:
+        total_runs = len(data)
+    error_rows = sum(1 for r in data if r.get(C.WINNER) == C.BATCH_ERROR_WINNER)
+    completed_rows = len(data) - error_rows
     winners = Counter(r.get(C.WINNER, C.DRAW) for r in data)
     avg_turns = mean(int(r.get(C.LOG_TURN, "0")) for r in data) if data else 0.0
 
     if not RICH_AVAILABLE:
-        lines = [f"{w}: {c}" for w, c in winners.items()]
+        lines = [
+            f"Total Runs: {total_runs}",
+            f"Completed Rows: {completed_rows}",
+            f"Error Rows: {error_rows}",
+        ]
+        lines.extend(f"{w}: {c}" for w, c in winners.items())
         lines.append(f"Average Turns: {avg_turns:.1f}")
         return "\n".join(lines)
 
     table = Table(title="Simulation Summary")
-    table.add_column("Winner")
+    table.add_column("Metric")
     table.add_column("Count", justify="right")
+    table.add_row("Total Runs", str(total_runs))
+    table.add_row("Completed Rows", str(completed_rows))
+    table.add_row("Error Rows", str(error_rows))
     for w, c in winners.items():
         table.add_row(w, str(c))
     table.add_row("Average Turns", f"{avg_turns:.1f}")

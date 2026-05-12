@@ -81,6 +81,8 @@ Run a one-fight batch simulation:
 uv run llmfight simulate --runs 1 --max-turns 2 --output-csv sim_results.csv
 ```
 
+Batch simulation rows with `winner=error` make `llmfight simulate` exit nonzero after the CSV is written. Use `--continue-on-error` when an automation should keep exit code 0 while preserving an error-producing CSV for inspection.
+
 Use an alternate config file:
 
 ```bash
@@ -97,6 +99,7 @@ Useful command options:
 
 - `--max-turns N`: cap a fight quickly during smoke tests.
 - `--runs N`: override batch simulation run count.
+- `--continue-on-error`: keep batch simulation exit code 0 even if the CSV contains `winner=error` rows.
 - `--simple-output`: print plain text instead of Rich tables.
 - `--verbose`: show more progress/debug output.
 
