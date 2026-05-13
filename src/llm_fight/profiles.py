@@ -106,83 +106,95 @@ def _validate_consequence_policy(part_id: str, tags: list[str], group: str | Non
             )
 
 
-def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
-    """Return a validated, normalized profile from raw JSON data."""
-    if not isinstance(raw_profile, dict):
-        raise FighterProfileError("Fighter profile must be a JSON object.")
-    try:
-        validate(raw_profile, FighterProfileSchema)
-    except ValidationError as exc:
-        raise FighterProfileError(f"Invalid fighter profile: {exc.message}") from exc
+def _raw_body_parts(raw_profile: dict[str, Any]) -> list[dict[str, Any]]:
+    return cast(list[dict[str, Any]], raw_profile.get(C.BODY_PARTS, raw_profile.get(C.ANATOMY, [])))
 
-    raw_parts = cast(list[dict[str, Any]], raw_profile.get(C.BODY_PARTS, raw_profile.get(C.ANATOMY, [])))
-    parts: dict[str, BodyPart] = {}
-    has_survival_consequence = False
-    legacy_vital_count = sum(
+
+def _legacy_vital_count(raw_parts: list[dict[str, Any]]) -> int:
+    return sum(
         1 for raw_part in raw_parts if bool(raw_part.get("is_vital", False)) and not raw_part.get(C.CONSEQUENCE_TAGS)
     )
 
-    for raw_part in raw_parts:
-        part_id = _canonical_part_id(raw_part.get("id"), field_name="body_part.id")
-        if part_id in parts:
-            raise FighterProfileError(f"Duplicate body part id after normalization: {part_id}")
 
-        display_name = _safe_text(
-            raw_part.get(C.NAME, part_id),
-            field_name=f"{part_id}.name",
-            max_length=C.EFFECT_METADATA_VALUE_MAX_LENGTH,
-        )
-        layers = []
-        layer_names: set[str] = set()
-        for raw_layer in raw_part.get("layers", []):
-            layer_name = _canonical_part_id(raw_layer.get(C.NAME), field_name=f"{part_id}.layers.name")
-            if layer_name in layer_names:
-                raise FighterProfileError(f"Duplicate layer name '{layer_name}' in body part '{part_id}'.")
-            layer_names.add(layer_name)
-            layers.append(
-                TissueLayer(
-                    name=layer_name,
-                    max_hp=_bounded_non_bool_int(
-                        raw_layer.get(C.MAX_HP),
-                        field_name=f"{part_id}.{layer_name}.max_hp",
-                        minimum=1,
-                        maximum=500,
-                    ),
-                )
+def _build_tissue_layers(part_id: str, raw_layers: list[dict[str, Any]]) -> list[TissueLayer]:
+    layers = []
+    layer_names: set[str] = set()
+    for raw_layer in raw_layers:
+        layer_name = _canonical_part_id(raw_layer.get(C.NAME), field_name=f"{part_id}.layers.name")
+        if layer_name in layer_names:
+            raise FighterProfileError(f"Duplicate layer name '{layer_name}' in body part '{part_id}'.")
+        layer_names.add(layer_name)
+        layers.append(
+            TissueLayer(
+                name=layer_name,
+                max_hp=_bounded_non_bool_int(
+                    raw_layer.get(C.MAX_HP),
+                    field_name=f"{part_id}.{layer_name}.max_hp",
+                    minimum=1,
+                    maximum=500,
+                ),
             )
-
-        is_vital = bool(raw_part.get("is_vital", False))
-        consequence_tags = _consequence_tags(
-            raw_part.get(C.CONSEQUENCE_TAGS),
-            field_name=f"{part_id}.{C.CONSEQUENCE_TAGS}",
         )
-        consequence_group = _consequence_group(
-            raw_part.get(C.CONSEQUENCE_GROUP),
-            field_name=f"{part_id}.{C.CONSEQUENCE_GROUP}",
-        )
-        if is_vital and not consequence_tags:
-            if legacy_vital_count == 1:
-                consequence_tags = [C.CONSEQUENCE_FATAL_IF_DESTROYED]
-            else:
-                consequence_tags = [
-                    C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
-                    C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
-                ]
-                consequence_group = C.CONSEQUENCE_GROUP_LEGACY_VITALS
+    return layers
 
-        _validate_consequence_policy(part_id, consequence_tags, consequence_group)
 
-        if any(
-            tag
-            in {
-                C.CONSEQUENCE_FATAL_IF_DESTROYED,
-                C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
-                C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
-            }
-            for tag in consequence_tags
-        ):
-            has_survival_consequence = True
-        parts[part_id] = BodyPart(
+def _derive_legacy_consequence_policy(
+    *,
+    is_vital: bool,
+    consequence_tags: list[str],
+    consequence_group: str | None,
+    legacy_vital_count: int,
+) -> tuple[list[str], str | None]:
+    if not is_vital or consequence_tags:
+        return consequence_tags, consequence_group
+    if legacy_vital_count == 1:
+        return [C.CONSEQUENCE_FATAL_IF_DESTROYED], consequence_group
+    return (
+        [
+            C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
+            C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
+        ],
+        C.CONSEQUENCE_GROUP_LEGACY_VITALS,
+    )
+
+
+def _has_survival_consequence(consequence_tags: list[str]) -> bool:
+    return any(
+        tag
+        in {
+            C.CONSEQUENCE_FATAL_IF_DESTROYED,
+            C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED,
+            C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER,
+        }
+        for tag in consequence_tags
+    )
+
+
+def _build_body_part(part_id: str, raw_part: dict[str, Any], *, legacy_vital_count: int) -> tuple[BodyPart, bool]:
+    display_name = _safe_text(
+        raw_part.get(C.NAME, part_id),
+        field_name=f"{part_id}.name",
+        max_length=C.EFFECT_METADATA_VALUE_MAX_LENGTH,
+    )
+    layers = _build_tissue_layers(part_id, raw_part.get("layers", []))
+    is_vital = bool(raw_part.get("is_vital", False))
+    consequence_tags = _consequence_tags(
+        raw_part.get(C.CONSEQUENCE_TAGS),
+        field_name=f"{part_id}.{C.CONSEQUENCE_TAGS}",
+    )
+    consequence_group = _consequence_group(
+        raw_part.get(C.CONSEQUENCE_GROUP),
+        field_name=f"{part_id}.{C.CONSEQUENCE_GROUP}",
+    )
+    consequence_tags, consequence_group = _derive_legacy_consequence_policy(
+        is_vital=is_vital,
+        consequence_tags=consequence_tags,
+        consequence_group=consequence_group,
+        legacy_vital_count=legacy_vital_count,
+    )
+    _validate_consequence_policy(part_id, consequence_tags, consequence_group)
+    return (
+        BodyPart(
             name=display_name or part_id,
             layers=layers,
             is_vital=is_vital,
@@ -201,13 +213,35 @@ def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
             ),
             consequence_tags=consequence_tags,
             consequence_group=consequence_group,
+        ),
+        _has_survival_consequence(consequence_tags),
+    )
+
+
+def _build_body_parts(raw_parts: list[dict[str, Any]]) -> dict[str, BodyPart]:
+    parts: dict[str, BodyPart] = {}
+    has_survival_consequence = False
+    legacy_count = _legacy_vital_count(raw_parts)
+    for raw_part in raw_parts:
+        part_id = _canonical_part_id(raw_part.get("id"), field_name="body_part.id")
+        if part_id in parts:
+            raise FighterProfileError(f"Duplicate body part id after normalization: {part_id}")
+        part, part_has_survival_consequence = _build_body_part(
+            part_id,
+            raw_part,
+            legacy_vital_count=legacy_count,
         )
+        parts[part_id] = part
+        has_survival_consequence = has_survival_consequence or part_has_survival_consequence
 
     if not parts:
         raise FighterProfileError("Fighter profile must contain at least one body part.")
     if not has_survival_consequence:
         raise FighterProfileError("Fighter profile must mark at least one body part as vital or terminal.")
+    return parts
 
+
+def _assemble_fighter_profile(raw_profile: dict[str, Any], parts: dict[str, BodyPart]) -> FighterProfile:
     return FighterProfile(
         class_=_safe_text(raw_profile.get(C.CONFIG_FIGHTER_CLASS), field_name=C.CONFIG_FIGHTER_CLASS),
         theme=_safe_text(raw_profile.get(C.THEME), field_name=C.THEME),
@@ -215,6 +249,19 @@ def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
         environment=_safe_text(raw_profile.get("environment"), field_name="environment"),
         parts=parts,
     )
+
+
+def build_fighter_profile(raw_profile: dict[str, Any]) -> FighterProfile:
+    """Return a validated, normalized profile from raw JSON data."""
+    if not isinstance(raw_profile, dict):
+        raise FighterProfileError("Fighter profile must be a JSON object.")
+    try:
+        validate(raw_profile, FighterProfileSchema)
+    except ValidationError as exc:
+        raise FighterProfileError(f"Invalid fighter profile: {exc.message}") from exc
+
+    parts = _build_body_parts(_raw_body_parts(raw_profile))
+    return _assemble_fighter_profile(raw_profile, parts)
 
 
 def _unique_paths(paths: list[Path]) -> list[Path]:
