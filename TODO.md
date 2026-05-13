@@ -1230,7 +1230,7 @@ Verification:
 
 Addresses: ISSUE-040
 
-- [ ] Extract body-part construction helpers from `build_fighter_profile()` without changing profile validation behavior.
+- [x] Extract body-part construction helpers from `build_fighter_profile()` without changing profile validation behavior.
 
 Implementation intent:
 
@@ -1248,6 +1248,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Extracted raw body-part selection, layer parsing, legacy vital consequence derivation, survival-consequence detection, body-part construction, and top-level profile assembly while preserving duplicate-ID error precedence.
+- Size impact: `build_fighter_profile()` -> 11 LOC; largest new helper `_build_body_part()` -> 46 LOC; `src\llm_fight\profiles.py` -> 316 LOC.
+- Focused tests: `uv run pytest -q tests\test_profiles.py tests\test_profile_generation.py tests\test_simulation.py tests\test_simulation_trace.py tests\test_simulation_turns.py tests\test_simulation_integration.py tests\test_simulation_failures.py tests\test_simulation_probabilities.py` -> 47 passed.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## ISSUE-040 Closure Measurement
 
