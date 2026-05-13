@@ -1105,7 +1105,7 @@ Verification:
 
 Addresses: ISSUE-040
 
-- [ ] Extract helper units from `get_fighter_attempt()` without changing fighter prompt behavior.
+- [x] Extract helper units from `get_fighter_attempt()` without changing fighter prompt behavior.
 
 Implementation intent:
 
@@ -1125,6 +1125,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Extracted fighter prompt settings/log selection, message construction, budgeted message preparation, metadata-aware transport dispatch, and cleaned-action selection into focused helpers while keeping `get_fighter_attempt()` as the public async wrapper.
+- Size impact: `get_fighter_attempt()` -> 34 LOC; largest new helper `_build_fighter_messages()` -> 54 LOC; `src\llm_fight\engine\fighter.py` -> 337 LOC.
+- Focused tests: `uv run pytest -q tests\engine\test_fighter.py tests\test_creativity_gate.py tests\test_live_simulation.py` -> 58 passed, 2 skipped.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## Judge Phase 2 Response Pipeline
 

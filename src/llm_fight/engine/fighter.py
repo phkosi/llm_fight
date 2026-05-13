@@ -2,7 +2,8 @@
 
 import re
 from collections.abc import Callable
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import Any
 
 from .. import config as config_mod
 from ..agents import chat, chat_with_metadata
@@ -21,6 +22,32 @@ from .state_summary import (
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _EMPTY_ACTION_FALLBACK = "I keep my guard up and look for an opening."
 _TEMPORARY_EFFECT_TERMS = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
+
+
+@dataclass(frozen=True)
+class _FighterPromptSettings:
+    turn_window: int
+    sentence_limit: int
+    word_limit: int
+    generation_limit: int
+    context_limit: int
+    best_of: int
+    max_retries: int
+    empty_action_retries: int
+
+
+@dataclass(frozen=True)
+class _FighterPromptContext:
+    fighter: FighterState
+    opponent: FighterState
+    pain_desc: str
+    exhaustion_desc: str
+    heat_desc: str
+    effects_list: str
+    self_state_summary: dict[str, Any]
+    opponent_state_summary: dict[str, Any]
+    recent_log: str
+    settings: _FighterPromptSettings
 
 
 def _clean_fighter_action(text: str) -> str:
@@ -102,6 +129,178 @@ def describe_heat(heat_level: int) -> str:
     return "critical heat levels, system failure imminent"
 
 
+def _resolve_turn_window(turn_window: int | None) -> int:
+    if turn_window is not None:
+        return turn_window
+    return config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
+
+
+def _recent_fighter_log(combat_log: CombatLog | str | None, turn_window: int) -> str:
+    if isinstance(combat_log, CombatLog):
+        return "" if turn_window == 0 else combat_log.to_summary(last_n=turn_window)
+    if turn_window == 0:
+        return ""
+    return str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
+
+
+def _fighter_prompt_settings(turn_window: int) -> _FighterPromptSettings:
+    sentence_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_SENTENCE_LIMIT, int, fallback=1)
+    word_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_WORD_LIMIT, int, fallback=30)
+    generation_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
+    context_limit = config_mod.CONFIG.get(
+        C.CONFIG_GENERAL,
+        C.CONFIG_OLLAMA_NUM_CTX,
+        int,
+        fallback=generation_limit,
+    )
+    best_of = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1)
+    max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
+    return _FighterPromptSettings(
+        turn_window=turn_window,
+        sentence_limit=sentence_limit,
+        word_limit=word_limit,
+        generation_limit=generation_limit,
+        context_limit=context_limit,
+        best_of=best_of,
+        max_retries=max_retries,
+        empty_action_retries=min(max_retries, 1),
+    )
+
+
+def _fighter_prompt_context(
+    fighter: FighterState,
+    opponent: FighterState,
+    combat_log: CombatLog | str | None,
+    turn_window: int | None,
+) -> _FighterPromptContext:
+    resolved_window = _resolve_turn_window(turn_window)
+    return _FighterPromptContext(
+        fighter=fighter,
+        opponent=opponent,
+        pain_desc=describe_pain(fighter.pain),
+        exhaustion_desc=describe_exhaustion(fighter.exhaustion),
+        heat_desc=describe_heat(fighter.heat),
+        effects_list=_effects_list_text(fighter),
+        self_state_summary=compact_fighter_state_summary(fighter),
+        opponent_state_summary=compact_fighter_state_summary(opponent),
+        recent_log=_recent_fighter_log(combat_log, resolved_window),
+        settings=_fighter_prompt_settings(resolved_window),
+    )
+
+
+def _build_fighter_messages(
+    context: _FighterPromptContext,
+    recent_log: str,
+    *,
+    retry: bool = False,
+) -> list[dict[str, str]]:
+    fighter = context.fighter
+    opponent = context.opponent
+    settings = context.settings
+    system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
+        fighter_id=fighter.id,
+        display_name=fighter.display_name,
+        opponent_id=opponent.id,
+        opponent_display_name=opponent.display_name,
+        class_=fighter.class_,
+        environment=fighter.environment,
+        pain_desc=context.pain_desc,
+        exhaustion_desc=context.exhaustion_desc,
+        heat_desc=context.heat_desc,
+        effects_list=context.effects_list,
+        own_target_parts=_valid_target_parts_text(fighter),
+        opponent_target_parts=_valid_target_parts_text(opponent),
+        self_state_summary=render_fighter_state_summary(context.self_state_summary),
+        opponent_state_summary=render_fighter_state_summary(context.opponent_state_summary),
+        environment_scope_guardrail=environment_scope_guardrail(),
+        temporary_effect_instruction=_temporary_effect_instruction(context.effects_list),
+        turn_window=settings.turn_window,
+        recent_log=recent_log,
+        loadout=fighter.loadout,
+        sentence_limit=settings.sentence_limit,
+        word_limit=settings.word_limit,
+    )
+
+    messages = [
+        {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content},
+        {
+            C.AGENT_ROLE: C.AGENT_USER,
+            C.AGENT_CONTENT: (
+                f"It's your turn to act, Fighter {fighter.id} ({fighter.display_name}). "
+                f"Opponent Fighter {opponent.id} ({opponent.display_name}) is visible. What do you do?"
+            ),
+        },
+    ]
+    if retry:
+        messages.append(
+            {
+                C.AGENT_ROLE: C.AGENT_USER,
+                C.AGENT_CONTENT: (
+                    f"Your previous response was empty. Give one concrete physical action for Fighter {fighter.id} "
+                    f"({fighter.display_name}) now. Raw action text only."
+                ),
+            }
+        )
+    return messages
+
+
+def _budget_fighter_messages(
+    context: _FighterPromptContext,
+    *,
+    retry: bool,
+) -> tuple[list[dict[str, str]], int]:
+    def build_for_log(recent_log: str) -> list[dict[str, str]]:
+        return _build_fighter_messages(context, recent_log, retry=retry)
+
+    active_messages, active_max_tokens, _ = budget_messages_with_trimmed_log(
+        build_for_log,
+        context.recent_log,
+        requested_max_tokens=context.settings.generation_limit,
+        context_limit=context.settings.context_limit,
+        min_completion_tokens=C.PROMPT_MIN_COMPLETION_FIGHTER,
+        phase=C.PROMPT_PHASE_FIGHTER_ACTION,
+        log_window_setting=C.CONFIG_FIGHTER_LOG_WINDOW,
+    )
+    return active_messages, active_max_tokens
+
+
+async def _request_fighter_texts(
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    settings: _FighterPromptSettings,
+    on_metadata: Callable[[dict[str, Any]], None] | None,
+) -> list[str]:
+    if on_metadata is None:
+        return await chat(
+            messages,
+            max_tokens=max_tokens,
+            num_ctx=settings.context_limit,
+            best_of=settings.best_of,
+            retries=settings.max_retries,
+        )
+
+    results = await chat_with_metadata(
+        messages,
+        max_tokens=max_tokens,
+        num_ctx=settings.context_limit,
+        best_of=settings.best_of,
+        retries=settings.max_retries,
+    )
+    texts = [result.content for result in results]
+    for result in results:
+        if result.metadata:
+            on_metadata(result.metadata)
+    return texts
+
+
+def _first_clean_fighter_action(texts: list[str]) -> str | None:
+    for text in texts:
+        cleaned = _clean_fighter_action(text)
+        if cleaned:
+            return cleaned
+    return None
+
+
 async def get_fighter_attempt(
     fighter: FighterState,
     opponent: FighterState,
@@ -119,129 +318,19 @@ async def get_fighter_attempt(
         turn_window: Number of recent turns to include in the prompt.
     """
 
-    pain_desc = describe_pain(fighter.pain)
-    exhaustion_desc = describe_exhaustion(fighter.exhaustion)
-    heat_desc = describe_heat(fighter.heat)
-    effects_list = _effects_list_text(fighter)
-    self_state_summary = compact_fighter_state_summary(fighter)
-    opponent_state_summary = compact_fighter_state_summary(opponent)
+    context = _fighter_prompt_context(fighter, opponent, combat_log, turn_window)
 
-    loadout = fighter.loadout
-
-    # If turn_window is not explicitly passed, try to get it from config, else default.
-    # This allows _single_fight to control it, or use a global default.
-    if turn_window is None:
-        turn_window = config_mod.CONFIG.get(C.CONFIG_CONTEXT, C.CONFIG_FIGHTER_LOG_WINDOW, int, fallback=5)
-
-    # Determine what snippet of combat history to include in the prompt
-    if isinstance(combat_log, CombatLog):
-        current_recent_log = "" if turn_window == 0 else combat_log.to_summary(last_n=turn_window)
-    else:
-        if turn_window == 0:
-            current_recent_log = ""
-        else:
-            current_recent_log = str(combat_log) if combat_log else "The fight has just begun! Nothing to report yet."
-
-    sentence_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_SENTENCE_LIMIT, int, fallback=1)
-    word_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_FIGHTER_WORD_LIMIT, int, fallback=30)
-
-    generation_limit = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int, fallback=256)
-    context_limit = config_mod.CONFIG.get(
-        C.CONFIG_GENERAL,
-        C.CONFIG_OLLAMA_NUM_CTX,
-        int,
-        fallback=generation_limit,
-    )
-    best_of = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1)
-    max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
-    empty_action_retries = min(max_retries, 1)
-
-    def build_messages(recent_log: str, retry: bool = False) -> list[dict[str, str]]:
-        system_prompt_content = FIGHTER_SYSTEM_PROMPT.format(
-            fighter_id=fighter.id,
-            display_name=fighter.display_name,
-            opponent_id=opponent.id,
-            opponent_display_name=opponent.display_name,
-            class_=fighter.class_,
-            environment=fighter.environment,
-            pain_desc=pain_desc,
-            exhaustion_desc=exhaustion_desc,
-            heat_desc=heat_desc,
-            effects_list=effects_list,
-            own_target_parts=_valid_target_parts_text(fighter),
-            opponent_target_parts=_valid_target_parts_text(opponent),
-            self_state_summary=render_fighter_state_summary(self_state_summary),
-            opponent_state_summary=render_fighter_state_summary(opponent_state_summary),
-            environment_scope_guardrail=environment_scope_guardrail(),
-            temporary_effect_instruction=_temporary_effect_instruction(effects_list),
-            turn_window=turn_window,
-            recent_log=recent_log,
-            loadout=loadout,
-            sentence_limit=sentence_limit,
-            word_limit=word_limit,
-        )
-
-        system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
-        user_prompt_content = (
-            f"It's your turn to act, Fighter {fighter.id} ({fighter.display_name}). "
-            f"Opponent Fighter {opponent.id} ({opponent.display_name}) is visible. What do you do?"
-        )
-        user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: user_prompt_content}
-        messages = [system, user]
-        if retry:
-            retry_user = {
-                C.AGENT_ROLE: C.AGENT_USER,
-                C.AGENT_CONTENT: (
-                    f"Your previous response was empty. Give one concrete physical action for Fighter {fighter.id} "
-                    f"({fighter.display_name}) now. Raw action text only."
-                ),
-            }
-            messages.append(retry_user)
-        return messages
-
-    for attempt in range(empty_action_retries + 1):
-        active_messages, active_max_tokens, _ = budget_messages_with_trimmed_log(
-            cast(
-                Callable[[str], list[dict[str, str]]],
-                lambda recent_log, retry=bool(attempt): build_messages(recent_log, retry=retry),
-            ),
-            current_recent_log,
-            requested_max_tokens=generation_limit,
-            context_limit=context_limit,
-            min_completion_tokens=C.PROMPT_MIN_COMPLETION_FIGHTER,
-            phase=C.PROMPT_PHASE_FIGHTER_ACTION,
-            log_window_setting=C.CONFIG_FIGHTER_LOG_WINDOW,
-        )
-
-        if on_metadata is None:
-            texts = await chat(
-                active_messages,
-                max_tokens=active_max_tokens,
-                num_ctx=context_limit,
-                best_of=best_of,
-                retries=max_retries,
-            )
-        else:
-            results = await chat_with_metadata(
-                active_messages,
-                max_tokens=active_max_tokens,
-                num_ctx=context_limit,
-                best_of=best_of,
-                retries=max_retries,
-            )
-            texts = [result.content for result in results]
-            for result in results:
-                if result.metadata:
-                    on_metadata(result.metadata)
-        for txt in texts:
-            cleaned = _clean_fighter_action(txt)
-            if cleaned:
-                return cleaned
+    for attempt in range(context.settings.empty_action_retries + 1):
+        active_messages, active_max_tokens = _budget_fighter_messages(context, retry=bool(attempt))
+        texts = await _request_fighter_texts(active_messages, active_max_tokens, context.settings, on_metadata)
+        action = _first_clean_fighter_action(texts)
+        if action:
+            return action
         logger.warning(
             "Fighter %s returned only empty action text on attempt %s/%s.",
             fighter.id,
             attempt + 1,
-            empty_action_retries + 1,
+            context.settings.empty_action_retries + 1,
         )
 
     logger.warning("Fighter %s produced no usable action; using fallback guard action.", fighter.id)
