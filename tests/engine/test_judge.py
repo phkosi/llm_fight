@@ -272,7 +272,7 @@ async def test_judge_phase2_trims_long_recent_log_newest_first(mock_chat, mock_g
 
     with (
         patch("llm_fight.judge._judge_settings", return_value=(512, 1, 0)),
-        patch("llm_fight.judge._ollama_num_ctx", return_value=1900),
+        patch("llm_fight.judge._ollama_num_ctx", return_value=2200),
     ):
         await judge_phase2(p2_input, MOCK_ROLLS)
 
@@ -395,8 +395,8 @@ async def test_judge_phase2_caps_parse_retries_for_empty_responses(mock_chat, mo
     assert result[C.DELTA] == {}
     assert result[C.FIGHT_END] is False
     assert result[C.WINNER] is None
-    assert mock_chat.call_count == 6
-    assert mock_sleep.await_count == 2
+    assert mock_chat.call_count == 2
+    mock_sleep.assert_not_awaited()
 
 
 @pytest.mark.asyncio

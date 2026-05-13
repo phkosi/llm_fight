@@ -8,6 +8,7 @@ from statistics import mean
 from typing import Any
 
 from . import constants as C
+from . import turn_display
 from .combat_log import CombatTurn
 
 Console: Any
@@ -36,8 +37,8 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> Table | str:
     """Return a rich ``Table`` or plain text representation of ``turn``."""
     if simple or not RICH_AVAILABLE:
         if simple:
-            return turn.to_simple_text()
-        return turn.to_text()
+            return turn_display.turn_to_simple_text(turn)
+        return turn_display.turn_to_text(turn)
 
     table = Table(title=f"Turn {turn.turn}", show_lines=True)
     table.add_column("Phase", style="bold", no_wrap=True)
@@ -46,10 +47,10 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> Table | str:
         table.add_row("Fighter A attempt", Text(turn.attempt_A, style="cyan"))
     if turn.attempt_B:
         table.add_row("Fighter B attempt", Text(turn.attempt_B, style="magenta"))
-    judge = turn.judge_ruling_text()
+    judge = turn_display.judge_ruling_text(turn)
     if judge:
         table.add_row("Judge ruling", Text(judge, style="yellow"))
-    rolls = turn.rolls_text()
+    rolls = turn_display.rolls_text(turn)
     if rolls:
         table.add_row("Rolls", Text(rolls, style="blue"))
     if turn.narration:
@@ -57,7 +58,7 @@ def make_turn_table(turn: CombatTurn, simple: bool = False) -> Table | str:
     fallback = turn.p2_fallback_text()
     if fallback:
         table.add_row("Warning", Text(fallback, style="bold red"))
-    changes = turn.mechanical_changes_text()
+    changes = turn_display.mechanical_changes_text(turn)
     if changes:
         table.add_row("Mechanical changes", changes)
     return table

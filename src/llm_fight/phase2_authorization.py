@@ -2,11 +2,88 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, cast
 
 from .engine import constants as C
 from .engine.logger import logger
-from .state import FighterState
+from .state import PART_ALIASES, FighterState
+
+_DAMAGE_INTENT_TERMS = {
+    "attack",
+    "bite",
+    "blade",
+    "blow",
+    "burn",
+    "claw",
+    "club",
+    "cut",
+    "dagger",
+    "fire",
+    "hit",
+    "kick",
+    "longsword",
+    "pierce",
+    "punch",
+    "shield bash",
+    "shoot",
+    "slash",
+    "smash",
+    "stab",
+    "strike",
+    "swing",
+    "thrust",
+    "weapon",
+    "wound",
+}
+
+_SMOKE_DAMAGE_OVERRIDES = {
+    "bite",
+    "blade",
+    "burn",
+    "claw",
+    "club",
+    "cut",
+    "dagger",
+    "fire",
+    "kick",
+    "longsword",
+    "pierce",
+    "punch",
+    "shield bash",
+    "slash",
+    "smash",
+    "stab",
+    "sword",
+    "thrust",
+}
+
+_COMMON_BODY_PART_TERMS = {
+    "arm",
+    "chest",
+    "face",
+    "hand",
+    "head",
+    "heart",
+    "leg",
+    "limb",
+    "neck",
+    "shield",
+    "torso",
+}
+
+_SELF_COST_TERMS = {
+    "backfire",
+    "burn myself",
+    "cost",
+    "expose myself",
+    "overextend",
+    "reckless",
+    "recoil",
+    "sacrifice",
+    "self",
+    "strain",
+}
 
 
 def _attempts_both_invalid_and_failed(p1: dict[str, Any], rolls: dict[str, bool]) -> bool:
@@ -73,14 +150,226 @@ def _phase2_validation_warning(
     return warning
 
 
+def _contains_phrase(text: str, phrase: str) -> bool:
+    pattern = rf"(?<![a-z0-9_]){re.escape(phrase)}(?![a-z0-9_])"
+    return re.search(pattern, text) is not None
+
+
+def _attempt_has_damage_intent(attempt: str) -> bool:
+    text = str(attempt or "").lower()
+    if "smoke bomb" in text and not any(_contains_phrase(text, term) for term in _SMOKE_DAMAGE_OVERRIDES):
+        return False
+    return any(_contains_phrase(text, term) for term in _DAMAGE_INTENT_TERMS)
+
+
+def _attempt_mentions_body_part(attempt: str) -> bool:
+    text = str(attempt or "").lower()
+    part_terms = _COMMON_BODY_PART_TERMS | set(PART_ALIASES)
+    return any(_contains_phrase(text, term) for term in part_terms)
+
+
+def _attempt_allows_self_wound(attempt: str) -> bool:
+    text = str(attempt or "").lower()
+    return any(term in text for term in _SELF_COST_TERMS)
+
+
+def _mentioned_target_parts(attempt: str, target_fighter: FighterState) -> set[str]:
+    text = str(attempt or "").lower()
+    mentioned = set()
+    for part_name in target_fighter.parts:
+        variants = _part_variants(part_name)
+        if any(_contains_phrase(text, variant.lower()) for variant in variants):
+            mentioned.add(part_name)
+    if mentioned:
+        return mentioned
+    for alias in PART_ALIASES:
+        resolved_alias = target_fighter.normalize_part_name(alias)
+        if resolved_alias is not None and _contains_phrase(text, alias):
+            mentioned.add(resolved_alias)
+    return mentioned
+
+
+def _part_variants(part_name: str) -> set[str]:
+    return {part_name, part_name.replace("_", " "), part_name.replace("_", "-")}
+
+
+def _self_owned_part_mention(text: str, variant: str, source_fighter: FighterState) -> bool:
+    owner_refs = {
+        "my",
+        "my own",
+        "own",
+        f"{source_fighter.id.lower()}'s",
+        f"fighter {source_fighter.id.lower()}'s",
+        f"{_display_name(source_fighter).lower()}'s",
+    }
+    return any(
+        re.search(rf"(?<![a-z0-9_]){re.escape(owner)}(?:\s+[a-z0-9_-]+){{0,3}}\s+{re.escape(variant)}", text)
+        for owner in owner_refs
+    )
+
+
+def _mentioned_opponent_parts(
+    attempt: str,
+    source_fighter: FighterState,
+    target_fighter: FighterState,
+) -> set[str]:
+    text = str(attempt or "").lower()
+    mentioned = set()
+    for part_name in target_fighter.parts:
+        variants = _part_variants(part_name)
+        if any(
+            _contains_phrase(text, variant.lower())
+            and not _self_owned_part_mention(text, variant.lower(), source_fighter)
+            for variant in variants
+        ):
+            mentioned.add(part_name)
+    if mentioned:
+        return mentioned
+    for alias in PART_ALIASES:
+        resolved_alias = target_fighter.normalize_part_name(alias)
+        if (
+            resolved_alias is not None
+            and _contains_phrase(text, alias)
+            and not _self_owned_part_mention(text, alias, source_fighter)
+        ):
+            mentioned.add(resolved_alias)
+    return mentioned
+
+
+def _mentioned_owned_parts(narration: str, owner_fighter: FighterState) -> set[str]:
+    text = str(narration or "").lower()
+    owner_refs = {
+        owner_fighter.id.lower(),
+        f"fighter {owner_fighter.id.lower()}",
+        _display_name(owner_fighter).lower(),
+    }
+    mentioned = set()
+    for part_name in owner_fighter.parts:
+        for variant in _part_variants(part_name):
+            if any(
+                re.search(
+                    rf"(?<![a-z0-9_]){re.escape(owner)}(?:'s)?(?:\s+[a-z0-9_-]+){{0,3}}\s+{re.escape(variant)}",
+                    text,
+                )
+                for owner in owner_refs
+            ):
+                mentioned.add(part_name)
+    return mentioned
+
+
+def _opponent_id(fighter_id: str) -> str:
+    return C.FIGHTER_B if fighter_id == C.FIGHTER_A else C.FIGHTER_A
+
+
+def _display_name(fighter: FighterState) -> str:
+    return fighter.display_name or fighter.id
+
+
+def _readable_part(part_name: str) -> str:
+    return part_name.replace("_", " ")
+
+
+def _repair_target_part(attempt: str, source_fighter: FighterState, target_fighter: FighterState) -> str | None:
+    mentioned_parts = _mentioned_opponent_parts(attempt, source_fighter, target_fighter)
+    if len(mentioned_parts) == 1:
+        return next(iter(mentioned_parts))
+    return None
+
+
+def _damage_type_from_attempt(attempt: str) -> C.DamageType:
+    text = str(attempt or "").lower()
+    if any(_contains_phrase(text, term) for term in ("burn", "fire", "flame")):
+        return C.DamageType.FIRE
+    if any(_contains_phrase(text, term) for term in ("dagger", "pierce", "stab", "thrust")):
+        return C.DamageType.PIERCING
+    if any(_contains_phrase(text, term) for term in ("blade", "cut", "longsword", "slash", "sword")):
+        return C.DamageType.SLASHING
+    if any(_contains_phrase(text, term) for term in ("bash", "blow", "club", "kick", "punch", "smash")):
+        return C.DamageType.BLUNT
+    return C.DamageType.GENERIC
+
+
+def _attempt_targets_opponent(text: str, target_fighter: FighterState) -> bool:
+    refs = {
+        "opponent",
+        "them",
+        "their",
+        target_fighter.id.lower(),
+        f"fighter {target_fighter.id.lower()}",
+        _display_name(target_fighter).lower(),
+    }
+    return any(_contains_phrase(text, ref) for ref in refs)
+
+
+def _attempt_setup_kind(attempt: str, target_fighter: FighterState) -> str | None:
+    text = str(attempt or "").lower()
+    if any(_contains_phrase(text, term) for term in ("smoke", "smoke bomb", "obscure", "disorient", "blind")):
+        return "obscured"
+    if any(_contains_phrase(text, term) for term in ("flank", "flanked")):
+        return "flanked"
+    if _attempt_targets_opponent(text, target_fighter) and any(
+        _contains_phrase(text, term) for term in ("behind", "position")
+    ):
+        return "flanked"
+    return None
+
+
+def _attempt_self_setup_kind(attempt: str) -> str | None:
+    text = str(attempt or "").lower()
+    if any(
+        _contains_phrase(text, term)
+        for term in (
+            "brace",
+            "defensive",
+            "guard",
+            "raise my shield",
+            "shield up",
+            "stabilize",
+            "step back",
+            "create distance",
+            "take cover",
+        )
+    ):
+        return "guarded"
+    return None
+
+
+def _setup_target_part(attempt: str, target_fighter: FighterState, setup_kind: str) -> str | None:
+    if setup_kind != "obscured":
+        return None
+    text = str(attempt or "").lower()
+    for raw_part in ("left_eye", "right_eye", "eye", "eyes", "face", "head"):
+        normalized = target_fighter.normalize_part_name(raw_part.rstrip("s"))
+        if normalized is not None and _contains_phrase(text, raw_part.replace("_", " ")):
+            return normalized
+    if any(_contains_phrase(text, term) for term in ("vision", "sight")):
+        return target_fighter.normalize_part_name("head")
+    return None
+
+
+def _wound_type_supported_by_attempt(wound: dict[str, Any], attempt: str) -> bool:
+    text = str(attempt or "").lower()
+    raw_type = wound.get(C.TYPE, C.DamageType.GENERIC)
+    damage_type = raw_type.value if isinstance(raw_type, C.DamageType) else str(raw_type).strip().lower()
+    if damage_type == C.DamageType.FIRE.value:
+        return any(_contains_phrase(text, term) for term in ("burn", "fire", "flame", "ignite", "torch"))
+    return True
+
+
 def _sanitize_phase2_narration(sanitized: dict[str, Any], warnings: list[dict[str, Any]]) -> None:
     invalid_target_warning_codes = {
         C.WARNING_CODE_INVALID_P2_WOUND_TARGET,
         C.WARNING_CODE_INVALID_EFFECT_REMOVAL_TARGET,
+        C.WARNING_CODE_P2_WOUND_SOURCE_MISMATCH,
+        C.WARNING_CODE_P2_WOUND_TARGET_MISMATCH,
+        C.WARNING_CODE_P2_WOUND_WITHOUT_DAMAGE_INTENT,
+        C.WARNING_CODE_P2_WOUND_TYPE_MISMATCH,
+        C.WARNING_CODE_P2_SCALAR_SOURCE_MISMATCH,
     }
     if any(warning.get("code") in invalid_target_warning_codes for warning in warnings):
         sanitized[C.NARRATION] = (
-            "The judge referenced an invalid body-part target; only validated consequences are recorded."
+            "The judge's mechanical target conflicted with the current actions; "
+            "only validated consequences are recorded."
         )
 
 
@@ -225,10 +514,48 @@ def _merge_phase2_warnings(*warning_groups: list[dict[str, Any]]) -> list[dict[s
     return merged
 
 
-def _authorized_scalar_value(entry: Any, authorized_sources: set[str], field_name: str) -> Any:
+def _authorized_scalar_value(
+    entry: Any,
+    authorized_sources: set[str],
+    field_name: str,
+    fighter_id: str,
+    attempts: dict[str, str] | None,
+) -> tuple[Any, dict[str, Any] | None]:
     if not _is_authorized_consequence(entry, authorized_sources, field_name):
-        return None
-    return entry.get(C.VALUE)
+        return None, None
+    source = entry.get(C.SOURCE)
+    source_attempt = (attempts or {}).get(str(source), "")
+    if (
+        source_attempt
+        and source == fighter_id
+        and field_name in {C.PAIN_INCREASE, C.HEAT_INCREASE, C.STATUS_CHANGE}
+        and _attempt_mentions_body_part(source_attempt)
+        and not _attempt_allows_self_wound(source_attempt)
+    ):
+        return None, _phase2_validation_warning(
+            code=C.WARNING_CODE_P2_SCALAR_SOURCE_MISMATCH,
+            fighter_id=fighter_id,
+            field=f"delta.{fighter_id}.{field_name}",
+            source=source,
+            action="dropped",
+            reason="source_attempt_did_not_describe_self_consequence",
+        )
+    if (
+        source_attempt
+        and source != fighter_id
+        and field_name in {C.PAIN_INCREASE, C.HEAT_INCREASE, C.STATUS_CHANGE}
+        and ("smoke bomb" in source_attempt.lower() or _attempt_mentions_body_part(source_attempt))
+        and not _attempt_has_damage_intent(source_attempt)
+    ):
+        return None, _phase2_validation_warning(
+            code=C.WARNING_CODE_P2_WOUND_WITHOUT_DAMAGE_INTENT,
+            fighter_id=fighter_id,
+            field=f"delta.{fighter_id}.{field_name}",
+            source=source,
+            action="dropped",
+            reason="source_attempt_did_not_describe_damage",
+        )
+    return entry.get(C.VALUE), None
 
 
 def _authorize_fighter_delta(
@@ -236,16 +563,24 @@ def _authorize_fighter_delta(
     authorized_sources: set[str],
     target_fighter: FighterState,
     fighter_id: str,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    fighters: dict[str, FighterState],
+    narration: str,
+    attempts: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], set[str]]:
     if not isinstance(delta, dict):
-        return {}, []
+        return {}, [], set()
 
     authorized_delta: dict[str, Any] = {}
     warnings: list[dict[str, Any]] = []
+    wound_sources: set[str] = set()
     for field_name in (C.PAIN_INCREASE, C.EXHAUSTION_INCREASE, C.HEAT_INCREASE, C.STATUS_CHANGE):
         if field_name not in delta:
             continue
-        value = _authorized_scalar_value(delta[field_name], authorized_sources, field_name)
+        value, warning = _authorized_scalar_value(
+            delta[field_name], authorized_sources, field_name, fighter_id, attempts
+        )
+        if warning is not None:
+            warnings.append(warning)
         if value is not None:
             authorized_delta[field_name] = value
 
@@ -253,10 +588,95 @@ def _authorize_fighter_delta(
     for index, wound in enumerate(delta.get(C.WOUNDS, [])):
         if _is_authorized_consequence(wound, authorized_sources, C.WOUNDS):
             source = wound.get(C.SOURCE)
+            field = f"delta.{fighter_id}.{C.WOUNDS}[{index}]"
+            source_attempt = (attempts or {}).get(str(source), "")
+            source_fighter = fighters.get(str(source))
+            if source_attempt and source == fighter_id and not _attempt_allows_self_wound(source_attempt):
+                warnings.append(
+                    _phase2_validation_warning(
+                        code=C.WARNING_CODE_P2_WOUND_SOURCE_MISMATCH,
+                        fighter_id=fighter_id,
+                        field=field,
+                        source=source,
+                        action="dropped",
+                        reason="source_attempt_did_not_describe_self_wound",
+                    )
+                )
+                continue
+            if source_attempt and not _attempt_has_damage_intent(source_attempt):
+                warnings.append(
+                    _phase2_validation_warning(
+                        code=C.WARNING_CODE_P2_WOUND_WITHOUT_DAMAGE_INTENT,
+                        fighter_id=fighter_id,
+                        field=field,
+                        source=source,
+                        action="dropped",
+                        reason="source_attempt_did_not_describe_damage",
+                    )
+                )
+                continue
             canonical_part, warning = _resolve_phase2_wound_target(wound, target_fighter, fighter_id, index)
             if warning is not None:
                 warnings.append(warning)
                 continue
+            if source_attempt and not _wound_type_supported_by_attempt(wound, source_attempt):
+                warnings.append(
+                    _phase2_validation_warning(
+                        code=C.WARNING_CODE_P2_WOUND_TYPE_MISMATCH,
+                        fighter_id=fighter_id,
+                        field=f"{field}.{C.TYPE}",
+                        source=source,
+                        action="dropped",
+                        reason="source_attempt_did_not_support_damage_type",
+                    )
+                )
+                continue
+
+            if source_attempt and source_fighter is not None:
+                mentioned_parts = _mentioned_opponent_parts(source_attempt, source_fighter, target_fighter)
+            else:
+                mentioned_parts = _mentioned_target_parts(source_attempt, target_fighter) if source_attempt else set()
+            if mentioned_parts and canonical_part not in mentioned_parts:
+                if len(mentioned_parts) == 1:
+                    canonical_part = next(iter(mentioned_parts))
+                    warnings.append(
+                        _phase2_validation_warning(
+                            code=C.WARNING_CODE_CANONICALIZED_P2_WOUND_TARGET,
+                            fighter_id=fighter_id,
+                            field=f"{field}.{C.TARGETED_PART}",
+                            source=source,
+                            action="canonicalized",
+                            reason="source_attempt_named_different_target",
+                            canonical_part=canonical_part,
+                        )
+                    )
+                else:
+                    warnings.append(
+                        _phase2_validation_warning(
+                            code=C.WARNING_CODE_P2_WOUND_TARGET_MISMATCH,
+                            fighter_id=fighter_id,
+                            field=f"{field}.{C.TARGETED_PART}",
+                            source=source,
+                            action="dropped",
+                            reason="source_attempt_named_different_targets",
+                        )
+                    )
+                    continue
+
+            narration_parts = _mentioned_owned_parts(narration, target_fighter) if not mentioned_parts else set()
+            if len(narration_parts) == 1 and canonical_part not in narration_parts:
+                canonical_part = next(iter(narration_parts))
+                warnings.append(
+                    _phase2_validation_warning(
+                        code=C.WARNING_CODE_CANONICALIZED_P2_WOUND_TARGET,
+                        fighter_id=fighter_id,
+                        field=f"{field}.{C.TARGETED_PART}",
+                        source=source,
+                        action="canonicalized",
+                        reason="narration_named_different_target",
+                        canonical_part=canonical_part,
+                    )
+                )
 
             sanitized_wound = _copy_without_source(wound)
             if sanitized_wound.get(C.TARGETED_PART) != canonical_part:
@@ -272,6 +692,8 @@ def _authorize_fighter_delta(
                 )
             sanitized_wound[C.TARGETED_PART] = canonical_part
             wounds.append(sanitized_wound)
+            if source in {C.FIGHTER_A, C.FIGHTER_B}:
+                wound_sources.add(source)
     if wounds:
         authorized_delta[C.WOUNDS] = wounds
 
@@ -312,7 +734,258 @@ def _authorize_fighter_delta(
     if effects_removed:
         authorized_delta[C.EFFECTS_REMOVED] = effects_removed
 
-    return authorized_delta, warnings
+    return authorized_delta, warnings, wound_sources
+
+
+def _successful_damage_sources(
+    authorized_sources: set[str],
+    attempts: dict[str, str] | None,
+    fighters: dict[str, FighterState],
+) -> list[tuple[str, str, str]]:
+    if attempts is None:
+        return []
+
+    damage_sources: list[tuple[str, str, str]] = []
+    for source_id in (C.FIGHTER_A, C.FIGHTER_B):
+        if source_id not in authorized_sources:
+            continue
+        source_attempt = attempts.get(source_id, "")
+        if not _attempt_has_damage_intent(source_attempt):
+            continue
+        target_id = _opponent_id(source_id)
+        target_part = _repair_target_part(source_attempt, fighters[source_id], fighters[target_id])
+        if target_part is None:
+            continue
+        damage_sources.append((source_id, target_id, target_part))
+    return damage_sources
+
+
+def _repair_missing_successful_damage(
+    *,
+    sanitized_delta: dict[str, Any],
+    wound_sources_by_target: dict[str, set[str]],
+    damage_sources: list[tuple[str, str, str]],
+    attempts: dict[str, str] | None,
+) -> tuple[list[dict[str, Any]], list[tuple[str, str, str]]]:
+    if attempts is None:
+        return [], []
+
+    warnings: list[dict[str, Any]] = []
+    repaired_sources: list[tuple[str, str, str]] = []
+    for source_id, target_id, target_part in damage_sources:
+        if source_id in wound_sources_by_target.get(target_id, set()):
+            continue
+        target_delta = sanitized_delta.setdefault(target_id, {})
+        wounds = target_delta.setdefault(C.WOUNDS, [])
+        source_attempt = attempts.get(source_id, "")
+        wounds.append(
+            {
+                C.TARGETED_PART: target_part,
+                C.VALUE: 10,
+                C.TYPE: _damage_type_from_attempt(source_attempt),
+            }
+        )
+        wound_sources_by_target.setdefault(target_id, set()).add(source_id)
+        warnings.append(
+            _phase2_validation_warning(
+                code=C.WARNING_CODE_P2_MECHANICAL_REPAIR,
+                fighter_id=target_id,
+                field=f"delta.{target_id}.{C.WOUNDS}",
+                source=source_id,
+                action="added",
+                reason="successful_damage_attempt_missing_authorized_wound",
+                canonical_part=target_part,
+            )
+        )
+        repaired_sources.append((source_id, target_id, target_part))
+    return warnings, repaired_sources
+
+
+def _fighter_has_effect(fighter: FighterState, effect_name: str) -> bool:
+    return any(effect.name == effect_name for effect in [*fighter.buffs, *fighter.debuffs])
+
+
+def _delta_has_effect(sanitized_delta: dict[str, Any], fighter_id: str, effect_name: str) -> bool:
+    delta = sanitized_delta.get(fighter_id, {})
+    if not isinstance(delta, dict):
+        return False
+    return any(
+        effect.get(C.NAME) == effect_name for effect in delta.get(C.EFFECTS_ADDED, []) if isinstance(effect, dict)
+    )
+
+
+def _setup_effect_payload(
+    *,
+    effect_name: str,
+    target_id: str,
+    target_part: str | None,
+    fighters: dict[str, FighterState],
+) -> dict[str, Any]:
+    target_name = _display_name(fighters[target_id])
+    if effect_name == "obscured":
+        payload = {
+            C.NAME: "obscured",
+            C.VALUE: 1,
+            C.EFFECT_TTL: 2,
+            C.TYPE: C.DEBUFFS,
+            C.EFFECT_ON_APPLY: f"{target_name} is obscured by smoke.",
+            C.EFFECT_ON_TICK: "The smoke lingers.",
+            C.EFFECT_MECHANICS: [
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                    C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY,
+                    C.VALUE: 20,
+                }
+            ],
+            C.EFFECT_TAGS: ["smoke", "obscurity"],
+        }
+    else:
+        payload = {
+            C.NAME: "flanked",
+            C.VALUE: 1,
+            C.EFFECT_TTL: 2,
+            C.TYPE: C.DEBUFFS,
+            C.EFFECT_ON_APPLY: f"{target_name} is pressured from a bad angle.",
+            C.EFFECT_ON_TICK: "The bad angle remains dangerous.",
+            C.EFFECT_MECHANICS: [
+                {
+                    C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_TARGETING_MODIFIER,
+                    C.EFFECT_MECHANIC_MODIFIER: C.EFFECT_MECHANIC_OUTGOING_ACCURACY_PENALTY,
+                    C.VALUE: 10,
+                }
+            ],
+            C.EFFECT_TAGS: ["positioning"],
+        }
+    if effect_name == "guarded":
+        payload = {
+            C.NAME: "guarded",
+            C.VALUE: 1,
+            C.EFFECT_TTL: 2,
+            C.TYPE: C.BUFFS,
+            C.EFFECT_ON_APPLY: f"{target_name} settles into a guarded stance.",
+            C.EFFECT_ON_TICK: "The guarded stance holds.",
+            C.EFFECT_TAGS: ["guard"],
+        }
+    if target_part is not None:
+        payload[C.METADATA] = {C.TARGETED_PART: target_part}
+    return payload
+
+
+def _repair_missing_successful_setup(
+    *,
+    sanitized_delta: dict[str, Any],
+    authorized_sources: set[str],
+    attempts: dict[str, str] | None,
+    fighters: dict[str, FighterState],
+) -> tuple[list[dict[str, Any]], list[tuple[str, str, str]]]:
+    if attempts is None:
+        return [], []
+
+    warnings: list[dict[str, Any]] = []
+    repaired_sources: list[tuple[str, str, str]] = []
+    for source_id in (C.FIGHTER_A, C.FIGHTER_B):
+        if source_id not in authorized_sources:
+            continue
+        source_attempt = attempts.get(source_id, "")
+        target_id = _opponent_id(source_id)
+        setup_kind = _attempt_setup_kind(source_attempt, fighters[target_id])
+        if setup_kind is not None and not (
+            _fighter_has_effect(fighters[target_id], setup_kind)
+            or _delta_has_effect(
+                sanitized_delta,
+                target_id,
+                setup_kind,
+            )
+        ):
+            target_part = _setup_target_part(source_attempt, fighters[target_id], setup_kind)
+            target_delta = sanitized_delta.setdefault(target_id, {})
+            effects_added = target_delta.setdefault(C.EFFECTS_ADDED, [])
+            effects_added.append(
+                _setup_effect_payload(
+                    effect_name=setup_kind,
+                    target_id=target_id,
+                    target_part=target_part,
+                    fighters=fighters,
+                )
+            )
+            warnings.append(
+                _phase2_validation_warning(
+                    code=C.WARNING_CODE_P2_MECHANICAL_REPAIR,
+                    fighter_id=target_id,
+                    field=f"delta.{target_id}.{C.EFFECTS_ADDED}",
+                    source=source_id,
+                    action="added",
+                    reason=f"successful_{setup_kind}_setup_missing_authorized_effect",
+                    canonical_part=target_part,
+                )
+            )
+            repaired_sources.append((source_id, target_id, setup_kind))
+        self_setup_kind = _attempt_self_setup_kind(source_attempt)
+        if self_setup_kind is None:
+            continue
+        if _fighter_has_effect(fighters[source_id], self_setup_kind) or _delta_has_effect(
+            sanitized_delta,
+            source_id,
+            self_setup_kind,
+        ):
+            continue
+        source_delta = sanitized_delta.setdefault(source_id, {})
+        source_effects_added = source_delta.setdefault(C.EFFECTS_ADDED, [])
+        source_effects_added.append(
+            _setup_effect_payload(
+                effect_name=self_setup_kind,
+                target_id=source_id,
+                target_part=None,
+                fighters=fighters,
+            )
+        )
+        warnings.append(
+            _phase2_validation_warning(
+                code=C.WARNING_CODE_P2_MECHANICAL_REPAIR,
+                fighter_id=source_id,
+                field=f"delta.{source_id}.{C.EFFECTS_ADDED}",
+                source=source_id,
+                action="added",
+                reason=f"successful_{self_setup_kind}_setup_missing_authorized_effect",
+            )
+        )
+        repaired_sources.append((source_id, source_id, self_setup_kind))
+    return warnings, repaired_sources
+
+
+def _narration_has_failure_for_source(narration: str, source_id: str, source_fighter: FighterState) -> bool:
+    text = str(narration or "").lower()
+    names = {
+        source_id.lower(),
+        f"fighter {source_id.lower()}",
+        _display_name(source_fighter).lower(),
+    }
+    failure_terms = r"\b(fail|fails|failed|miss|misses|missed|invalid)\b"
+    return any(re.search(rf"{re.escape(name)}.{{0,180}}{failure_terms}", text) for name in names)
+
+
+def _mechanical_resolution_narration(
+    damage_sources: list[tuple[str, str, str]],
+    setup_sources: list[tuple[str, str, str]],
+    fighters: dict[str, FighterState],
+) -> str:
+    clauses = [
+        (
+            f"{_display_name(fighters[source_id])}'s successful attack lands on "
+            f"{_display_name(fighters[target_id])}'s {_readable_part(target_part)}"
+        )
+        for source_id, target_id, target_part in damage_sources
+    ]
+    clauses.extend(
+        (
+            f"{_display_name(fighters[source_id])}'s successful setup leaves "
+            f"{_display_name(fighters[target_id])} {effect_name}"
+        )
+        for source_id, target_id, effect_name in setup_sources
+    )
+    if not clauses:
+        return "The validated exchange resolves from the successful rolls."
+    return "Validated mechanics resolve the exchange: " + "; ".join(clauses) + "."
 
 
 def authorize_phase2_result(
@@ -320,6 +993,8 @@ def authorize_phase2_result(
     p1: dict[str, Any],
     rolls: dict[str, bool],
     fighters: dict[str, FighterState],
+    *,
+    attempts: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Return a source-authorized and target-sanitized Judge Phase 2 result."""
     authorized_sources = _authorized_phase2_sources(p1, rolls)
@@ -349,25 +1024,78 @@ def authorize_phase2_result(
 
     sanitized_delta: dict[str, Any] = {}
     warnings: list[dict[str, Any]] = []
+    wound_sources_by_target: dict[str, set[str]] = {}
+    narration = str(sanitized.get(C.NARRATION, ""))
     for fighter_id in (C.FIGHTER_A, C.FIGHTER_B):
-        authorized_delta, delta_warnings = _authorize_fighter_delta(
+        authorized_delta, delta_warnings, wound_sources = _authorize_fighter_delta(
             raw_delta.get(fighter_id, {}),
             authorized_sources,
             fighters[fighter_id],
             fighter_id,
+            fighters,
+            narration,
+            attempts=attempts,
         )
         warnings.extend(delta_warnings)
+        wound_sources_by_target[fighter_id] = wound_sources
         if authorized_delta:
             sanitized_delta[fighter_id] = authorized_delta
 
+    damage_sources = _successful_damage_sources(authorized_sources, attempts, fighters)
+    repair_warnings, repaired_sources = _repair_missing_successful_damage(
+        sanitized_delta=sanitized_delta,
+        wound_sources_by_target=wound_sources_by_target,
+        damage_sources=damage_sources,
+        attempts=attempts,
+    )
+    setup_repair_warnings, repaired_setups = _repair_missing_successful_setup(
+        sanitized_delta=sanitized_delta,
+        authorized_sources=authorized_sources,
+        attempts=attempts,
+        fighters=fighters,
+    )
+    if repaired_sources or repaired_setups:
+        metadata = sanitized.setdefault(C.METADATA, {})
+        if isinstance(metadata, dict):
+            metadata[C.P2_ENGINE_REPAIR_USED] = True
+        sanitized[C.FIGHT_END] = False
+        sanitized[C.WINNER] = None
+
     sanitized[C.DELTA] = sanitized_delta
-    warnings = _merge_phase2_warnings(warnings, invalid_target_warnings)
+    warnings = _merge_phase2_warnings(warnings, invalid_target_warnings, repair_warnings, setup_repair_warnings)
     if warnings:
         sanitized[C.VALIDATION_WARNINGS] = warnings
         _sanitize_phase2_narration(sanitized, warnings)
+    if repaired_sources or repaired_setups:
+        sanitized[C.NARRATION] = _mechanical_resolution_narration(damage_sources, repaired_setups, fighters)
+    elif attempts is not None:
+        mismatched_sources = [
+            source_id
+            for source_id, _, _ in damage_sources
+            if _narration_has_failure_for_source(str(sanitized.get(C.NARRATION, "")), source_id, fighters[source_id])
+        ]
+        if mismatched_sources:
+            mismatch_warnings = [
+                _phase2_validation_warning(
+                    code=C.WARNING_CODE_P2_NARRATION_ROLL_MISMATCH,
+                    fighter_id=source_id,
+                    field=C.NARRATION,
+                    source=source_id,
+                    action="replaced",
+                    reason="narration_contradicted_successful_roll",
+                )
+                for source_id in mismatched_sources
+            ]
+            warnings = _merge_phase2_warnings(warnings, mismatch_warnings)
+            sanitized[C.VALIDATION_WARNINGS] = warnings
+            sanitized[C.NARRATION] = _mechanical_resolution_narration(damage_sources, [], fighters)
     terminal_suppression_warning_codes = {
         C.WARNING_CODE_INVALID_P2_WOUND_TARGET,
         C.WARNING_CODE_INVALID_EFFECT_REMOVAL_TARGET,
+        C.WARNING_CODE_P2_WOUND_SOURCE_MISMATCH,
+        C.WARNING_CODE_P2_WOUND_TARGET_MISMATCH,
+        C.WARNING_CODE_P2_WOUND_WITHOUT_DAMAGE_INTENT,
+        C.WARNING_CODE_P2_WOUND_TYPE_MISMATCH,
     }
     if not sanitized_delta and any(warning.get("code") in terminal_suppression_warning_codes for warning in warnings):
         sanitized[C.FIGHT_END] = False

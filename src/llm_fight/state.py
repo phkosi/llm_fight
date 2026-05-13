@@ -7,13 +7,10 @@ from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from typing import Any
 
 from . import config as config_mod
+from . import state_damage, state_delta, state_invariants
 from .anatomy import PRESETS, BodyPart
 from .effects import (
     Effect,
-    apply_effect_removal_selector,
-    build_effect_from_payload,
-    mark_effect_fresh,
-    safe_effect_removal_selector,
 )
 from .effects import (
     apply_effects as apply_effects_to_fighter,
@@ -62,18 +59,11 @@ PART_ALIASES = {
 
 DAMAGE_TYPE_ALIASES = {
     "burn": C.DamageType.FIRE.value,
-    "burning": C.DamageType.FIRE.value,
     "cut": C.DamageType.SLASHING.value,
     "slash": C.DamageType.SLASHING.value,
     "stab": C.DamageType.PIERCING.value,
     "poison": C.DamageType.GENERIC.value,
     C.EFFECT_FIRE_FROM_EFFECT: C.DamageType.FIRE.value,
-}
-
-_STATUS_SEVERITY = {
-    C.FighterStatus.FIGHTING: 0,
-    C.FighterStatus.UNCONSCIOUS: 1,
-    C.FighterStatus.DEAD: 2,
 }
 
 
@@ -235,55 +225,19 @@ class FighterState:
         return DAMAGE_TYPE_ALIASES.get(normalized, normalized)
 
     def _layer_current_hp(self, layer) -> int:
-        current_hp = getattr(layer, C.CURRENT_HP, None)
-        if current_hp is None:
-            current_hp = layer.max_hp
-            layer.current_hp = current_hp
-        return int(current_hp)
+        return state_damage.layer_current_hp(layer)
 
     def _apply_damage_to_layer(self, layer, damage_amount: int) -> int:
-        current_hp = self._layer_current_hp(layer)
-        dealt_to_layer = min(damage_amount, current_hp)
-        layer.current_hp = current_hp - dealt_to_layer
-        return dealt_to_layer
+        return state_damage.apply_damage_to_layer(layer, damage_amount)
 
     def _part_is_lost(self, part: BodyPart) -> bool:
-        return (
-            part.severed
-            or part.status in {C.IS_DESTROYED, C.STATUS_SEVERED}
-            or all(self._layer_current_hp(layer) <= 0 for layer in part.layers)
-        )
+        return state_damage.part_is_lost(part)
 
     def _mark_part_lost_if_depleted(self, part_name: str, part: BodyPart) -> None:
-        if not part.layers or not all(self._layer_current_hp(layer) <= 0 for layer in part.layers):
-            return
-        if part.status in {C.IS_DESTROYED, C.STATUS_SEVERED} or part.severed:
-            return
-        if part.can_be_severed:
-            part.status = C.STATUS_SEVERED
-            part.severed = True
-            logger.info(f"{self.id}:{part_name} has been severed!")
-            self.debuffs.append(
-                mark_effect_fresh(
-                    Effect(
-                        name=f"{part_name} {C.STATUS_SEVERED}",
-                        magnitude=1,
-                        ttl=-1,
-                        on_apply=f"{part_name} was severed from the body.",
-                        on_tick=None,
-                        metadata={C.TARGETED_PART: part_name},
-                    )
-                )
-            )
-            self.pain += 20
-        else:
-            part.status = C.IS_DESTROYED
-        logger.info(f"{self.id}:{part_name} has been {part.status}.")
+        state_damage.mark_part_lost_if_depleted(self, part_name, part)
 
     def _remove_debuffs_by_name(self, names: set[str]) -> None:
-        if not names:
-            return
-        self.debuffs = [eff for eff in self.debuffs if eff.name not in names]
+        state_invariants.remove_debuffs_by_name(self, names)
 
     def _add_or_refresh_consequence_debuff(
         self,
@@ -294,25 +248,13 @@ class FighterState:
         tags: list[str],
         metadata: dict[str, Any],
     ) -> None:
-        existing = next((eff for eff in self.debuffs if eff.name == name), None)
-        if existing is not None:
-            existing.magnitude = magnitude
-            existing.ttl = -1
-            existing.on_apply = on_apply
-            existing.metadata = metadata
-            existing.tags = tags
-            return
-        self.debuffs.append(
-            mark_effect_fresh(
-                Effect(
-                    name=name,
-                    magnitude=magnitude,
-                    ttl=-1,
-                    on_apply=on_apply,
-                    metadata=metadata,
-                    tags=tags,
-                )
-            )
+        state_invariants.add_or_refresh_consequence_debuff(
+            self,
+            name=name,
+            magnitude=magnitude,
+            on_apply=on_apply,
+            tags=tags,
+            metadata=metadata,
         )
 
     def _apply_group_member_consequence(
@@ -326,271 +268,33 @@ class FighterState:
         strong_on_apply: str,
         tag_name: str,
     ) -> None:
-        members = [
-            (name, part)
-            for name, part in self.parts.items()
-            if tag in getattr(part, C.CONSEQUENCE_TAGS, []) and part.consequence_group == group
-        ]
-        lost_members = [name for name, part in members if self._part_is_lost(part)]
-        if len(lost_members) >= 2:
-            self._remove_debuffs_by_name({weak_name})
-            self._add_or_refresh_consequence_debuff(
-                name=strong_name,
-                magnitude=2,
-                on_apply=strong_on_apply,
-                tags=[C.EFFECT_TAG_ANATOMY_CONSEQUENCE, tag_name],
-                metadata={
-                    C.CONSEQUENCE_GROUP: group,
-                    "affected_parts": sorted(lost_members),
-                },
-            )
-        elif len(lost_members) == 1 and not any(eff.name == strong_name for eff in self.debuffs):
-            self._add_or_refresh_consequence_debuff(
-                name=weak_name,
-                magnitude=1,
-                on_apply=weak_on_apply,
-                tags=[C.EFFECT_TAG_ANATOMY_CONSEQUENCE, tag_name],
-                metadata={
-                    C.CONSEQUENCE_GROUP: group,
-                    C.TARGETED_PART: lost_members[0],
-                },
-            )
+        state_invariants.apply_group_member_consequence(
+            self,
+            tag=tag,
+            group=group,
+            weak_name=weak_name,
+            strong_name=strong_name,
+            weak_on_apply=weak_on_apply,
+            strong_on_apply=strong_on_apply,
+            tag_name=tag_name,
+        )
 
     def _apply_anatomy_consequences(self) -> None:
-        lost_parts = {name: part for name, part in self.parts.items() if self._part_is_lost(part)}
-
-        for part in lost_parts.values():
-            tags = getattr(part, C.CONSEQUENCE_TAGS, [])
-            if C.CONSEQUENCE_FATAL_IF_DESTROYED in tags:
-                self._apply_status_change(C.FighterStatus.DEAD)
-            elif C.CONSEQUENCE_INCAPACITATING_IF_DESTROYED in tags:
-                self._apply_status_change(C.FighterStatus.UNCONSCIOUS)
-
-        legacy_members = [
-            part
-            for part in self.parts.values()
-            if C.CONSEQUENCE_LEGACY_VITAL_GROUP_MEMBER in getattr(part, C.CONSEQUENCE_TAGS, [])
-            and part.consequence_group == C.CONSEQUENCE_GROUP_LEGACY_VITALS
-        ]
-        if legacy_members and all(self._part_is_lost(part) for part in legacy_members):
-            self._apply_status_change(C.FighterStatus.DEAD)
-
-        self._apply_group_member_consequence(
-            tag=C.CONSEQUENCE_VISION_MEMBER,
-            group=C.CONSEQUENCE_GROUP_VISION,
-            weak_name=C.EFFECT_IMPAIRED_VISION,
-            strong_name=C.EFFECT_BLINDED,
-            weak_on_apply="Vision is impaired after losing one eye.",
-            strong_on_apply="Both eyes are destroyed; vision is gone.",
-            tag_name=C.EFFECT_TAG_VISION_IMPAIRED,
-        )
-        self._apply_group_member_consequence(
-            tag=C.CONSEQUENCE_MOBILITY_MEMBER,
-            group=C.CONSEQUENCE_GROUP_LEGS,
-            weak_name=C.EFFECT_IMPAIRED_MOBILITY,
-            strong_name=C.EFFECT_GROUNDED,
-            weak_on_apply="Mobility is impaired after losing one leg.",
-            strong_on_apply="Both legs are destroyed or severed; the fighter is grounded.",
-            tag_name=C.EFFECT_TAG_MOBILITY_IMPAIRED,
-        )
+        state_invariants.apply_anatomy_consequences(self)
 
     def _update_status_from_invariants(self) -> None:
-        """Apply status invariants after any state mutation."""
-        if self.pain >= C.MAX_PAIN_THRESHOLD and self.status == C.FighterStatus.FIGHTING:
-            logger.info(f"{self.id} fell unconscious due to pain: {self.pain}. Current status: {self.status}")
-            self.status = C.FighterStatus.UNCONSCIOUS
-            logger.info(f"{self.id} status is now {self.status}")
-
-        logger.debug(
-            f"Checking death by pain for {self.id}: Pain={self.pain} "
-            f"(Limit={C.MAX_PAIN_BEFORE_DEATH}), Status={self.status}"
-        )
-        if self.pain >= C.MAX_PAIN_BEFORE_DEATH and self.status != C.FighterStatus.DEAD:
-            logger.info(f"{self.id} met conditions for death by pain. Current status before change: {self.status}")
-            self.status = C.FighterStatus.DEAD
-            logger.info(f"{self.id} died from excessive pain: {self.pain}. Status is now {self.status}")
-        else:
-            logger.debug(f"{self.id} did NOT meet conditions for death by pain.")
-
-        self._apply_anatomy_consequences()
+        state_invariants.update_status_from_invariants(self)
 
     def _apply_status_change(self, new_status: Any) -> None:
-        if new_status in (None, ""):
-            return
-        if not isinstance(new_status, C.FighterStatus):
-            try:
-                new_status = C.FighterStatus(new_status)
-            except ValueError:
-                logger.warning(f"Unknown status '{new_status}' for fighter {self.id}")
-                return
-
-        current_severity = _STATUS_SEVERITY[self.status]
-        new_severity = _STATUS_SEVERITY[new_status]
-        if new_severity < current_severity:
-            logger.warning(
-                "Ignoring non-monotonic status change for fighter %s: %s -> %s",
-                self.id,
-                self.status.value,
-                new_status.value,
-            )
-            return
-        self.status = new_status
+        state_invariants.apply_status_change(self, new_status)
 
     def apply_damage_to_part(self, part_name: str, damage_amount: int, damage_type: C.DamageType | str):
         """Applies damage to a specific body part and its tissue layers."""
-        if damage_amount <= 0:
-            logger.warning(
-                "Ignoring non-positive damage amount %s to %s for fighter %s", damage_amount, part_name, self.id
-            )
-            self._update_status_from_invariants()
-            return
-
-        resolved_part_name = self.normalize_part_name(part_name)
-        if resolved_part_name is None:
-            logger.warning(f"Attempted to damage non-existent part: {part_name} for fighter {self.id}")
-            return
-
-        part_name = resolved_part_name
-        part = self.parts[part_name]
-        remaining_damage = damage_amount
-        dt = self.normalize_damage_type(damage_type)
-
-        # If part is already severed or destroyed, no more damage can be applied to its layers
-        if part.severed or part.status == C.IS_DESTROYED:
-            logger.debug(f"Attempted to damage already severed/destroyed part: {part_name} for fighter {self.id}")
-            # Optionally, apply pain or other effects even if part is gone/destroyed
-            self.pain += damage_amount // 2  # Reduced pain for hitting a gone part
-            self._update_status_from_invariants()
-            return
-
-        for layer in part.layers:
-            if remaining_damage <= 0:
-                break
-            dealt_to_layer = self._apply_damage_to_layer(layer, remaining_damage)
-            remaining_damage -= dealt_to_layer
-            logger.debug(
-                f"Dealt {dealt_to_layer} {dt} to {self.id}:{part_name}.{layer.name}, "
-                f"HP now {layer.current_hp}/{layer.max_hp}"
-            )
-
-        # Basic pain update - can be refined
-        self.pain += damage_amount
-
-        # Check for part destruction or severing
-        self._mark_part_lost_if_depleted(part_name, part)
-
-        # Apply bleeding or burning effects based on damage type
-        if dt == C.DamageType.FIRE.value:
-            existing_burning = next(
-                (
-                    eff
-                    for eff in self.debuffs
-                    if eff.name == C.EFFECT_BURNING and eff.metadata.get(C.TARGETED_PART) == part_name
-                ),
-                None,
-            )
-            if not existing_burning:
-                self.debuffs.append(
-                    mark_effect_fresh(
-                        Effect(
-                            name=C.EFFECT_BURNING,
-                            magnitude=damage_amount / 10,
-                            ttl=3,
-                            on_apply=f"{part_name} is on fire!",
-                            on_tick=f"{part_name} takes burn damage.",
-                            metadata={C.TARGETED_PART: part_name},
-                        )
-                    )
-                )
-                logger.debug(f"{self.id}:{part_name} is now burning.")
-        elif dt in {C.DamageType.PIERCING.value, C.DamageType.SLASHING.value}:
-            existing_bleeding = next(
-                (
-                    eff
-                    for eff in self.debuffs
-                    if eff.name == C.EFFECT_BLEEDING and eff.metadata.get(C.TARGETED_PART) == part_name
-                ),
-                None,
-            )
-            if not existing_bleeding and part.bleed_rate > 0:
-                self.debuffs.append(
-                    mark_effect_fresh(
-                        Effect(
-                            name=C.EFFECT_BLEEDING,
-                            magnitude=part.bleed_rate * (damage_amount / 10),
-                            ttl=5,
-                            on_apply=f"{part_name} is bleeding profusely!",
-                            on_tick=f"{part_name} loses blood.",
-                            metadata={C.TARGETED_PART: part_name},
-                        )
-                    )
-                )
-                logger.debug(f"{self.id}:{part_name} is now bleeding.")
-
-        self._update_status_from_invariants()
+        state_damage.apply_damage_to_part(self, part_name, damage_amount, damage_type)
 
     def apply_delta(self, delta: dict[str, Any]):
         """Applies changes from a Judge P2 delta to the fighter's state."""
-        if not delta:
-            self._update_status_from_invariants()
-            return self
-
-        self.pain += delta.get(C.PAIN_INCREASE, 0)
-        self.exhaustion += delta.get(C.EXHAUSTION_INCREASE, 0)
-        self.heat += delta.get(C.HEAT_INCREASE, 0)
-
-        for wound_data in delta.get(C.WOUNDS, []):
-            self.apply_damage_to_part(
-                part_name=wound_data[C.TARGETED_PART],
-                damage_amount=wound_data[C.VALUE],
-                damage_type=wound_data.get(C.TYPE, C.DamageType.GENERIC),
-            )
-
-        if C.EFFECTS_ADDED in delta:
-            for eff_data in delta[C.EFFECTS_ADDED]:
-                parsed_effect = build_effect_from_payload(self, eff_data)
-                if parsed_effect is None:
-                    continue
-                list_name, new_effect = parsed_effect
-                effect_name = new_effect.name
-
-                is_duplicate = False
-                for existing_eff_list in (self.buffs, self.debuffs):
-                    for eff in existing_eff_list:
-                        if eff.name == effect_name and eff.ttl == -1:
-                            logger.debug(
-                                f"Prevented adding duplicate permanent effect: {effect_name} for fighter {self.id}"
-                            )
-                            is_duplicate = True
-                            break
-                    if is_duplicate:
-                        break
-                if is_duplicate:
-                    continue
-
-                mark_effect_fresh(new_effect)
-                if list_name == C.BUFFS:
-                    self.buffs.append(new_effect)
-                else:
-                    self.debuffs.append(new_effect)
-                logger.info(
-                    f"Effect '{new_effect.name}' added to {self.id}. TTL: {new_effect.ttl}, "
-                    f"Magnitude: {new_effect.magnitude:.2f}"
-                )
-
-        if C.EFFECTS_REMOVED in delta:
-            for removal_data in delta[C.EFFECTS_REMOVED]:
-                selector = safe_effect_removal_selector(self, removal_data)
-                if selector is None:
-                    continue
-                apply_effect_removal_selector(self, selector)
-
-        if C.STATUS_CHANGE in delta:
-            self._apply_status_change(delta[C.STATUS_CHANGE])
-
-        self._update_status_from_invariants()
-
-        return self  # Allow chaining or inspection
+        return state_delta.apply_delta(self, delta)
 
     def apply_effects(self, rng=None):
         """Applies the actual consequences of active effects each tick."""

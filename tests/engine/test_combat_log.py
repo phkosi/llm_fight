@@ -41,6 +41,21 @@ def test_to_summary_marks_phase2_fallback_instead_of_confident_narration():
     assert log.to_summary() == f"Turn 1: {C.P2_FALLBACK_MARKER_TEXT}"
 
 
+def test_to_summary_uses_authoritative_repair_narration():
+    log = CombatLog()
+    log.append(
+        CombatTurn(
+            turn=1,
+            judge_p2={
+                C.NARRATION: "The model claimed a clean hit.",
+                C.METADATA: {C.P2_ENGINE_REPAIR_USED: True},
+            },
+        )
+    )
+
+    assert log.to_summary() == "Turn 1: The model claimed a clean hit."
+
+
 def test_combat_turn_to_text():
     turn = CombatTurn(
         turn=3,
@@ -80,6 +95,21 @@ def test_combat_turn_to_text_marks_phase2_fallback():
     text = turn.to_text()
 
     assert C.P2_FALLBACK_MARKER_TEXT in text
+
+
+def test_combat_turn_to_text_hides_phase2_engine_repair_marker():
+    turn = CombatTurn(
+        turn=3,
+        judge_p2={
+            C.NARRATION: "Validated mechanics resolve the exchange.",
+            C.METADATA: {C.P2_ENGINE_REPAIR_USED: True},
+        },
+    )
+
+    text = turn.to_text()
+
+    assert C.P2_REPAIR_MARKER_TEXT not in text
+    assert C.P2_FALLBACK_MARKER_TEXT not in text
 
 
 def test_combat_turn_to_simple_text():

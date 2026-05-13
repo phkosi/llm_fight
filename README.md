@@ -4,40 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](pyproject.toml)
 
-LLM Fighters is an experimental local-first combat simulator where two LLM-controlled fighters duel under a third LLM judge. Python owns the mechanics: state, randomness, validation, retries, logging, and CLI workflow. Ollama runs the models locally by default.
+LLM Fighters is a local-first combat game where two LLM-controlled fighters duel under an LLM judge. Python owns the combat engine: state, anatomy, effects, dice rolls, validation, prompt budgeting, transcripts, and winner authority. Ollama runs the models locally by default.
 
-## Project Status
-
-This project is a playable proof of concept, not a stable game engine yet. It is built to explore free-text combat actions, structured LLM judging, and layered anatomy state. Expect model-dependent behavior, nondeterministic outcomes, and occasional structured-output failures with smaller local models.
-
-Current defaults are tuned for a cheap local smoke test with `llama3.2:3b`. Stronger models will usually produce better narration and more coherent combat deltas.
-
-## What It Does
-
-- Lets two fighters propose free-text combat actions.
-- Uses a two-phase Judge/Narrator LLM flow: probability assessment, then narration and state delta.
-- Applies Python-side dice rolls, JSON Schema validation, retries, damage, effects, KO/death checks, and winner consistency.
-- Models multi-layer body parts with pain, bleeding, burning, unconsciousness, death, and limb loss.
-- Provides a Typer CLI for single fights and batch simulations.
-
-## Requirements
-
-- Python 3.14 or newer.
-- [`uv`](https://docs.astral.sh/uv/) for the locked development workflow.
-- [Ollama](https://ollama.com/) running locally.
-- A pulled Ollama model. The default tested smoke model is `llama3.2:3b`.
-
-Install `uv` if needed:
-
-```bash
-python -m pip install "uv>=0.11.13,<0.12"
-```
-
-If Python 3.14 is not already available, `uv` can install it:
-
-```bash
-uv python install 3.14
-```
+The project is still experimental, but the first screen should feel like a game, not a benchmark harness: use `llmfight play` for readable fights, and use `llmfight simulate` only when you want batch evidence for tuning or regression checks.
 
 ## Quick Start
 
@@ -49,8 +18,8 @@ cd llm_fight
 uv python install 3.14
 uv sync --locked --all-extras --dev
 Copy-Item llmfight.ini.example llmfight.ini
-ollama pull llama3.2:3b
-uv run llmfight play --max-turns 2 --simple-output
+ollama pull qwen3.6:35b
+uv run llmfight play
 ```
 
 Bash:
@@ -61,104 +30,69 @@ cd llm_fight
 uv python install 3.14
 uv sync --locked --all-extras --dev
 cp llmfight.ini.example llmfight.ini
-ollama pull llama3.2:3b
-uv run llmfight play --max-turns 2 --simple-output
+ollama pull qwen3.6:35b
+uv run llmfight play
 ```
 
-Make sure the Ollama server is running before `play` or `simulate`. The CLI checks the configured endpoint before starting a fight.
+Make sure Ollama is running before `play` or `simulate`. The CLI checks the configured endpoint before starting.
 
-## Usage
-
-Run a short single-fight smoke test:
+For a fast plain-text smoke check:
 
 ```bash
 uv run llmfight play --max-turns 2 --simple-output
 ```
 
-`play` renders the fighter designs before turn 1 and shows live phase status
-while fighter and judge calls are running. When the configured provider returns
-real token usage metadata, `play` summarizes prompt/completion/total tokens at
-the end; providers that omit usage metadata are handled silently. Each rendered
-turn shows Judge Phase 1 roll outcomes and a compact mechanical diff for actual
-state changes such as stat shifts, wounds, body-part damage, effects, statuses,
-or an explicit no-op line when nothing changed.
+For low-spec machines, a smaller model can be useful for smoke tests, but the
+recommended first play experience assumes a stronger local model than a tiny
+3B checker.
 
-Run a one-fight batch simulation:
+## Playing
+
+Run the default interactive fight:
 
 ```bash
-uv run llmfight simulate --runs 1 --max-turns 2 --output-csv sim_results.csv
+uv run llmfight play
 ```
 
-Batch simulation rows with `winner=error` make `llmfight simulate` exit nonzero after the CSV is written. Use `--continue-on-error` when an automation should keep exit code 0 while preserving an error-producing CSV for inspection.
+`play` renders both fighter designs before turn 1, shows live phase status while local LLM calls run, prints each completed turn, and ends with the winner. Rich output is the recommended player experience. `--simple-output` exists for terminals, logs, and CI-style checks that should avoid Rich tables.
 
-Use an alternate config file:
+Useful `play` options:
 
-```bash
-uv run llmfight play --config path/to/llmfight.ini --max-turns 2
-```
+- `--config path/to/llmfight.ini`: use a different local config.
+- `--fighter-a SECTION --fighter-b SECTION`: choose fighter sections from the config.
+- `--max-turns N`: cap a fight for tests or quick experiments.
+- `--simple-output`: use plain text instead of Rich tables.
+- `--verbose`: show debug/progress logs.
 
-Select fighter sections from the config:
+## Fighter Config
 
-```bash
-uv run llmfight play --fighter-a A --fighter-b B
-```
+Copy [llmfight.ini.example](llmfight.ini.example) to `llmfight.ini`; local `.ini` files are ignored by Git.
 
-Useful command options:
-
-- `--max-turns N`: cap a fight quickly during smoke tests.
-- `--runs N`: override batch simulation run count.
-- `--continue-on-error`: keep batch simulation exit code 0 even if the CSV contains `winner=error` rows.
-- `--simple-output`: print plain text instead of Rich tables.
-- `--verbose`: show more progress/debug output.
-
-## Configuration
-
-Copy [llmfight.ini.example](llmfight.ini.example) to `llmfight.ini` and adjust it locally. Local `.ini` files are ignored by Git so secrets and machine-specific settings are not committed.
-
-Minimal local settings:
-
-```ini
-[General]
-ollama_default_model = llama3.2:3b
-ollama_api_url = http://localhost:11434/api/chat
-ollama_keep_alive = 10m
-ollama_num_ctx = 32768
-max_tokens_fighter = 512
-max_tokens_judge = 4096
-best_of_fighter = 1
-best_of_judge = 1
-max_retries = 1
-judge_phase2_failure_policy = fail_open
-fighter_creation_mode = configured
-
-[SIMULATION]
-runs = 1
-max_turns = 2
-```
-
-Fighter sections can optionally point to a custom anatomy JSON profile. Omit
-the key, leave it empty, or set it to `humanoid` to keep the default body plan.
-Relative JSON paths are resolved from the active config file directory first,
-then the current working directory.
+The default config defines a named knight and assassin. `name` is display-only: prompts, output, and transcripts show the label, but mechanics and JSON keys still use stable ids `A` and `B`.
 
 ```ini
 [A]
 name = Sir Galant
-class = Winged Duelist
-loadout = hook blades
-anatomy_profile = profiles/winged_duelist.json
+class = Veteran Knight
+loadout = longsword and tower shield
 
 [B]
 name = Shade
-profile = humanoid
+class = Cunning Assassin
+loadout = poison dagger and smoke bombs
 ```
 
-`name` is a display label only. Combat mechanics, JSON deltas, transcripts'
-`fighter_id` fields, the `winner` result, and batch CSV winner ids continue to
-use the stable ids `A` and `B`. When `name` is omitted, output falls back to the
-stable fighter id.
+Custom anatomy is supplied through `anatomy_profile`:
 
-Profile files use canonical part ids:
+```ini
+[A]
+name = Talon
+class = Winged Duelist
+loadout = hook blades and wing spurs
+anatomy_profile = profiles/winged_duelist.json
+```
+
+Profile files define canonical targetable parts:
 
 ```json
 {
@@ -180,206 +114,58 @@ Profile files use canonical part ids:
 }
 ```
 
-Layers define stable `max_hp`; runtime damage lowers `current_hp` in state and
-serialization. Body parts can also define `bleed_rate` and `burn_rate` for
-targeted bleeding and burn susceptibility. Body parts can also define explicit
-consequence policy fields: `consequence_tags` and `consequence_group`. Supported tags are
-`fatal_if_destroyed`, `incapacitating_if_destroyed`, `vision_member`,
-`mobility_member`, and `legacy_vital_group_member`. Legacy `is_vital: true`
-profiles still load: one legacy vital part becomes fatal when destroyed, while
-multiple legacy vital parts use an explicit aggregate legacy-vitals policy.
+Configured or generated profiles are authoritative. A prose class like `dragon` does not create targetable wings unless a profile defines them.
 
-Set `fighter_creation_mode = generated` to opt into match-start profile
-generation. In generated mode, the model creates structured fighter profiles
-before turn 1 using the same profile schema and anatomy validation. Generated
-profile class, theme, loadout, environment, and anatomy are authoritative for
-that fight; if generation fails validation, the game falls back to the
-configured profile or default humanoid fighter and records sanitized
-`profile_generation` metadata in state/logs. Raw rejected generated profile
-text is not written to transcripts.
+## Lab Commands
 
-The default endpoint is native Ollama `/api/chat`. OpenAI-compatible Ollama endpoints are also supported:
-
-For native Ollama, `ollama_keep_alive` is sent with each chat request so the model can stay resident between fighter and judge calls during local playtests. `ollama_num_ctx` is the fixed context window sent to every fighter and judge call in a run; keep it stable to avoid runner reloads caused by alternating context sizes. Increase `ollama_keep_alive` for long runs if you want the model resident after the CLI exits, and lower it if you want VRAM freed sooner.
-
-For OpenAI-compatible `/v1/chat/completions` endpoints, the transport sends
-only compatible fields such as `model`, `messages`, `temperature`,
-`max_tokens`, and `response_format`. Native Ollama controls such as
-`ollama_num_ctx`, `ollama_keep_alive`, `think`, `stream`, and native `format`
-are not sent in `/v1` mode; the app logs one warning for that endpoint mode.
-Health checks use `/api/tags` for native Ollama and `/v1/models` for
-OpenAI-compatible endpoints.
-
-Proxy handling is controlled by `[General] ollama_proxy_mode`:
-
-- `auto` (default): ignore environment proxies for loopback endpoints
-  (`localhost`, `127.x.x.x`, and `::1`) and honor them for remote endpoints.
-- `disabled`: always ignore environment proxies.
-- `enabled`: always honor environment proxies, including loopback.
-
-Transport retry/error logs are redacted. They include operational metadata such
-as request id, endpoint mode, redacted URL, model, message count, message
-character count, completion cap, and schema-present status, but not raw prompts,
-schemas, responses, userinfo, query strings, or payload dumps. When
-`save_transcripts = true`, each fight writes one ordered JSONL trace under
-`transcript_dir`. Trace events include fight id, sequence index, phase, turn,
-fighter id when relevant, fighter/judge prompt-response exchanges, provider
-token/duration metadata when available, rolls, deltas, state snapshots, errors,
-and final result. Generated-profile rejection keeps raw unsafe profile text out
-of traces and records only sanitized profile-generation metadata.
-
-Prompt budgeting is strict. Fighter actions, Judge Phase 1, Judge Phase 2,
-Judge Phase 2 repair, and generated fighter profiles reserve phase-specific
-completion space before contacting the model. Long `recent_combat_log` payloads
-are trimmed deterministically by dropping oldest lines first while preserving
-current fighter state, attempts, rolls, valid target parts, and active-effect
-reminders. If required non-log combat prompt content still cannot fit, the CLI
-fails before transport with an actionable context/log-window error instead of
-sending a one-token completion request. Generated fighter profile budget
-failures are sanitized through the existing profile-generation fallback path.
-
-Judge Phase 2 parse failures are visible. With the default
-`judge_phase2_failure_policy = fail_open`, an exhausted Phase 2 call becomes a
-marked no-op turn with `fallback_used` metadata and no delta, winner, or
-`fight_end`. Set `judge_phase2_failure_policy = fail_closed` to turn the same
-failure into a hard fight error. Batch CSVs include `p2_fallback_turns` and
-`p2_fallback_used`; verbose summaries count fallback rows separately from hard
-`winner=error` rows.
-
-```ini
-ollama_api_url = http://localhost:11434/v1/chat/completions
-```
-
-You can override the endpoint at runtime.
-
-Bash:
+Batch simulation is for evaluation and tuning:
 
 ```bash
-export API_URL="http://localhost:11434/api/chat"
+uv run llmfight simulate --runs 3 --output-csv sim_results.csv
 ```
 
-PowerShell:
+Rows with `winner=error` make `simulate` exit nonzero after writing the CSV. Use `--continue-on-error` when automation should keep exit code 0 while preserving evidence.
 
-```powershell
-$env:API_URL = "http://localhost:11434/api/chat"
-```
+Advanced config, transcripts, live/perf tests, endpoint modes, and batch workflow notes live in [docs/ADVANCED.md](docs/ADVANCED.md).
 
-## Testing And Quality
+## Quality
 
-Run the standard local checks:
+Use the locked `uv` workflow:
 
 ```bash
-uv sync --locked --dev
+uv sync --locked --all-extras --dev
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src/llm_fight
 uv run pytest -q
 ```
 
-Run the CI-equivalent test command:
+Live Ollama tests are opt-in:
 
 ```bash
-uv run pytest -q --cov=llm_fight
-```
-
-Pre-commit uses the locked `uv` environment for project tooling:
-
-```bash
-uv run pre-commit run --all-files
-uv run pre-commit run --hook-stage pre-push --all-files
-```
-
-The normal test suite uses the installed package from the locked `uv`
-environment; tests do not add `src/` to `sys.path`. CI also runs the installed
-`llmfight --help` console script as a package smoke test.
-
-Live Ollama tests are skipped by default. To run the quick live smoke tests,
-install the live extra, set `API_URL`, and pass `--run-live`:
-
-Bash:
-
-```bash
-uv sync --locked --all-extras --dev
-export API_URL="http://localhost:11434/api/chat"
-uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py tests/test_live_simulation.py
-```
-
-PowerShell:
-
-```powershell
-uv sync --locked --all-extras --dev
-$env:API_URL = "http://localhost:11434/api/chat"
-uv run pytest -q --run-live tests/test_live_api.py tests/test_live_judge.py tests/test_live_simulation.py
-```
-
-Heavy local performance probes are separate from quick live tests. Keep
-`API_URL` set and the live extra installed, then add `--run-perf`:
-
-```bash
+uv run pytest -q --run-live
 uv run pytest -q --run-live --run-perf tests/test_memory_usage.py
 ```
 
-CI runs on Python 3.14 using the locked `uv` workflow. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
-
 ## Architecture
 
-The installable package lives under `src/llm_fight/`. The core flow is:
+The core loop is:
 
-1. Fighter A and Fighter B propose actions concurrently.
-2. Judge Phase 1 returns validity and success probabilities.
-3. Python rolls against those probabilities and stores the roll metadata on the combat turn for display.
-4. Judge Phase 2 receives attempts, the full P1 result, successful rolls, combat log, valid body parts, and fighter state.
-5. Judge Phase 2 deltas must mark each mechanical consequence with the source fighter whose valid action succeeded.
-6. Python drops consequences from invalid, failed, missing, or unknown sources before applying deltas, applies anatomy consequence policies, then ticks eligible effects and resolves the winner from resulting state. Burning ticks damage the selected active tissue layer directly and preserve stable targeted effect metadata.
-7. Judge-only `fight_end` or `winner` values are ignored unless Python state becomes terminal.
+1. Fighters generate free-text actions from current state, active effects, anatomy, loadout, and recent history.
+2. Judge Phase 1 decides action validity and success probabilities.
+3. Python rolls dice and records success/failure.
+4. Judge Phase 2 narrates the turn and proposes state deltas.
+5. Python authorizes deltas, applies damage/effects/status changes, and resolves the winner from actual state.
 
-Effects created by a turn delta or wound side effect are fresh for that turn: they are shown in the resulting state and in the next turn's fighter/judge context before their first eligible tick. Pre-existing effects still tick once per turn.
+Do not remove these guardrails when slimming code: state-authoritative outcomes, Phase 2 source authorization, valid target-part checks, prompt budgeting, current-state reminders, and safe effect validation are all load-bearing. No-op Phase 2 fallback stays visible to players; successful engine repair is recorded in metadata/transcripts so the player sees the repaired exchange instead of a noisy warning.
 
-Judge Phase 2 effect removals are source-bearing objects:
-`{"source":"A","name":"bleeding","type":"debuffs","targeted_part":"left_arm"}`.
-`type` is optional and narrows removal to `buffs` or `debuffs`; `targeted_part`
-is optional and removes only effects with matching canonical
-`metadata.targeted_part`. Omitting both is an intentional remove-all by name.
-Runtime `FighterState.apply_delta()` still accepts legacy string removals as
-remove-all compatibility, but Judge Phase 2 JSON does not.
+## Known Limits
 
-For more detail, see [docs/Design_doc.md](docs/Design_doc.md).
-
-## Known Limitations
-
-- Combat balance and judge consistency are still evolving.
-- Output quality depends heavily on the local model.
-- Small models may occasionally fail strict JSON output even with retries.
-- Custom anatomy is authoritative only when supplied through `anatomy_profile`,
-  `profile`, or generated fighter profiles. A prose-only class such as
-  "dragon" or "tentacle horror" does not create new targetable parts unless a
-  profile or generated profile defines them.
-- `play` shows live phase status and renders each completed turn, but it does
-  not stream partial model tokens or unfinished fighter/judge responses.
-- Judge Phase 2 parse recovery is deliberately capped. Under the default
-  `judge_phase2_failure_policy = fail_open`, exhausted Phase 2 retries become
-  marked no-op turns; `fail_closed` turns the same condition into a hard error.
-- Formal releases are not established yet; `main` is the current development line.
-
-## Troubleshooting
-
-- `Cannot reach Ollama server`: start Ollama and confirm the configured health endpoint responds. Native `/api/chat` uses `/api/tags`; OpenAI-compatible `/v1/chat/completions` uses `/v1/models`.
-- `model not found`: run `ollama pull llama3.2:3b` or set `ollama_default_model` to a model you have locally.
-- `LLM output could not be parsed`: try a stronger model, increase
-  `max_tokens_judge`, increase `ollama_num_ctx`, or reduce temperature. General
-  fighter/Judge Phase 1 calls also honor higher `max_retries`; Judge Phase 2
-  parsing is capped and will either create a marked no-op turn in fail-open mode
-  or stop the fight in fail-closed mode.
-- `uv sync` cannot find Python 3.14: run `uv python install 3.14`.
-
-## Contributing And Support
-
-Contributions are welcome for bug reports, documentation, tests, and small gameplay fixes. Please open an issue before large architecture or combat-system changes.
-
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
-- Use [GitHub Issues](https://github.com/phkosi/llm_fight/issues) for bugs, questions, and feature ideas. Include your OS, Python version, Ollama version, model name, command, and relevant logs with secrets removed.
-- See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+- Smaller local models can still produce weak narration or malformed structured output.
+- Default fighters are intentionally simple; richer drama usually needs stronger models or custom profiles.
+- `simulate` is a lab tool, not the intended first-run experience.
+- Raw transcripts can contain prompts and fight state. They are opt-in, ignored by Git, and should not be committed.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT. See [LICENSE](LICENSE).

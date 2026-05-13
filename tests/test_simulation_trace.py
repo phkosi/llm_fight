@@ -160,6 +160,7 @@ async def test_single_fight_writes_ordered_trace_with_exchanges_rolls_deltas_and
                 "[General]",
                 "save_transcripts = true",
                 f"transcript_dir = {transcript_dir}",
+                "transcript_detail = full",
                 "",
                 "[SIMULATION]",
                 "max_turns = 1",

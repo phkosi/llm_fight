@@ -10,7 +10,7 @@ Use the locked `uv` workflow:
 uv sync --locked --all-extras --dev
 ```
 
-`pyproject.toml` is the dependency source of truth. `requirements.txt` and `requirements-dev.txt` are generated compatibility exports from `uv.lock`.
+`pyproject.toml` and `uv.lock` are the dependency source of truth. Do not add generated requirements exports; use the locked `uv` workflow.
 
 Copy `llmfight.ini.example` to `llmfight.ini` before running the app manually.
 

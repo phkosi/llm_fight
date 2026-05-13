@@ -35,7 +35,7 @@ def test_judge_p2_prompt_contains_damage_types():
 
 
 def test_judge_p2_prompt_describes_wounds_as_positive():
-    assert '"value": positive integer' in JUDGE_P2_SYSTEM_PROMPT
+    assert '"value": integer 1-200' in JUDGE_P2_SYSTEM_PROMPT
 
 
 def test_judge_p2_prompt_requires_source_attribution():
@@ -43,6 +43,24 @@ def test_judge_p2_prompt_requires_source_attribution():
     assert "Every state-changing consequence must include the source fighter" in JUDGE_P2_SYSTEM_PROMPT
     assert "Do not infer source from the target fighter" in JUDGE_P2_SYSTEM_PROMPT
     assert "judge-only fight_end or winner values will be ignored" in JUDGE_P2_SYSTEM_PROMPT
+
+
+def test_judge_p2_prompt_distinguishes_target_delta_key_from_source():
+    assert "Delta keys are the fighter receiving the consequence" in JUDGE_P2_SYSTEM_PROMPT
+    assert "successful B hit on A -> delta.A with source B" in JUDGE_P2_SYSTEM_PROMPT
+    assert "successful A hit on B -> delta.B with source A" in JUDGE_P2_SYSTEM_PROMPT
+    assert "Do not put attack damage under the attacking fighter" in JUDGE_P2_SYSTEM_PROMPT
+
+
+def test_judge_prompts_forbid_swapping_actions_and_called_shot_targets():
+    for prompt in (JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT):
+        assert "attempt_A is Fighter A's action only" in prompt
+        assert "attempt_B is Fighter B's action only" in prompt
+    assert "Never swap actions" in prompt
+    assert "failed or invalid actions" in JUDGE_P2_SYSTEM_PROMPT
+    assert "must not create wounds" in JUDGE_P2_SYSTEM_PROMPT
+    assert "Do not move a called shot to a different part" in JUDGE_P2_SYSTEM_PROMPT
+    assert "do not convert them into weapon wounds" in JUDGE_P2_SYSTEM_PROMPT
 
 
 def test_judge_p2_prompt_documents_structured_targeted_effect_removal():

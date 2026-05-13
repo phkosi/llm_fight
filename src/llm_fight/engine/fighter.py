@@ -12,7 +12,7 @@ from ..utils.token_counter import budget_messages_with_trimmed_log
 from . import constants as C  # Added import
 from .combat_log import CombatLog
 from .logger import logger
-from .prompts import FIGHTER_SYSTEM_PROMPT  # Import the detailed prompt
+from .prompts import FIGHTER_SYSTEM_PROMPT, TEMPORARY_EFFECT_HISTORY_GUARDRAIL, TEMPORARY_EFFECT_TERMS
 from .state_summary import (
     compact_fighter_state_summary,
     environment_scope_guardrail,
@@ -21,7 +21,6 @@ from .state_summary import (
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _EMPTY_ACTION_FALLBACK = "I keep my guard up and look for an opening."
-_TEMPORARY_EFFECT_TERMS = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
 
 
 @dataclass(frozen=True)
@@ -61,12 +60,12 @@ def _clean_fighter_action(text: str) -> str:
 def _temporary_effect_instruction(effects_list: str) -> str:
     if effects_list == "none":
         return (
-            f"No temporary effects are active right now. Do not describe {_TEMPORARY_EFFECT_TERMS} "
+            f"No temporary effects are active right now. Do not describe {TEMPORARY_EFFECT_TERMS} "
             "as current conditions unless your new action creates them."
         )
     return (
         f"Only these temporary effects are active right now: {effects_list}. "
-        f"Do not describe other old {_TEMPORARY_EFFECT_TERMS} as current conditions."
+        f"Do not describe other old {TEMPORARY_EFFECT_TERMS} as current conditions."
     )
 
 
@@ -213,6 +212,7 @@ def _build_fighter_messages(
         self_state_summary=render_fighter_state_summary(context.self_state_summary),
         opponent_state_summary=render_fighter_state_summary(context.opponent_state_summary),
         environment_scope_guardrail=environment_scope_guardrail(),
+        temporary_effect_history_guardrail=TEMPORARY_EFFECT_HISTORY_GUARDRAIL,
         temporary_effect_instruction=_temporary_effect_instruction(context.effects_list),
         turn_window=settings.turn_window,
         recent_log=recent_log,

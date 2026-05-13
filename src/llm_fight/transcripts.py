@@ -52,6 +52,14 @@ def _trace_directory() -> Path:
     return Path(config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_TRANSCRIPT_DIR, str, fallback="transcripts"))
 
 
+def _trace_detail() -> str:
+    return config_mod.CONFIG.get_transcript_detail()
+
+
+def _full_trace_enabled() -> bool:
+    return _trace_detail() == C.TRANSCRIPT_DETAIL_FULL
+
+
 class NullTraceWriter:
     """No-op writer used when transcripts are disabled."""
 
@@ -156,8 +164,31 @@ def _phase_for_event(event_name: str, data: dict[str, Any]) -> str:
 
 def _event_data_for_trace(event_name: str, data: dict[str, Any]) -> dict[str, Any]:
     if event_name == C.FIGHT_EVENT_TURN_COMPLETE and "turn" in data:
+        if not _full_trace_enabled():
+            return {"turn": _compact_turn_event(data["turn"])}
         return {"turn": data["turn"]}
     return data
+
+
+def _compact_turn_event(turn: Any) -> dict[str, Any]:
+    """Return the compact per-turn trace shape used outside deep debugging."""
+    rolls = getattr(turn, "rolls", {})
+    judge_p2 = getattr(turn, "judge_p2", {})
+    metadata = judge_p2.get(C.METADATA, {}) if isinstance(judge_p2, dict) else {}
+    fallback_used = bool(metadata.get(C.P2_FALLBACK_USED)) if isinstance(metadata, dict) else False
+    mechanical_changes = []
+    if hasattr(turn, "mechanical_change_lines"):
+        mechanical_changes = list(turn.mechanical_change_lines())
+    return {
+        C.LOG_TURN: getattr(turn, "turn", None),
+        C.LOG_ATTEMPT_A: getattr(turn, "attempt_A", ""),
+        C.LOG_ATTEMPT_B: getattr(turn, "attempt_B", ""),
+        "judge_ruling": turn.judge_ruling_lines() if hasattr(turn, "judge_ruling_lines") else [],
+        "rolls": rolls,
+        C.NARRATION: getattr(turn, "narration", ""),
+        C.P2_FALLBACK_USED: fallback_used,
+        "mechanical_changes": mechanical_changes,
+    }
 
 
 def create_fight_trace(run_index: int | None = None, fight_id: str | None = None) -> TraceWriter | NullTraceWriter:
@@ -223,12 +254,20 @@ def log_exchange(
     """
     writer = _current_trace()
     if writer is not None:
-        data = {
-            "messages": messages,
-            "responses": responses,
-        }
-        if metadata_items:
-            data["metadata"] = metadata_items
+        if _full_trace_enabled():
+            data = {
+                "messages": messages,
+                "responses": responses,
+            }
+            if metadata_items:
+                data["metadata"] = metadata_items
+        else:
+            data = {
+                "message_count": len(messages),
+                "response_count": len(responses),
+            }
+            if metadata_items:
+                data["metadata"] = metadata_items
         writer.write_event(
             event="llm_exchange",
             phase=_TRACE_PHASE.get() or "llm",
@@ -239,6 +278,9 @@ def log_exchange(
         return
 
     if not _trace_enabled():
+        return
+    if not _full_trace_enabled():
+        logger.debug("Ignoring standalone transcript exchange outside an active fight trace in compact mode.")
         return
 
     directory = _trace_directory()

@@ -1,262 +1,95 @@
-# LLM Fighters Combat Engine - Design Document
+# LLM Fighters Combat Engine - Design Notes
 
-Status: 2026-05-11. Archived design notes remain in `Design_doc_archived_2025.md`.
+Status: 2026-05-13. Archived 2025 design notes live in `docs/archive/design-doc-archived-2025.md`.
 
-## 1. Overview
+## Overview
 
-LLM Fighters is a turn-based duel between two local LLM-controlled fighters and one Judge/Narrator LLM. Fighters propose free-text actions. The Judge estimates success probability, Python rolls dice, and the Judge returns a narration plus structured state delta.
+LLM Fighters is a local-first turn-based duel between two LLM-controlled fighters and one Judge/Narrator LLM. Fighters propose free-text actions. The Judge estimates validity and success probability, Python rolls dice, and the Judge returns narration plus structured state deltas.
 
-Python owns deterministic mechanics: configuration, RNG, schema validation, retry policy, anatomy state, effect ticks, winner consistency, logging, and CLI workflow. The default LLM transport is Ollama native `/api/chat` with structured outputs.
+Python owns deterministic mechanics: configuration, RNG, schema validation, retry policy, prompt budgeting, anatomy state, effect ticks, Phase 2 authorization, winner consistency, logging, transcripts, and CLI workflow.
 
-## 2. Stack
+## Stack
 
 - Python 3.14 or newer.
-- `uv` lockfile workflow with `uv.lock` committed.
+- Locked `uv` workflow with `uv.lock` committed.
 - Runtime package: `llm_fight`, located at `src/llm_fight/`.
-- CLI scripts:
-  - `llmfight = llm_fight.cli:app`
-- Core runtime deps: `aiohttp`, `jsonschema`, `rich`, `typer`, `click`.
-- Optional extras:
-  - `tokens` for `tiktoken` token counting.
-  - `live` for Ollama helper package experiments.
+- Console script: `llmfight = llm_fight.cli:app`.
+- Core runtime deps: `aiohttp`, `jsonschema`, `rich`, `typer`, and `click`.
+- Optional extras: `tokens` for `tiktoken`, `live` for Ollama helper-package experiments.
 
-## 3. Package Layout
+## Product Shape
 
-```text
-src/llm_fight/
-|-- agents.py          # async Ollama client
-|-- anatomy.py         # body presets and fresh tissue layers
-|-- cli.py             # Typer CLI
-|-- config.py          # INI loader
-|-- judge.py           # judge phase orchestration
-|-- rng.py             # central PRNG
-|-- simulation.py      # fight loop and batch runs
-|-- state.py           # FighterState mutation and invariants
-|-- transcripts.py     # transcript logging
-|-- validation.py      # JSON schemas and guarded_call
-|-- engine/
-|   |-- combat_log.py
-|   |-- constants.py
-|   |-- fighter.py
-|   |-- logger.py
-|   |-- prompts.py
-|   `-- render.py
-`-- utils/
-    |-- json_parser.py
-    `-- token_counter.py
-```
+`llmfight play` is the player front door. It renders fighter designs, live phase status, readable turn sections, roll outcomes, mechanical changes, and the winner.
 
-`run.py` is a compatibility shim only. Prefer `llmfight`.
+`llmfight simulate` is a lab/evaluation command for model tuning and regression evidence. It writes batch CSVs and should not drive the first-run player experience.
 
-## 4. Turn Flow
+## Turn Flow
 
-1. Fighter A and Fighter B generate actions concurrently.
-2. Judge Phase 1 receives compact fighter summaries, attempts, and recent combat log.
-3. Phase 1 returns strict JSON with validity and probability for each attempt.
-4. Python rolls success using the central PRNG.
-5. Judge Phase 2 receives attempts, full P1 result, `successful_rolls`, combat log context, valid body parts, and current fighter states.
-6. Phase 2 returns strict JSON containing narration, delta, `fight_end`, and `winner`. Every state-changing delta entry must include `source: "A" | "B"` for the fighter whose valid current action succeeded.
-7. Python drops delta consequences with missing, unknown, invalid, or failed sources before state mutation. Authorized consequences may target either fighter, including self-costs.
-8. Python applies authorized deltas, normalizes body-part and damage aliases, ticks eligible effects, re-checks status invariants, and resolves winner consistency from final state. Judge-only `fight_end` or `winner` values are ignored unless the resulting Python state is terminal.
+1. Fighter A and Fighter B generate actions concurrently from current state, anatomy, loadout, active effects, and recent history.
+2. Judge Phase 1 receives compact state summaries, attempts, and recent combat log, then returns validity and success probabilities.
+3. Python resolves rolls through the fight-local RNG.
+4. Judge Phase 2 receives attempts, P1 result, successful rolls, valid target parts, current states, and recent combat log, then returns narration and sourced deltas.
+5. Python drops consequences from missing, invalid, failed, unknown, or unauthorized sources.
+6. Python applies authorized deltas, canonicalizes body parts, ticks eligible effects, updates invariants, and resolves the winner from actual state.
+7. Judge-only `fight_end` or `winner` values are ignored unless the resulting Python state is terminal.
 
-## 5. Anatomy And State
+## Load-Bearing Guardrails
 
-`FighterState` owns mutable per-fighter state:
+Do not remove these as “bloat”:
 
-- `parts`: body-part map with fresh `TissueLayer` instances per part and per fighter.
-- `pain`, `exhaustion`, `heat`.
-- `buffs` and `debuffs` as `Effect` objects.
-- `status`: `fighting`, `unconscious`, or `dead`.
-- `display_name`, `class_`, `loadout`, and `environment` from config.
+- Layered anatomy, severing, bleeding, burning, pain, exhaustion, heat, body-part consequences, and dynamic effect mechanics.
+- Current-state prompt authority and reminders that recent combat log is history.
+- Phase 2 source authorization and target canonicalization.
+- Strict schemas, post-validation, bounded deltas, prompt budgeting, visible no-op Phase 2 fallback, and metadata-visible engine repair.
+- State-authoritative fight endings.
+- Opt-in sanitized traces for diagnosing model behavior.
 
-`id` remains the authoritative mechanics key (`A` or `B`). `display_name` is a
-human-facing label shown in prompts, traces, and terminal output; omitted names
-fall back to the stable id and never replace delta keys, `fighter_id`, or
-`winner` values.
+## Anatomy And State
 
-Critical invariants:
+`FighterState` stores mutable fighter state: canonical parts, pain/exhaustion/heat, buffs/debuffs, status, display name, class, theme, loadout, environment, and optional profile-generation metadata.
 
-- Unknown targeted parts are rejected before damage is applied.
-- Common natural-language aliases such as `chest` and `left arm` normalize to canonical body parts.
-- Burning and bleeding ticks can cause KO/death after effect application.
-- Effects created by a delta or wound side effect are visible in state and in the next turn's fighter/judge context before their first eligible tick.
-- Effects that existed before the current delta remain eligible and tick once per turn.
-- Judge-facing effect removals are structured source-bearing selectors `{source, name, type?, targeted_part?}`. Missing `type` matches both buffs and debuffs; missing `targeted_part` is intentional remove-all for that name/type scope; supplied targets are canonicalized before state mutation.
-- Tissue layers keep stable `max_hp`; damage lowers `current_hp` and clamps at zero.
-- Humanoid blood-bearing parts define preset `bleed_rate` values; piercing/slashing wounds can create targeted bleeding effects from those rates.
-- Burning effects use target-part `burn_rate` for tick damage and mutate the selected active tissue layer directly, so debug logs name the layer that actually lost `current_hp`.
-- Destroyed or severed parts apply explicit anatomy consequence tags. Default humanoid heart/head destruction is fatal, torso destruction is incapacitating, and eye/leg loss creates persistent visible consequence debuffs.
-- Legacy custom-profile `is_vital` fields are translated to explicit terminal policies at load time.
-- Pain thresholds still update status immediately.
+Stable ids `A` and `B` are the mechanical keys. Display names are user-facing labels only and never replace delta keys, `fighter_id`, or `winner`.
 
-## 6. Ollama I/O
+Custom anatomy is mechanical only when it comes from `anatomy_profile` or a validated generated profile. Prose in `class`, `theme`, or `loadout` can influence narration, but it does not create targetable parts by itself. `profile` remains a legacy config alias, but new docs and examples should use `anatomy_profile`.
 
-Default endpoint:
+## LLM I/O
+
+Native Ollama `/api/chat` is the default endpoint. Native requests use schema grammar hints, fixed `num_ctx`, `keep_alive`, `think=false`, and `stream=false`.
+
+OpenAI-compatible `/v1/chat/completions` endpoints remain supported, but native Ollama controls are omitted in that mode. Health checks use `/api/tags` for native mode and `/v1/models` for `/v1` mode.
+
+For advanced endpoint, proxy, transcript, batch, and live-test details, see `docs/ADVANCED.md`.
+
+## Configuration
+
+Config is read at call time through `llm_fight.config.CONFIG`. CLI commands activate a fresh scoped `Config`, apply CLI overrides inside that scope, seed RNG from `[SIMULATION].seed`, and restore previous config/RNG state when the command exits.
+
+Default interactive fights are no longer smoke-test length:
 
 ```ini
-ollama_api_url = http://localhost:11434/api/chat
-```
-
-Native Ollama requests use:
-
-- `format` for JSON schema structured outputs.
-- `options.num_predict` for generation limit.
-- fixed `options.num_ctx` from `ollama_num_ctx` for every fighter and judge call.
-- top-level `keep_alive` for model residency between turn requests.
-- `stream: false`.
-
-OpenAI-compatible `/v1/chat/completions` endpoints remain supported and use
-`response_format`. In `/v1` mode, native Ollama-only controls such as
-`keep_alive`, `options.num_ctx`, `think`, `stream`, and native `format` are not
-sent; the app logs one warning that those native settings are ignored. Native
-health checks use `/api/tags`, while OpenAI-compatible health checks use
-`/v1/models`.
-
-## 7. Configuration
-
-Config is read at call time through `llm_fight.config.CONFIG`. CLI commands
-activate a fresh scoped `Config` for the invocation, apply CLI overrides inside
-that scope, seed the process RNG from the active `[SIMULATION].seed`, and
-restore the previous config/RNG state when the command exits. Programmatic
-callers that need temporary config ownership should use
-`llm_fight.config.use_config(Config(...))` plus explicit RNG seeding rather than
-permanently replacing the process global. Avoid import-time copies of
-config-derived values.
-
-Important keys:
-
-```ini
-[General]
-ollama_default_model = llama3.2:3b
-ollama_api_url = http://localhost:11434/api/chat
-ollama_keep_alive = 10m
-ollama_num_ctx = 32768
-ollama_proxy_mode = auto
-max_tokens_fighter = 512
-max_tokens_judge = 4096
-ollama_temperature = 0.4
-best_of_fighter = 1
-best_of_judge = 1
-max_retries = 1
-judge_phase2_failure_policy = fail_open
-fighter_A = A
-fighter_B = B
-fighter_creation_mode = configured
-
-[CONTEXT]
-fighter_log_window = 10
-judge_log_window = 9999
-
 [SIMULATION]
 runs = 1
 seed = 42
-concurrent_runs = 1
-max_turns = 2
+max_turns = 6
 ```
 
-`ollama_proxy_mode = auto` disables environment proxy use for loopback endpoints
-and enables it for remote endpoints. `disabled` always uses direct connections;
-`enabled` always honors environment proxies, including loopback.
+Use `uv run llmfight play --max-turns 2 --simple-output` for quick smoke checks.
 
-Package logging is library-friendly by default. Importing logger-using modules
-installs only a direct `NullHandler` on the package logger and leaves
-propagation enabled so host applications can route records through their own
-root handlers. Importing the top-level `llm_fight` package does not attach a
-visible console handler. CLI commands temporarily replace the logger-module
-default with a stderr handler for the command duration, then restore the
-previous logger handlers, level, and propagation state.
-
-Prompt budgeting is enforced before transport. Fighter actions, Judge Phase 1,
-Judge Phase 2, Judge Phase 2 repair, and generated profile calls reserve
-phase-specific completion tokens. Combat-log context is the only prompt content
-trimmed automatically: older lines are dropped first, while current state,
-attempts, rolls, valid target parts, and active-effect reminders remain
-authoritative. If required non-log content cannot fit in `ollama_num_ctx`, the
-run surfaces a prompt-budget error rather than sending a one-token request.
-
-Fighter prompts and Judge Phase 1 share a compact state-summary contract:
-identity/class, loadout, environment, status, pain/exhaustion/heat, structured
-`active_effects`, canonical `valid_target_parts`, shallow `target_parts`
-anatomy metadata, and `damaged_parts` only for non-intact, severed, or partially
-damaged parts. Effect summaries expose type, name, TTL, magnitude, target,
-mechanics, and tags, but not freeform `on_apply` or `on_tick` prose.
-
-`judge_phase2_failure_policy = fail_open` preserves long-run playtests by
-recording an exhausted Judge Phase 2 parse/validation retry cycle as a marked
-no-op turn with `metadata.fallback_used = true`, empty `delta`, `fight_end =
-false`, and `winner = null`. `fail_closed` turns the same condition into a hard
-fight failure. Batch CSVs include `p2_fallback_turns` and
-`p2_fallback_used`, and summaries count fallback rows separately from error
-rows.
-
-Batch runs derive an isolated per-fight RNG stream from `[SIMULATION].seed`
-and the run index, so concurrent scheduling or model latency does not change a
-run's dice rolls or random effect-layer choices. Batch CSV output stays ordered
-by run index and still flushes incrementally whenever the next ordered result is
-available.
-
-`fighter_creation_mode = generated` is opt-in. It asks the LLM for structured
-fighter profiles before turn 1, validates them with the same custom anatomy
-schema used for configured JSON profiles, and suppresses raw rejected generated
-profile text from transcripts. Invalid generated profiles fall back to the
-configured profile or humanoid preset with sanitized `profile_generation`
-metadata.
-
-Current gameplay contract:
-
-- Custom anatomy is mechanical only when it comes from a configured JSON profile
-  or a validated generated profile. Plain prose in `class`, `theme`, or
-  `loadout` can influence narration, but it does not create new canonical target
-  parts by itself.
-- `play` emits pre-fight fighter designs, phase status updates, completed turns,
-  and final token summaries when metadata exists. It does not expose unfinished
-  streaming model tokens.
-- `max_retries` is a bounded retry control, not unlimited recovery. Judge Phase
-  2 parse retries are capped to protect live runs from retry storms; exhausted
-  fail-open retries become marked no-op turns, while fail-closed retries become
-  fight errors.
-
-`save_transcripts = true` writes one fight-scoped JSONL trace per fight under
-`transcript_dir`. Each line has `schema_version`, ordered `event_index`,
-timestamp, fight id, optional run index, turn, phase, event name, fighter id,
-and event data. Active fighter/judge prompt-response exchanges are routed into
-that trace as `llm_exchange` events instead of isolated fragment files; direct
-non-fight callers of `log_exchange()` keep the legacy wrapper behavior. Trace
-writes flush after each event so failures preserve partial history, including
-sanitized `fight_error` or `fight_interrupted` events.
-
-## 8. Developer Workflow
+## Developer Workflow
 
 ```bash
-uv sync --locked --dev
+uv sync --locked --all-extras --dev
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src/llm_fight
 uv run pytest -q
 ```
 
-The standard suite runs against the installed package path and includes a
-console-script smoke test for `llmfight --help`; tests do not inject `src/`
-directly into `sys.path`.
+Default tests do not contact Ollama. Live/perf tests are opt-in as documented in `docs/ADVANCED.md`.
 
-Live tests are opt-in and require `API_URL`:
+## Planning Surfaces
 
-```bash
-uv run pytest -q --run-live
-```
-
-Performance probes are additionally gated:
-
-```bash
-uv run pytest -q --run-live --run-perf tests/test_memory_usage.py
-```
-
-CI runs on Python 3.14 with the same locked `uv` workflow and omits optional
-live extras unless a live job is added explicitly.
-
-## 9. Future Work
-
-- Replayable trace format for deterministic debugging.
-- Stronger typed request/response objects around LLM calls.
-- Better cancellation and timeout reporting for batch runs.
-- Visual replay tooling once the combat log format stabilizes.
+- Root `TODO.md`: active implementation tasks only.
+- Root `ISSUES.md`: active bugs, regressions, security risks, prompt failures, test gaps, and code-size findings.
+- `DESIGN_ISSUES.md`: product design concerns such as pacing, drama, balance, and readability.
+- `docs/archive/`: compact history of resolved work.

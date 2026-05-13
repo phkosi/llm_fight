@@ -11,7 +11,7 @@ from . import config as config_mod
 from .agents import chat, chat_with_metadata
 from .engine import constants as C
 from .engine.logger import logger
-from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT
+from .engine.prompts import JUDGE_P1_SYSTEM_PROMPT, JUDGE_P2_SYSTEM_PROMPT, TEMPORARY_EFFECT_TERMS
 from .engine.state_summary import compact_fighter_state_summary
 from .utils.json_parser import parse_json_from_text
 from .utils.token_counter import budget_messages_with_trimmed_log
@@ -63,7 +63,6 @@ def _active_effect_names_text(fighter: dict[str, Any], effect_type: str) -> str:
 
 
 def _current_state_reminder(fighter_a: dict[str, Any], fighter_b: dict[str, Any]) -> str:
-    temp_terms = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
     return (
         "Current active effects: "
         f"Fighter A buffs={_active_effect_names_text(fighter_a, C.BUFFS)}, "
@@ -71,7 +70,7 @@ def _current_state_reminder(fighter_a: dict[str, Any], fighter_b: dict[str, Any]
         f"Fighter B buffs={_active_effect_names_text(fighter_b, C.BUFFS)}, "
         f"debuffs={_active_effect_names_text(fighter_b, C.DEBUFFS)}. "
         "Temporary effects not listed here are inactive, even if recent_combat_log mentions them. "
-        f"Do not cite old {temp_terms} as current conditions unless they are listed here or "
+        f"Do not cite old {TEMPORARY_EFFECT_TERMS} as current conditions unless they are listed here or "
         "created by the current action."
     )
 
@@ -148,7 +147,7 @@ def _phase2_noop_result(exc: Exception | None = None, *, policy: str = C.P2_FAIL
 
 def _judge_phase2_settings() -> _JudgePhase2Settings:
     max_tokens, best_of, max_retries = _judge_settings()
-    parse_retries = min(max_retries, 2)
+    parse_retries = 0
     context_limit = _ollama_num_ctx(max_tokens)
     return _JudgePhase2Settings(
         max_tokens=max_tokens,
@@ -181,7 +180,11 @@ def _judge_phase2_user_payload(context: _JudgePhase2Context, recent_log: str, *,
     if repair:
         user_payload["strict_output_reminder"] = (
             "Return one compact JSON object only with keys narration, delta, fight_end, and winner. "
-            "Use no markdown, no prose outside JSON, and no reasoning text."
+            "Use no markdown, no prose outside JSON, and no reasoning text. "
+            "attempt_A belongs to Fighter A and attempt_B belongs to Fighter B; do not swap actions or equipment. "
+            "Delta keys are the fighter receiving the consequence: a successful B hit on A goes under delta.A "
+            "with source B; a successful A hit on B goes under delta.B with source A. "
+            "Failed or invalid actions create no state changes. Called shots should wound the named body part."
         )
     return user_payload
 

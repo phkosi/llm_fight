@@ -17,20 +17,89 @@ from .transcripts import active_trace, create_fight_trace, llm_trace_context
 
 
 @dataclass(frozen=True)
-class SingleFightHooks:
+class FightModelServices:
     build_match_fighters: Callable[..., Awaitable[tuple[FighterState, FighterState]]]
     get_fighter_attempt: Callable[..., Awaitable[str]]
     judge_phase1: Callable[..., Awaitable[dict[str, Any]]]
     judge_phase2: Callable[..., Awaitable[dict[str, Any]]]
+
+
+@dataclass(frozen=True)
+class FightRuleServices:
     apply_effect_roll_modifiers: Callable[[dict[str, Any], dict[str, FighterState]], dict[str, Any]]
     authorize_phase2_result: Callable[..., dict[str, Any]]
     resolve_turn_rolls: Callable[..., tuple[dict[str, bool], dict[str, Any]]]
-    emit_event: Callable[[Callable[[Any], None] | None, Any], None]
-    emit_token_metadata: Callable[..., None]
     status_outcome: Callable[[FighterState, FighterState], str | None]
     judge_outcome: Callable[[dict[str, Any]], str | None]
     winner_display_name: Callable[[str, dict[str, FighterState]], str]
+
+
+@dataclass(frozen=True)
+class FightEventServices:
+    emit_event: Callable[[Callable[[Any], None] | None, Any], None]
+    emit_token_metadata: Callable[..., None]
     fight_event_type: type
+
+
+@dataclass(frozen=True)
+class SingleFightHooks:
+    """Runtime services used by the generic single-fight loop."""
+
+    model: FightModelServices
+    rules: FightRuleServices
+    events: FightEventServices
+
+    @property
+    def build_match_fighters(self):
+        return self.model.build_match_fighters
+
+    @property
+    def get_fighter_attempt(self):
+        return self.model.get_fighter_attempt
+
+    @property
+    def judge_phase1(self):
+        return self.model.judge_phase1
+
+    @property
+    def judge_phase2(self):
+        return self.model.judge_phase2
+
+    @property
+    def apply_effect_roll_modifiers(self):
+        return self.rules.apply_effect_roll_modifiers
+
+    @property
+    def authorize_phase2_result(self):
+        return self.rules.authorize_phase2_result
+
+    @property
+    def resolve_turn_rolls(self):
+        return self.rules.resolve_turn_rolls
+
+    @property
+    def status_outcome(self):
+        return self.rules.status_outcome
+
+    @property
+    def judge_outcome(self):
+        return self.rules.judge_outcome
+
+    @property
+    def winner_display_name(self):
+        return self.rules.winner_display_name
+
+    @property
+    def emit_event(self):
+        return self.events.emit_event
+
+    @property
+    def emit_token_metadata(self):
+        return self.events.emit_token_metadata
+
+    @property
+    def fight_event_type(self):
+        return self.events.fight_event_type
 
 
 def _resolved_fighter_sections(
@@ -206,6 +275,7 @@ async def _judge_phase2_result(
     p1: dict[str, Any],
     rolls: dict[str, bool],
     fighters: dict[str, FighterState],
+    attempts: dict[str, str],
     *,
     turn: int,
     wants_event_metadata: bool,
@@ -224,7 +294,7 @@ async def _judge_phase2_result(
         )
     with active_trace(trace_writer), llm_trace_context(phase="judge_phase2", turn=turn):
         p2 = await hooks.judge_phase2(p2_input_state, rolls, **p2_kwargs)
-    p2 = hooks.authorize_phase2_result(p2, p1, rolls, fighters)
+    p2 = hooks.authorize_phase2_result(p2, p1, rolls, fighters, attempts=attempts)
     hooks.emit_event(on_event, hooks.fight_event_type(C.FIGHT_EVENT_JUDGE_PHASE2_END, turn=turn, data={"p2": p2}))
     return p2
 
@@ -301,11 +371,16 @@ async def _run_turn(
     )
 
     p2_input = _p2_input_state(A, B, attemptA, attemptB, p1, combat_log, judge_log_window)
+    attempts = {
+        C.FIGHTER_A: attemptA,
+        C.FIGHTER_B: attemptB,
+    }
     p2 = await _judge_phase2_result(
         p2_input,
         p1,
         rolls,
         {C.FIGHTER_A: A, C.FIGHTER_B: B},
+        attempts,
         turn=turn,
         wants_event_metadata=wants_event_metadata,
         on_event=on_event,

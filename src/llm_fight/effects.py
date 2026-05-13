@@ -359,7 +359,7 @@ def apply_effects(fighter: Any, rng: random.Random | None = None) -> None:
 
             expired = eff.tick()
             if expired:
-                logger.info(f"Effect {eff.name} on {fighter.id} expired.")
+                logger.debug("Effect %s on %s expired.", eff.name, fighter.id)
                 eff_list.remove(eff)
     fighter._update_status_from_invariants()
 

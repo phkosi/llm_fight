@@ -9,7 +9,7 @@ from llm_fight import config as config_mod
 from llm_fight.config import Config
 from llm_fight.engine import constants as C
 from llm_fight.judge import judge_phase1, judge_phase2
-from llm_fight.validation import ActionSchema, DeltaSchema, EffectSchema, JudgeP1Schema, JudgeP2Schema, guarded_call
+from llm_fight.validation import DeltaSchema, EffectSchema, JudgeP1Schema, JudgeP2Schema, guarded_call
 
 
 # --- Mocks for guarded_call tests ---
@@ -180,22 +180,6 @@ def _validate_against_schema(data: Any, schema: dict[str, Any], should_be_valid:
             validate(instance=data, schema=schema)
 
 
-# --- ActionSchema Tests ---
-def test_action_schema_valid():
-    valid_data = {C.VALIDATION_PROB: 0.75, C.VALIDATION_PREDICTED: "Fighter attempts a feint."}
-    _validate_against_schema(valid_data, ActionSchema, True)
-
-
-def test_action_schema_invalid_missing_field():
-    invalid_data = {C.VALIDATION_PREDICTED: "Action details"}  # Missing prob
-    _validate_against_schema(invalid_data, ActionSchema, False)
-
-
-def test_action_schema_invalid_type():
-    invalid_data = {C.VALIDATION_PROB: "0.5", C.VALIDATION_PREDICTED: "Text"}  # prob should be number
-    _validate_against_schema(invalid_data, ActionSchema, False)
-
-
 # --- JudgeP1Schema Tests ---
 def test_judge_p1_schema_valid():
     valid_data = {
@@ -253,6 +237,18 @@ def test_judge_p1_schema_invalid_probability():
         f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "1.2",
         f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
         f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.5",
+    }
+    _validate_against_schema(invalid_data, JudgeP1Schema, False)
+
+
+def test_judge_p1_schema_rejects_additional_properties():
+    invalid_data = {
+        "judgement_text": "Both fighters engage!",
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.8",
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.1",
+        "unexpected": "extra",
     }
     _validate_against_schema(invalid_data, JudgeP1Schema, False)
 
@@ -334,6 +330,11 @@ def test_delta_schema_invalid_pain_value():
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
+def test_delta_schema_rejects_oversized_scalar_value():
+    invalid_data = {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, C.P2_MAX_STAT_DELTA + 1)}
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
 def test_delta_schema_rejects_missing_source_for_scalar_consequence():
     invalid_data = {C.PAIN_INCREASE: {C.VALUE: 5}}
     _validate_against_schema(invalid_data, DeltaSchema, False)
@@ -356,6 +357,13 @@ def test_delta_schema_invalid_negative_wound_value():
 
 def test_delta_schema_invalid_zero_wound_value():
     invalid_data = {C.WOUNDS: [_source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "head", C.VALUE: 0})]}
+    _validate_against_schema(invalid_data, DeltaSchema, False)
+
+
+def test_delta_schema_rejects_oversized_wound_value():
+    invalid_data = {
+        C.WOUNDS: [_source_wound(C.FIGHTER_A, **{C.TARGETED_PART: "head", C.VALUE: C.P2_MAX_WOUND_DAMAGE + 1})]
+    }
     _validate_against_schema(invalid_data, DeltaSchema, False)
 
 
@@ -387,7 +395,7 @@ def test_judge_p2_schema_rejects_misplaced_result_fields_inside_delta():
 
 def test_delta_schema_damage_types_match_constants():
     enum_list = DeltaSchema[C.SCHEMA_PROPERTIES][C.WOUNDS][C.SCHEMA_ITEMS][C.SCHEMA_PROPERTIES][C.TYPE][C.SCHEMA_ENUM]
-    assert set(enum_list) == {dt.value for dt in C.DamageType} | {"burning"}
+    assert set(enum_list) == {dt.value for dt in C.DamageType}
 
 
 def _valid_effect(**overrides):
@@ -589,6 +597,17 @@ def test_judge_p2_schema_invalid_delta_fighter_key():
         C.DELTA: {"FighterC": {C.PAIN_INCREASE: _source_value(C.FIGHTER_A, 1)}},  # Invalid fighter key
         C.FIGHT_END: False,
         C.WINNER: None,
+    }
+    _validate_against_schema(invalid_data, JudgeP2Schema, False)
+
+
+def test_judge_p2_schema_rejects_additional_properties():
+    invalid_data = {
+        C.NARRATION: "The fighters trade feints.",
+        C.DELTA: {},
+        C.FIGHT_END: False,
+        C.WINNER: None,
+        "reasoning": "extra",
     }
     _validate_against_schema(invalid_data, JudgeP2Schema, False)
 

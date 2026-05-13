@@ -11,7 +11,7 @@ from .engine import constants as C
 
 DEFAULTS = {
     C.CONFIG_GENERAL: {
-        C.CONFIG_LLAMA_DEFAULT_MODEL: "llama3.2:3b",
+        C.CONFIG_LLAMA_DEFAULT_MODEL: "qwen3.6:35b",
         C.CONFIG_LLAMA_API_URL: "http://localhost:11434/api/chat",
         C.CONFIG_OLLAMA_KEEP_ALIVE: "10m",
         C.CONFIG_OLLAMA_NUM_CTX: "32768",
@@ -27,6 +27,7 @@ DEFAULTS = {
         C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
         C.CONFIG_TRANSCRIPT_DIR: "transcripts",
+        C.CONFIG_TRANSCRIPT_DETAIL: C.TRANSCRIPT_DETAIL_COMPACT,
         C.CONFIG_FIGHTER_SENTENCE_LIMIT: "1",
         C.CONFIG_FIGHTER_WORD_LIMIT: "30",
         C.CONFIG_FIGHTER_A_SECTION: "A",
@@ -41,7 +42,7 @@ DEFAULTS = {
         C.CONFIG_RUNS: "1",
         C.CONFIG_SEED: "42",
         C.CONFIG_CONCURRENT_RUNS: "1",
-        C.CONFIG_MAX_TURNS: "2",
+        C.CONFIG_MAX_TURNS: "6",
     },
     C.CONFIG_DEFAULTS: {
         C.CONFIG_FIGHTER_ENVIRONMENT: "an open arena",
@@ -225,6 +226,22 @@ class Config:
                 f"'{C.P2_FAILURE_POLICY_FAIL_OPEN}' or '{C.P2_FAILURE_POLICY_FAIL_CLOSED}'."
             )
         return policy
+
+    def get_transcript_detail(self) -> str:
+        """Return the configured transcript detail mode."""
+        detail = self.get(
+            C.CONFIG_GENERAL,
+            C.CONFIG_TRANSCRIPT_DETAIL,
+            str,
+            fallback=C.TRANSCRIPT_DETAIL_COMPACT,
+        )
+        detail = str(detail).strip().lower()
+        if detail not in {C.TRANSCRIPT_DETAIL_COMPACT, C.TRANSCRIPT_DETAIL_FULL}:
+            raise ValueError(
+                f"[{C.CONFIG_GENERAL}] {C.CONFIG_TRANSCRIPT_DETAIL} must be "
+                f"'{C.TRANSCRIPT_DETAIL_COMPACT}' or '{C.TRANSCRIPT_DETAIL_FULL}'."
+            )
+        return detail
 
     @staticmethod
     def _clean_display_name(value: str | None, fallback: str) -> str:

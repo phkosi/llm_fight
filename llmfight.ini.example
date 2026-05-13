@@ -1,45 +1,20 @@
 [General]
-ollama_default_model = llama3.2:3b
+ollama_default_model = qwen3.6:35b
 ollama_api_url = http://localhost:11434/api/chat
 ollama_keep_alive = 10m
 ollama_num_ctx = 32768
-# auto disables environment proxies for loopback endpoints and honors them for
-# remote endpoints. Use enabled or disabled to force aiohttp trust_env.
-ollama_proxy_mode = auto
 max_tokens_fighter = 512
 max_tokens_judge = 4096
 ollama_temperature = 0.4
-best_of_fighter = 1
-best_of_judge = 1
 max_retries = 1
-# fail_open keeps long runs moving with a visible marked no-op turn when Judge
-# Phase 2 cannot produce valid JSON; fail_closed turns that failure into an error.
-judge_phase2_failure_policy = fail_open
-log_level = INFO
-log_combat_turns = false
-# When true, each fight writes one ordered fight-scoped JSONL trace file.
-save_transcripts = false
-transcript_dir = transcripts
-fighter_sentence_limit = 1
-fighter_word_limit = 30
+fighter_creation_mode = configured
 fighter_A = A
 fighter_B = B
-# configured = use fighter sections/anatomy profiles only.
-# generated = ask the LLM to create structured fighter profiles before turn 1.
-fighter_creation_mode = configured
-
-[CONTEXT]
-# Recent combat logs are trimmed oldest-first when needed so each prompt keeps
-# a phase-specific completion reserve. If required current state cannot fit,
-# the CLI fails before contacting the model instead of sending max_tokens=1.
-fighter_log_window = 10
-judge_log_window = 9999
 
 [SIMULATION]
 runs = 1
 seed = 42
-concurrent_runs = 1
-max_turns = 2
+max_turns = 6
 
 [DEFAULTS]
 environment = an open arena
@@ -62,5 +37,4 @@ loadout = longsword and tower shield
 name = Shade
 class = Cunning Assassin
 loadout = poison dagger and smoke bombs
-# profile is accepted as an alias for anatomy_profile.
-# profile = humanoid
+# anatomy_profile = humanoid

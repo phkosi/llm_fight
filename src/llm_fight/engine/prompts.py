@@ -1,6 +1,18 @@
 """System prompt templates for LLM agents."""
 
-FIGHTER_SYSTEM_PROMPT = """
+TEMPORARY_EFFECT_TERMS = "smoke, haze, shadows, poison, bleeding, burning, stun, or obscurity"
+TEMPORARY_EFFECT_HISTORY_GUARDRAIL = "Older temporary effects not listed here have ended."
+TEMPORARY_EFFECT_JUDGE_P1_GUARDRAIL = (
+    f"Temporary conditions from older narration, such as {TEMPORARY_EFFECT_TERMS}, are active only if they are "
+    "still listed in buffs/debuffs or are created by the current attempts."
+)
+TEMPORARY_EFFECT_JUDGE_P2_GUARDRAIL = (
+    f"Temporary conditions from older narration, such as {TEMPORARY_EFFECT_TERMS}, are active only if they are "
+    "still present in the current fighter states or are created by a successful current action."
+)
+
+FIGHTER_SYSTEM_PROMPT = (
+    """
 You are Fighter {fighter_id} (display name: {display_name}), a {class_} currently fighting inside {environment}.
 Your opponent is Fighter {opponent_id} (display name: {opponent_display_name}).
 Display names are labels only; stable combat ids remain A and B for targeting, state, and judge mechanics.
@@ -12,7 +24,9 @@ Self state summary: {self_state_summary}
 Opponent state summary: {opponent_state_summary}
 Last {turn_window} turns:
 {recent_log}
-Current state reminder: active effects right now are {effects_list}. Older temporary effects not listed here have ended.
+Current state reminder: active effects right now are {effects_list}. """
+    + TEMPORARY_EFFECT_HISTORY_GUARDRAIL
+    + """
 {temporary_effect_instruction}
 Your equipment: {loadout}
 ---
@@ -22,19 +36,26 @@ Do not rely on temporary effects from the recent log unless they are still liste
 {environment_scope_guardrail}
 (No outcome narration. Raw text only.)
 """
+)
 
 # Note: Judge P1 Schema was updated based on design discussions.
 # This prompt reflects the schema in validation.py (judgement_text, attempt_A_valid, attempt_A_prob, etc.)
 # It combines the role from docs/Design_doc.md with the specific schema requirements.
-JUDGE_P1_SYSTEM_PROMPT = """
+JUDGE_P1_SYSTEM_PROMPT = (
+    """
 You are an impartial combat arbiter. Analyze the attempts from Fighter A and Fighter B.
 Your role is to determine the validity of each attempt and the probability of its success.
 Consider the fighters' states, their proposed actions, and the general context of a duel.
 You are also provided with a short snippet of the recent combat log under 'recent_combat_log'.
 Each fighter summary includes class, loadout, environment, active_effects, valid_target_parts, target_parts, and damaged_parts.
 Display names in fighter summaries are labels only; JSON keys and mechanical fighter ids remain A and B.
+attempt_A is Fighter A's action only. attempt_B is Fighter B's action only. Never swap actions, loadouts, equipment, or display names.
+If an action mentions the opponent display name, still attribute the action to the fighter id in the attempt key.
 Current fighter summaries are authoritative. Treat the recent combat log as history, not active state.
-Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still listed in buffs/debuffs or are created by the current attempts.
+Do not describe old actions from recent_combat_log as if they are current-turn attempts.
+"""
+    + TEMPORARY_EFFECT_JUDGE_P1_GUARDRAIL
+    + """
 Return JSON only, adhering to the following schema:
 {
   "judgement_text": "string (your overall assessment of the turn, qualitatively describing the interaction of attempts)",
@@ -47,14 +68,24 @@ Return JSON only, adhering to the following schema:
 Ensure that probabilities are realistic given the described actions and context.
 Invalid or nonsensical actions should be marked `valid: false` and ideally have a probability of 0.0.
 """
+)
 
-JUDGE_P2_SYSTEM_PROMPT = """
+JUDGE_P2_SYSTEM_PROMPT = (
+    """
 You are the combat narrator. Based on the fighters' states (fighter_A, fighter_B), the attempted actions (attempt_A, attempt_B), the full previous phase result (p1_result), the outcomes of the dice rolls (successful_rolls), and the recent combat log (recent_combat_log, combat_log_turns), narrate the events of the turn.
 Then, determine the precise changes (delta) to each fighter's state as a result of the turn's actions.
 Use only body parts from the fighters' valid_target_parts lists. Use "fire" for burn wounds, not "burning".
 Display names in fighter states are labels only; all delta keys, source values, and winner values must remain stable ids A or B.
+attempt_A is Fighter A's action only. attempt_B is Fighter B's action only. Never swap actions, loadouts, equipment, or display names.
+Use p1_result and successful_rolls literally: failed or invalid actions may be narrated as failed, but they must not create wounds, effects, pain, exhaustion, heat, fight_end, or a winner.
+Delta keys are the fighter receiving the consequence: successful B hit on A -> delta.A with source B; successful A hit on B -> delta.B with source A.
+Do not put attack damage under the attacking fighter unless the narration explicitly describes recoil, self-harm, or another self-cost.
+Called-shot wounds must use the named body part or canonical alias. Do not move a called shot to a different part.
+Smoke, feints, movement, positioning, intimidation, or setup actions may add temporary effects only when successful; do not convert them into weapon wounds without a concrete damaging hit.
 Current fighter states and active effects are authoritative. Treat the recent combat log as history, not active state.
-Temporary conditions from older narration, such as smoke, poison, obscured, burning, stunned, or bleeding, are active only if they are still present in the current fighter states or are created by a successful current action.
+"""
+    + TEMPORARY_EFFECT_JUDGE_P2_GUARDRAIL
+    + """
 Output JSON ONLY, adhering to the following schema:
 {
   "narration": "string (a vivid, engaging description of what happened this turn based on successful actions and context)",
@@ -67,10 +98,10 @@ Output JSON ONLY, adhering to the following schema:
 }
 
 The DeltaSchema for each fighter includes fields like:
-- "pain_increase": object with {"source": "A"|"B", "value": integer non-negative}
-- "exhaustion_increase": object with {"source": "A"|"B", "value": integer non-negative}
-- "heat_increase": object with {"source": "A"|"B", "value": integer non-negative}
-- "wounds": array of objects, each with "source": "A"|"B", "targeted_part": string, "value": positive integer, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
+- "pain_increase": object with {"source": "A"|"B", "value": integer 0-100}
+- "exhaustion_increase": object with {"source": "A"|"B", "value": integer 0-100}
+- "heat_increase": object with {"source": "A"|"B", "value": integer 0-100}
+- "wounds": array of objects, each with "source": "A"|"B", "targeted_part": string, "value": integer 1-200, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
 - "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "poisoned", "value": 2.0, "ttl": 3, "on_apply": "Poison takes hold", "on_tick": "Poison weakens the body", "metadata": {"targeted_part": "torso"}, "mechanics": [{"kind": "stat_tick", "stat": "pain", "value": 2}], "tags": ["poison"]})
 - "effects_removed": array of objects, each with {"source": "A"|"B", "name": string, "type": "buffs"|"debuffs" optional, "targeted_part": string optional}
   - include "targeted_part" when treating or extinguishing one localized effect; omit it only for intentional remove-all by name/type
@@ -85,3 +116,4 @@ If neither fighter becomes dead or unconscious in the resulting Python state, ju
 If an action was successful (based on `successful_rolls`), describe its impact. If an action failed, describe that too.
 Be creative and fair.
 """
+)

@@ -7,7 +7,14 @@ from llm_fight.engine import constants as C
 
 
 def test_log_exchange_creates_file(tmp_path, monkeypatch):
-    ini = f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
+    ini = "\n".join(
+        [
+            f"[{C.CONFIG_GENERAL}]",
+            f"{C.CONFIG_SAVE_TRANSCRIPTS}=true",
+            f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}",
+            f"{C.CONFIG_TRANSCRIPT_DETAIL}=full",
+        ]
+    )
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(ini)
     custom_cfg = Config(cfg_path)
@@ -29,7 +36,14 @@ def test_log_exchange_creates_file(tmp_path, monkeypatch):
 
 
 def test_log_exchange_unique_timestamps(tmp_path, monkeypatch):
-    ini = f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
+    ini = "\n".join(
+        [
+            f"[{C.CONFIG_GENERAL}]",
+            f"{C.CONFIG_SAVE_TRANSCRIPTS}=true",
+            f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}",
+            f"{C.CONFIG_TRANSCRIPT_DETAIL}=full",
+        ]
+    )
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(ini)
     custom_cfg = Config(cfg_path)
@@ -57,6 +71,17 @@ def test_log_exchange_unique_timestamps(tmp_path, monkeypatch):
     assert files[0].name != files[1].name
 
 
+def test_standalone_log_exchange_is_silent_in_compact_mode(tmp_path, monkeypatch):
+    ini = f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
+    cfg_path = tmp_path / "cfg.ini"
+    cfg_path.write_text(ini)
+    monkeypatch.setattr(config_mod, "CONFIG", Config(cfg_path))
+
+    transcripts.log_exchange([{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "hi"}], ["hello"])
+
+    assert not (tmp_path / "logs").exists()
+
+
 def test_create_fight_trace_disabled_is_silent(tmp_path, monkeypatch):
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n")
@@ -71,7 +96,14 @@ def test_create_fight_trace_disabled_is_silent(tmp_path, monkeypatch):
 def test_active_trace_routes_exchange_to_fight_jsonl(tmp_path, monkeypatch):
     cfg_path = tmp_path / "cfg.ini"
     cfg_path.write_text(
-        f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
+        "\n".join(
+            [
+                f"[{C.CONFIG_GENERAL}]",
+                f"{C.CONFIG_SAVE_TRANSCRIPTS}=true",
+                f"{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}",
+                f"{C.CONFIG_TRANSCRIPT_DETAIL}=full",
+            ]
+        )
     )
     monkeypatch.setattr(config_mod, "CONFIG", Config(cfg_path))
 
@@ -102,6 +134,30 @@ def test_active_trace_routes_exchange_to_fight_jsonl(tmp_path, monkeypatch):
     assert event["data"]["messages"][0][C.AGENT_CONTENT] == "act"
     assert event["data"]["responses"] == ["strike"]
     assert event["data"]["metadata"][0]["completion_tokens"] == 2
+
+
+def test_active_trace_compact_exchange_omits_raw_prompt_text(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "cfg.ini"
+    cfg_path.write_text(
+        f"[{C.CONFIG_GENERAL}]\n{C.CONFIG_SAVE_TRANSCRIPTS}=true\n{C.CONFIG_TRANSCRIPT_DIR}={tmp_path / 'logs'}\n"
+    )
+    monkeypatch.setattr(config_mod, "CONFIG", Config(cfg_path))
+
+    writer = transcripts.create_fight_trace(fight_id="compact")
+    with transcripts.active_trace(writer), transcripts.llm_trace_context(phase="judge_phase1"):
+        transcripts.log_exchange(
+            [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "secret prompt"}],
+            ["secret response"],
+            [{"total_tokens": 3}],
+        )
+
+    [path] = list((tmp_path / "logs").glob("*.jsonl"))
+    event = json.loads(path.read_text(encoding="utf-8"))
+    assert event["data"]["message_count"] == 1
+    assert event["data"]["response_count"] == 1
+    assert event["data"]["metadata"][0]["total_tokens"] == 3
+    assert "secret prompt" not in path.read_text(encoding="utf-8")
+    assert "secret response" not in path.read_text(encoding="utf-8")
 
 
 def test_trace_writer_orders_events(tmp_path, monkeypatch):

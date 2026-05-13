@@ -12,7 +12,7 @@ from .engine import constants as C
 from .engine.combat_log import CombatLog
 from .engine.fighter import get_fighter_attempt
 from .engine.logger import logger
-from .fight_loop import SingleFightHooks, run_single_fight
+from .fight_loop import FightEventServices, FightModelServices, FightRuleServices, SingleFightHooks, run_single_fight
 from .judge import judge_phase1, judge_phase2
 from .phase2_authorization import authorize_phase2_result as _authorize_phase2_result
 from .profile_generation import (
@@ -343,19 +343,25 @@ async def _single_fight(
 ) -> dict[str, str] | tuple[dict[str, str], CombatLog]:
     """Simulate a single fight between two AI fighters."""
     hooks = SingleFightHooks(
-        build_match_fighters=_build_match_fighters,
-        get_fighter_attempt=get_fighter_attempt,
-        judge_phase1=judge_phase1,
-        judge_phase2=judge_phase2,
-        apply_effect_roll_modifiers=_apply_effect_roll_modifiers,
-        authorize_phase2_result=_authorize_phase2_result,
-        resolve_turn_rolls=_resolve_turn_rolls,
-        emit_event=_emit_event,
-        emit_token_metadata=_emit_token_metadata,
-        status_outcome=_status_outcome,
-        judge_outcome=_judge_outcome,
-        winner_display_name=_winner_display_name,
-        fight_event_type=FightEvent,
+        model=FightModelServices(
+            build_match_fighters=_build_match_fighters,
+            get_fighter_attempt=get_fighter_attempt,
+            judge_phase1=judge_phase1,
+            judge_phase2=judge_phase2,
+        ),
+        rules=FightRuleServices(
+            apply_effect_roll_modifiers=_apply_effect_roll_modifiers,
+            authorize_phase2_result=_authorize_phase2_result,
+            resolve_turn_rolls=_resolve_turn_rolls,
+            status_outcome=_status_outcome,
+            judge_outcome=_judge_outcome,
+            winner_display_name=_winner_display_name,
+        ),
+        events=FightEventServices(
+            emit_event=_emit_event,
+            emit_token_metadata=_emit_token_metadata,
+            fight_event_type=FightEvent,
+        ),
     )
     return await run_single_fight(
         fighter_a_section=fighter_a_section,

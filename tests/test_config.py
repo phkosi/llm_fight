@@ -205,7 +205,7 @@ def test_global_config_instance_loads():
 
 
 def test_default_max_turns_loaded(temp_config_instance):
-    assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 2
+    assert temp_config_instance.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, int) == 6
 
 
 def test_default_ollama_keep_alive_loaded(temp_config_instance):
@@ -226,6 +226,18 @@ def test_default_fighter_creation_mode_loaded(temp_config_instance):
 
 def test_default_judge_phase2_failure_policy_loaded(temp_config_instance):
     assert temp_config_instance.get_judge_phase2_failure_policy() == C.P2_FAILURE_POLICY_FAIL_OPEN
+
+
+def test_default_transcript_detail_loaded(temp_config_instance):
+    assert temp_config_instance.get_transcript_detail() == C.TRANSCRIPT_DETAIL_COMPACT
+
+
+def test_invalid_transcript_detail_raises(tmp_path):
+    file_path = tmp_path / "bad_transcript_detail.ini"
+    file_path.write_text("[General]\ntranscript_detail = everything\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="transcript_detail"):
+        Config(file_path).get_transcript_detail()
 
 
 def test_invalid_fighter_creation_mode_raises(tmp_path):

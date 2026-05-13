@@ -14,6 +14,8 @@ uv run pytest -q
 uv run pre-commit run --all-files
 ```
 
+`pyproject.toml` and `uv.lock` are the dependency source of truth. The repo does not track generated requirements exports.
+
 On PowerShell, copy the config with:
 
 ```powershell
