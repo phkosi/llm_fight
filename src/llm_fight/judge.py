@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from jsonschema import ValidationError, validate
@@ -21,6 +22,23 @@ from .validation import JudgeP1Schema, JudgeP2Schema, guarded_call
 
 class JudgePhase2FailureError(RuntimeError):
     """Raised when Judge Phase 2 exhausts retries under fail-closed policy."""
+
+
+@dataclass(frozen=True)
+class _JudgePhase2Settings:
+    max_tokens: int
+    best_of: int
+    max_retries: int
+    parse_retries: int
+    context_limit: int
+
+
+@dataclass(frozen=True)
+class _JudgePhase2Context:
+    p2_input_state: dict[str, Any]
+    rolls: dict[str, bool]
+    original_recent_log: str
+    settings: _JudgePhase2Settings
 
 
 def _effect_names_text(effects: list[Any]) -> str:
@@ -128,6 +146,177 @@ def _phase2_noop_result(exc: Exception | None = None, *, policy: str = C.P2_FAIL
     }
 
 
+def _judge_phase2_settings() -> _JudgePhase2Settings:
+    max_tokens, best_of, max_retries = _judge_settings()
+    parse_retries = min(max_retries, 2)
+    context_limit = _ollama_num_ctx(max_tokens)
+    return _JudgePhase2Settings(
+        max_tokens=max_tokens,
+        best_of=best_of,
+        max_retries=max_retries,
+        parse_retries=parse_retries,
+        context_limit=context_limit,
+    )
+
+
+def _judge_phase2_context(p2_input_state: dict[str, Any], rolls: dict[str, bool]) -> _JudgePhase2Context:
+    return _JudgePhase2Context(
+        p2_input_state=p2_input_state,
+        rolls=rolls,
+        original_recent_log=str(p2_input_state.get("recent_combat_log", "")),
+        settings=_judge_phase2_settings(),
+    )
+
+
+def _judge_phase2_user_payload(context: _JudgePhase2Context, recent_log: str, *, repair: bool) -> dict[str, Any]:
+    user_payload = {
+        **context.p2_input_state,
+        "recent_combat_log": recent_log,
+        C.SUCCESSFUL_ROLLS: context.rolls,
+    }
+    user_payload["current_state_reminder"] = _current_state_reminder(
+        context.p2_input_state.get("fighter_A", {}),
+        context.p2_input_state.get("fighter_B", {}),
+    )
+    if repair:
+        user_payload["strict_output_reminder"] = (
+            "Return one compact JSON object only with keys narration, delta, fight_end, and winner. "
+            "Use no markdown, no prose outside JSON, and no reasoning text."
+        )
+    return user_payload
+
+
+def _judge_phase2_messages(
+    context: _JudgePhase2Context,
+    recent_log: str,
+    *,
+    repair: bool = False,
+) -> list[dict[str, str]]:
+    system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: JUDGE_P2_SYSTEM_PROMPT}
+    user = {
+        C.AGENT_ROLE: C.AGENT_USER,
+        C.AGENT_CONTENT: json.dumps(_judge_phase2_user_payload(context, recent_log, repair=repair)),
+    }
+    return [system, user]
+
+
+def _budget_judge_phase2_messages(
+    context: _JudgePhase2Context,
+    *,
+    repair: bool = False,
+) -> tuple[list[dict[str, str]], int]:
+    settings = context.settings
+    min_completion_tokens = C.PROMPT_MIN_COMPLETION_JUDGE_P2_REPAIR if repair else C.PROMPT_MIN_COMPLETION_JUDGE_P2
+    phase = C.PROMPT_PHASE_JUDGE_P2_REPAIR if repair else C.PROMPT_PHASE_JUDGE_P2
+
+    def build_for_log(candidate_recent_log: str) -> list[dict[str, str]]:
+        return _judge_phase2_messages(context, candidate_recent_log, repair=repair)
+
+    messages, max_tokens, _ = budget_messages_with_trimmed_log(
+        build_for_log,
+        context.original_recent_log,
+        requested_max_tokens=settings.max_tokens,
+        context_limit=settings.context_limit,
+        min_completion_tokens=min_completion_tokens,
+        phase=phase,
+        log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
+    )
+    return messages, max_tokens
+
+
+async def _request_judge_phase2_texts(
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    settings: _JudgePhase2Settings,
+    on_metadata: Callable[[dict[str, Any]], None] | None,
+    *,
+    schema: dict[str, Any] | None,
+) -> list[str]:
+    best_of = settings.best_of if schema is not None else max(1, settings.best_of)
+    if on_metadata is None:
+        kwargs: dict[str, Any] = {}
+        if schema is not None:
+            kwargs["schema"] = schema
+        return await chat(
+            messages,
+            max_tokens=max_tokens,
+            num_ctx=settings.context_limit,
+            best_of=best_of,
+            retries=settings.max_retries,
+            **kwargs,
+        )
+
+    kwargs = {}
+    if schema is not None:
+        kwargs["schema"] = schema
+    results = await chat_with_metadata(
+        messages,
+        max_tokens=max_tokens,
+        num_ctx=settings.context_limit,
+        best_of=best_of,
+        retries=settings.max_retries,
+        **kwargs,
+    )
+    response_texts = [result.content for result in results]
+    for result in results:
+        if result.metadata:
+            on_metadata(result.metadata)
+    return response_texts
+
+
+async def _call_judge_phase2_with_schema(
+    context: _JudgePhase2Context,
+    on_metadata: Callable[[dict[str, Any]], None] | None,
+) -> dict[str, Any]:
+    messages, max_tokens = _budget_judge_phase2_messages(context)
+    response_texts = await _request_judge_phase2_texts(
+        messages,
+        max_tokens,
+        context.settings,
+        on_metadata,
+        schema=JudgeP2Schema,
+    )
+    return _parse_first_json_response(response_texts)
+
+
+async def _call_judge_phase2_repair(
+    context: _JudgePhase2Context,
+    on_metadata: Callable[[dict[str, Any]], None] | None,
+) -> dict[str, Any]:
+    messages, max_tokens = _budget_judge_phase2_messages(context, repair=True)
+    response_texts = await _request_judge_phase2_texts(
+        messages,
+        max_tokens,
+        context.settings,
+        on_metadata,
+        schema=None,
+    )
+    return _parse_first_json_response(response_texts)
+
+
+async def _call_judge_phase2_with_repair(
+    context: _JudgePhase2Context,
+    on_metadata: Callable[[dict[str, Any]], None] | None,
+) -> dict[str, Any]:
+    try:
+        data = await _call_judge_phase2_with_schema(context, on_metadata)
+        validate(data, JudgeP2Schema)
+        return data
+    except (json.JSONDecodeError, ValidationError) as exc:
+        logger.warning("Judge Phase 2 structured response failed; retrying as plain JSON: %s", exc)
+        return await _call_judge_phase2_repair(context, on_metadata)
+
+
+def _handle_phase2_guarded_failure(exc: RuntimeError) -> dict[str, Any]:
+    policy = _phase2_failure_policy()
+    if policy == C.P2_FAILURE_POLICY_FAIL_CLOSED:
+        raise JudgePhase2FailureError(
+            f"Judge Phase 2 failed after retries under fail_closed policy: {_sanitize_error_text(exc)}"
+        ) from exc
+    logger.warning("Judge Phase 2 failed after retries; using no-op turn result: %s", exc)
+    return _phase2_noop_result(exc, policy=policy)
+
+
 async def judge_phase1(
     state: dict[str, Any],
     attemptA: str,
@@ -225,111 +414,14 @@ async def judge_phase2(
         A dictionary conforming to JudgeP2Schema, including narration, state deltas
         for each fighter, a flag indicating if the fight ended, and the winner if applicable.
     """
-    system_prompt_content = JUDGE_P2_SYSTEM_PROMPT
-    system = {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: system_prompt_content}
-    max_tok_j, best_j, max_retries = _judge_settings()
-    parse_retries = min(max_retries, 2)
-    context_limit = _ollama_num_ctx(max_tok_j)
-    original_recent_log = str(p2_input_state.get("recent_combat_log", ""))
-
-    def build_messages(candidate_recent_log: str, *, repair: bool = False) -> list[dict[str, str]]:
-        user_payload = {**p2_input_state, "recent_combat_log": candidate_recent_log, C.SUCCESSFUL_ROLLS: rolls}
-        user_payload["current_state_reminder"] = _current_state_reminder(
-            p2_input_state.get("fighter_A", {}),
-            p2_input_state.get("fighter_B", {}),
-        )
-        if repair:
-            user_payload["strict_output_reminder"] = (
-                "Return one compact JSON object only with keys narration, delta, fight_end, and winner. "
-                "Use no markdown, no prose outside JSON, and no reasoning text."
-            )
-        user = {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload)}
-        return [system, user]
-
-    messages, max_tok, _ = budget_messages_with_trimmed_log(
-        build_messages,
-        original_recent_log,
-        requested_max_tokens=max_tok_j,
-        context_limit=context_limit,
-        min_completion_tokens=C.PROMPT_MIN_COMPLETION_JUDGE_P2,
-        phase=C.PROMPT_PHASE_JUDGE_P2,
-        log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
-    )
-
-    async def _call_with_schema() -> dict[str, Any]:
-        if on_metadata is None:
-            response_texts = await chat(
-                messages,
-                max_tokens=max_tok,
-                num_ctx=context_limit,
-                best_of=best_j,
-                schema=JudgeP2Schema,
-                retries=max_retries,
-            )
-        else:
-            results = await chat_with_metadata(
-                messages,
-                max_tokens=max_tok,
-                num_ctx=context_limit,
-                best_of=best_j,
-                schema=JudgeP2Schema,
-                retries=max_retries,
-            )
-            response_texts = [result.content for result in results]
-            for result in results:
-                if result.metadata:
-                    on_metadata(result.metadata)
-        return _parse_first_json_response(response_texts)
-
-    async def _call_without_schema() -> dict[str, Any]:
-        repair_messages, repair_max_tok, _ = budget_messages_with_trimmed_log(
-            lambda candidate_recent_log: build_messages(candidate_recent_log, repair=True),
-            original_recent_log,
-            requested_max_tokens=max_tok_j,
-            context_limit=context_limit,
-            min_completion_tokens=C.PROMPT_MIN_COMPLETION_JUDGE_P2_REPAIR,
-            phase=C.PROMPT_PHASE_JUDGE_P2_REPAIR,
-            log_window_setting=C.CONFIG_JUDGE_LOG_WINDOW,
-        )
-        if on_metadata is None:
-            response_texts = await chat(
-                repair_messages,
-                max_tokens=repair_max_tok,
-                num_ctx=context_limit,
-                best_of=max(1, best_j),
-                retries=max_retries,
-            )
-        else:
-            results = await chat_with_metadata(
-                repair_messages,
-                max_tokens=repair_max_tok,
-                num_ctx=context_limit,
-                best_of=max(1, best_j),
-                retries=max_retries,
-            )
-            response_texts = [result.content for result in results]
-            for result in results:
-                if result.metadata:
-                    on_metadata(result.metadata)
-        return _parse_first_json_response(response_texts)
-
-    async def _call() -> dict[str, Any]:
-        try:
-            data = await _call_with_schema()
-            validate(data, JudgeP2Schema)
-            return data
-        except (json.JSONDecodeError, ValidationError) as exc:
-            logger.warning("Judge Phase 2 structured response failed; retrying as plain JSON: %s", exc)
-            return await _call_without_schema()
+    context = _judge_phase2_context(p2_input_state, rolls)
 
     try:
-        result = await guarded_call(_call, JudgeP2Schema, max_retries=parse_retries)
+        result = await guarded_call(
+            lambda: _call_judge_phase2_with_repair(context, on_metadata),
+            JudgeP2Schema,
+            max_retries=context.settings.parse_retries,
+        )
     except RuntimeError as exc:
-        policy = _phase2_failure_policy()
-        if policy == C.P2_FAILURE_POLICY_FAIL_CLOSED:
-            raise JudgePhase2FailureError(
-                f"Judge Phase 2 failed after retries under fail_closed policy: {_sanitize_error_text(exc)}"
-            ) from exc
-        logger.warning("Judge Phase 2 failed after retries; using no-op turn result: %s", exc)
-        return _phase2_noop_result(exc, policy=policy)
+        return _handle_phase2_guarded_failure(exc)
     return _strip_untrusted_phase2_metadata(result)
