@@ -1168,7 +1168,7 @@ Verification:
 
 Addresses: ISSUE-040
 
-- [ ] Extract helper units from `play()` without changing CLI play behavior.
+- [x] Extract helper units from `play()` without changing CLI play behavior.
 
 Implementation intent:
 
@@ -1187,6 +1187,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Extracted play render state, event handling, rich status wrapping, missed-turn flushing, and winner/token summary output while keeping Typer options on `play()`.
+- Size impact: `play()` -> 57 LOC; largest new play helper `_run_play_fight()` -> 22 LOC; `src\llm_fight\cli.py` -> 393 LOC. `simulate()` remains 118 LOC for the separate CLI simulate task.
+- Focused tests: `uv run pytest -q tests\test_cli.py tests\test_cli_play.py tests\test_cli_simulate.py` -> 36 passed, 1 warning.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## CLI Simulate Batch Helpers
 
