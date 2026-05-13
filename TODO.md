@@ -1260,7 +1260,7 @@ Verification:
 
 Addresses: ISSUE-040
 
-- [ ] Re-run function-size measurements and close ISSUE-040 once standalone function thresholds are satisfied.
+- [x] Re-run function-size measurements and close ISSUE-040 once standalone function thresholds are satisfied.
 
 Acceptance goals:
 
@@ -1275,3 +1275,11 @@ Required tests:
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
 - `git diff --check`
+
+Verification:
+
+- `ISSUES.md` now marks ISSUE-040 `Status: resolved`.
+- Final named function measurements: `_single_fight()` 35 LOC; `get_fighter_attempt()` 34 LOC; `judge_phase2()` 29 LOC; `play()` 57 LOC; `simulate()` 73 LOC; `build_fighter_profile()` 11 LOC.
+- No production function remains at 100+ LOC.
+- Watchlist helpers below the issue threshold: `generate_fighter_profile()` 99 LOC; `apply_damage_to_part()` 92 LOC; `build_effect_from_payload()` 92 LOC; `run_single_fight()` 83 LOC; `_authorize_fighter_delta()` 82 LOC; `_build_match_fighter()` 77 LOC; `judge_phase1()` 77 LOC; `budget_messages_with_trimmed_log()` 75 LOC; `_run_turn()` 75 LOC.
+- Required checks: `uv run ruff format --check .` -> 75 files already formatted; `uv run ruff check .` -> all checks passed; `uv run mypy src/llm_fight` -> success; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings; `git diff --check` -> no whitespace errors (line-ending normalization warnings only).

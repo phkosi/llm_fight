@@ -371,11 +371,12 @@ When a task is added to `TODO.md` for an issue, update that issue with `Task: TO
 
 ### ISSUE-040: Standalone runtime functions exceed code-size thresholds
 
-- Status: tasked
+- Status: resolved
 - Task: TODO.md - Single Fight Loop Orchestration Extraction; Fighter Attempt Prompt Pipeline; Judge Phase 2 Response Pipeline; CLI Play Rendering Helpers; CLI Simulate Batch Helpers; Fighter Profile Builder Extraction; ISSUE-040 Closure Measurement
 - Source: codebase review
 - Area: Maintainability, AI-agent ergonomics
 - Evidence: Code-size review found production functions over the `AGENTS.md` 100+ LOC function threshold: `src/llm_fight/simulation.py::_single_fight()` at about 265 LOC, `src/llm_fight/engine/fighter.py::get_fighter_attempt()` at 144 LOC, `src/llm_fight/cli.py::play()` at 127 LOC, `src/llm_fight/judge.py::judge_phase2()` at 126 LOC, `src/llm_fight/cli.py::simulate()` at 118 LOC, and `src/llm_fight/profiles.py::build_fighter_profile()` at 109 LOC.
+- Resolution: Closure measurement found all named ISSUE-040 functions below the 100 LOC issue threshold: `_single_fight()` 35 LOC, `get_fighter_attempt()` 34 LOC, `judge_phase2()` 29 LOC, `play()` 57 LOC, `simulate()` 73 LOC, and `build_fighter_profile()` 11 LOC. No production function remains at 100+ LOC. Remaining 75-99 LOC watchlist helpers are below the issue threshold: `generate_fighter_profile()` 99 LOC, `apply_damage_to_part()` 92 LOC, `build_effect_from_payload()` 92 LOC, `run_single_fight()` 83 LOC, `_authorize_fighter_delta()` 82 LOC, `_build_match_fighter()` 77 LOC, `judge_phase1()` 77 LOC, `budget_messages_with_trimmed_log()` 75 LOC, and `_run_turn()` 75 LOC.
 - Impact: These functions are not full monolithic modules, but each combines enough prompting, validation, rendering, command orchestration, or profile parsing behavior that small changes require reading a long mixed-responsibility block. That makes reviews and AI-agent edits more brittle.
 - Suggested fix: Extract narrow helpers around stable seams: fighter prompt assembly and metadata handling from `get_fighter_attempt()`, CLI event/render/error branches from `play()` and `simulate()`, Phase 2 prompt/message preparation and response handling from `judge_phase2()`, and profile field/layer/body-part construction helpers from `build_fighter_profile()`.
 - Tests: Preserve behavior with focused tests around each extraction target, then run `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy src/llm_fight`, relevant focused tests, and `uv run pytest -q`.
