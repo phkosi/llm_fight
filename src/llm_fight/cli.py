@@ -212,6 +212,81 @@ def _print_play_summary(state: _PlayRenderState, result: dict) -> None:
     typer.echo(f"Winner: {_format_winner_label(result, state.fighter_display_names)}")
 
 
+def _make_simulation_progress(console):
+    from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+
+    progress = Progress(
+        TextColumn("Simulating"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    )
+
+    def update(done: int, total: int) -> None:
+        if not progress.tasks:
+            progress.add_task("runs", total=total)
+        progress.update(cast(Any, 0), completed=done)
+
+    return progress, update
+
+
+def _run_simulation_batch(
+    output_csv: Path,
+    *,
+    fighter_a: str | None,
+    fighter_b: str | None,
+    verbose: bool,
+):
+    from .simulation import run_batch
+
+    if not verbose:
+        return (
+            _run_async(
+                run_batch(
+                    output_csv,
+                    fighter_a_section=fighter_a,
+                    fighter_b_section=fighter_b,
+                )
+            ),
+            None,
+        )
+
+    console = render.Console()
+    progress, progress_cb = _make_simulation_progress(console)
+    with progress:
+        path = _run_async(
+            run_batch(
+                output_csv,
+                fighter_a_section=fighter_a,
+                fighter_b_section=fighter_b,
+                progress=progress_cb,
+            )
+        )
+    return path, console
+
+
+def _summarize_simulation(path: Path, *, total_runs: int, console) -> Any:
+    import csv
+
+    from .simulation import summarize_batch_csv
+
+    summary = summarize_batch_csv(path, total_runs=total_runs)
+    if console is not None:
+        with open(path, newline="") as fp:
+            rows = list(csv.DictReader(fp))
+        table = render.make_summary_table(rows, total_runs=summary.total_runs)
+        console.print(table)
+    return summary
+
+
+def _finish_simulation(path: Path, summary, *, continue_on_error: bool) -> None:
+    typer.echo(f"Simulation saved to {path}")
+    if summary.has_errors:
+        typer.echo(_batch_error_warning(summary))
+        if not continue_on_error:
+            raise typer.Exit(1)
+
+
 @app.command()
 def simulate(
     output_csv: Path = typer.Option(
@@ -278,59 +353,14 @@ def simulate(
 
         _run_async(ping_ollama())
 
-        from .simulation import run_batch, summarize_batch_csv
-
-        progress_cb = None
-        if verbose:
-            from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
-
-            console = render.Console()
-            progress = Progress(
-                TextColumn("Simulating"),
-                BarColumn(),
-                TaskProgressColumn(),
-                console=console,
-            )
-
-            def update(done: int, total: int) -> None:
-                if not progress.tasks:
-                    progress.add_task("runs", total=total)
-                progress.update(cast(Any, 0), completed=done)
-
-            progress_cb = update
-            with progress:
-                path = _run_async(
-                    run_batch(
-                        output_csv,
-                        fighter_a_section=fighter_a,
-                        fighter_b_section=fighter_b,
-                        progress=progress_cb,
-                    )
-                )
-        else:
-            path = _run_async(
-                run_batch(
-                    output_csv,
-                    fighter_a_section=fighter_a,
-                    fighter_b_section=fighter_b,
-                )
-            )
-
-        summary = summarize_batch_csv(path, total_runs=batch_runs)
-
-        if verbose:
-            import csv
-
-            with open(path, newline="") as fp:
-                rows = list(csv.DictReader(fp))
-            table = render.make_summary_table(rows, total_runs=summary.total_runs)
-            console.print(table)
-
-        typer.echo(f"Simulation saved to {path}")
-        if summary.has_errors:
-            typer.echo(_batch_error_warning(summary))
-            if not continue_on_error:
-                raise typer.Exit(1)
+        path, console = _run_simulation_batch(
+            output_csv,
+            fighter_a=fighter_a,
+            fighter_b=fighter_b,
+            verbose=verbose,
+        )
+        summary = _summarize_simulation(path, total_runs=batch_runs, console=console)
+        _finish_simulation(path, summary, continue_on_error=continue_on_error)
 
 
 @app.command()

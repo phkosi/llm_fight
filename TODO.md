@@ -1199,7 +1199,7 @@ Verification:
 
 Addresses: ISSUE-040
 
-- [ ] Extract helper units from `simulate()` without changing CLI simulate behavior.
+- [x] Extract helper units from `simulate()` without changing CLI simulate behavior.
 
 Implementation intent:
 
@@ -1218,6 +1218,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Extracted verbose progress construction, batch execution, CSV summary rendering, and batch error exit handling while keeping Typer options on `simulate()`.
+- Size impact: `simulate()` -> 73 LOC; `play()` remains 57 LOC; largest new simulate helper `_run_simulation_batch()` -> 33 LOC; `src\llm_fight\cli.py` -> 423 LOC.
+- Focused tests: `uv run pytest -q tests\test_cli.py tests\test_cli_play.py tests\test_cli_simulate.py tests\test_batch.py` -> 55 passed, 1 warning.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## Fighter Profile Builder Extraction
 
