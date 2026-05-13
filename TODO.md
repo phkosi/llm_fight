@@ -1137,7 +1137,7 @@ Verification:
 
 Addresses: ISSUE-040
 
-- [ ] Extract helper units from `judge_phase2()` without changing Judge Phase 2 behavior.
+- [x] Extract helper units from `judge_phase2()` without changing Judge Phase 2 behavior.
 
 Implementation intent:
 
@@ -1156,6 +1156,13 @@ Required tests:
 - `uv run ruff check .`
 - `uv run mypy src/llm_fight`
 - `uv run pytest -q`
+
+Verification:
+
+- Extracted Phase 2 settings, payload/message construction, prompt budgeting, schema-first transport, plain-JSON repair transport, and failure-policy handling while keeping `judge_phase2()` as the public async wrapper.
+- Size impact: `judge_phase2()` -> 29 LOC; largest new helper `_request_judge_phase2_texts()` -> 38 LOC; `src\llm_fight\judge.py` -> 427 LOC.
+- Focused tests: `uv run pytest -q tests\engine\test_judge.py tests\test_validation.py` -> 92 passed.
+- Full gate: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q` -> 466 passed, 6 skipped, 5 warnings.
 
 ## CLI Play Rendering Helpers
 
