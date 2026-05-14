@@ -29,5 +29,6 @@ Use this file for game design concerns that are not clearly bugs, regressions, s
 - Status: open
 - Source: playtest
 - Observation: The generated-character trial collection `uv run llmfight collect-trials --mode generated` wrote accepted artifacts to `transcripts\trials\20260513_233837`, but summaries recorded 35 fallback fighter profiles and only 1 generated fighter profile across 36 fighters. The smoke run at `transcripts\trials\20260513_233748` also fell back for both fighters.
+- Latest evidence: Profile-only evaluation before prompt changes measured 1 valid profile and 11 fallbacks at `transcripts\profile_trials\20260514_180458`; after the prompt reliability pass, `transcripts\profile_trials\20260514_181840` measured 12 valid profiles, 0 fallbacks, and 12 altered/non-humanoid body plans. A generated-mode fight retest is still needed before treating generated-character trials as parameter evidence.
 - Design concern: Generated-character mode can be mechanically reviewable while still failing to deliver the intended fantasy of distinct original fighters, custom anatomy, and fresh silhouettes/loadouts.
 - Possible direction: Review generated-profile prompting and validation strictness with a dedicated creativity/profile-quality pass before treating generated-mode trials as a reliable creativity benchmark.

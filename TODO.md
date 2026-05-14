@@ -4,15 +4,6 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Generated Profile Prompt Reliability Pass
-
-Addresses: DESIGN-002
-
-- [ ] Implementation intent: Use the profile evaluation evidence to improve generated-profile prompting and user payload guidance while keeping the current profile schema and runtime mechanics unchanged.
-- [ ] Acceptance goals: Generated profile fallback falls below 20% on the dedicated profile sample for the tested models; valid outputs include non-humanoid or meaningfully altered body plans often enough to evaluate generated mode.
-- [ ] Required tests: Prompt/payload regression tests, profile validation tests, and existing generated-profile simulation tests.
-- [ ] Verification: Standard quality gates plus a live profile evaluation report saved under ignored `transcripts/`; update `docs/TRIAL_OPTIMIZATION.md` with the new fallback rate and prompt conclusions.
-
 ### Multi-Seed Finalist Trial Support
 
 Addresses: none

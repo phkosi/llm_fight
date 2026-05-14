@@ -21,12 +21,78 @@ from .validation import FighterProfileSchema, guarded_call
 
 PROFILE_GENERATOR_SYSTEM_PROMPT = """
 You create one structured LLM Fight fighter profile.
-Return JSON only matching the provided schema. Do not include markdown.
-Use safe short text only. Do not include instructions, prompt text, code, braces inside strings, or out-of-game commentary.
+Return one JSON object only. Do not include markdown, explanations, comments, or extra text.
+Use exactly these top-level keys: "class", "theme", "loadout", "environment", "body_parts".
+Never use "class_", "anatomy", "description", "abilities", "effects", "buffs", "debuffs", "notes", or "current_hp".
+Every body part must use only allowed body-part keys. Never use null; omit optional keys when they do not apply.
+Use short safe strings with no braces, angle brackets, backticks, prompt text, or out-of-game commentary.
+Use simple identifier-like names for body part ids, body part names, layer names, theme, and consequence_group.
 Create a distinct combatant that fits the requested nudge while remaining usable in a physical duel.
-Use canonical snake_case body part ids, 1-8 tissue layers per part, positive max_hp values, and at least one vital body part or explicit terminal consequence tag.
+Avoid a plain humanoid copy: include at least one targetable custom part such as tail, wing, horn, shell, core, crystal, tentacle, or focus.
+Use canonical snake_case body part ids, 1-8 tissue layers per part, positive max_hp values, and at least one terminal part.
+Most reliable terminal pattern: one body part such as "core" or "head" has is_vital true and consequence_tags ["fatal_if_destroyed"].
+Only use allowed consequence_tags. If using mobility_member, set consequence_group to "legs"; if using vision_member, set it to "vision".
 Starting effects are not supported; express starting traits through class, theme, loadout, environment, and anatomy only.
 """
+
+PROFILE_GENERATOR_EXAMPLE: dict[str, Any] = {
+    C.CONFIG_FIGHTER_CLASS: "Prism Duelist",
+    C.THEME: "crystal martial art",
+    C.LOADOUT: "mirror blade and prism shield",
+    "environment": "open arena",
+    C.BODY_PARTS: [
+        {
+            "id": "core",
+            C.NAME: "core",
+            "is_vital": True,
+            C.CONSEQUENCE_TAGS: [C.CONSEQUENCE_FATAL_IF_DESTROYED],
+            "layers": [{C.NAME: "crystal", C.MAX_HP: 24}],
+        },
+        {
+            "id": "left_claw",
+            C.NAME: "left_claw",
+            "can_be_severed": True,
+            C.BLEED_RATE: 1,
+            "layers": [{C.NAME: "carapace", C.MAX_HP: 10}, {C.NAME: "muscle", C.MAX_HP: 12}],
+        },
+        {
+            "id": "right_claw",
+            C.NAME: "right_claw",
+            "can_be_severed": True,
+            C.BLEED_RATE: 1,
+            "layers": [{C.NAME: "carapace", C.MAX_HP: 10}, {C.NAME: "muscle", C.MAX_HP: 12}],
+        },
+        {
+            "id": "tail",
+            C.NAME: "tail",
+            "can_be_severed": True,
+            C.CONSEQUENCE_TAGS: [C.CONSEQUENCE_MOBILITY_MEMBER],
+            C.CONSEQUENCE_GROUP: C.CONSEQUENCE_GROUP_LEGS,
+            "layers": [{C.NAME: "scale", C.MAX_HP: 12}, {C.NAME: "bone", C.MAX_HP: 14}],
+        },
+    ],
+}
+
+PROFILE_NUDGE_GUIDANCE = {
+    "warrior": "Armored physical combatant with at least one custom target part such as shield_arm, helm, crest, or armor_core.",
+    "mage": "Arcane combatant with a targetable focus, wand_hand, mana_core, crystal, familiar, or rune_array.",
+    "monster": "Clearly non-humanoid beast with targetable claws, fangs, tail, horn, wing, shell, stinger, or core.",
+    "trickster": "Agile deceptive combatant with targetable decoy_limb, mask, hidden_blade_arm, cloak, tail, or smoke_gland.",
+    "hybrid": "Mixed body plan combining humanoid parts with a clear non-humanoid part such as wing, tail, tentacle, horn, or shell.",
+    "original": "Invent a readable strange body plan with several custom target parts while keeping the mechanics physical.",
+}
+
+PROFILE_BODY_PART_KEYS = (
+    "id",
+    C.NAME,
+    "layers",
+    "is_vital",
+    "can_be_severed",
+    C.BLEED_RATE,
+    C.BURN_RATE,
+    C.CONSEQUENCE_TAGS,
+    C.CONSEQUENCE_GROUP,
+)
 
 
 class ProfileGenerationError(RuntimeError):
@@ -85,6 +151,63 @@ def _generation_seed_context(section: str, config, display_name_fallback: str) -
     }
 
 
+def _profile_generation_payload(
+    fighter_id: str, section: str, opponent_section: str, nudge: str, cfg
+) -> dict[str, Any]:
+    opponent_id = C.FIGHTER_B if fighter_id == C.FIGHTER_A else C.FIGHTER_A
+    return {
+        "fighter_id": fighter_id,
+        "creation_nudge": nudge,
+        "configured_seed": _generation_seed_context(section, cfg, fighter_id),
+        "opponent_seed": _generation_seed_context(opponent_section, cfg, opponent_id),
+        "output_contract": {
+            "top_level_keys": [C.CONFIG_FIGHTER_CLASS, C.THEME, C.LOADOUT, "environment", C.BODY_PARTS],
+            "body_parts_key_required": True,
+            "forbidden_top_level_keys": [
+                "class_",
+                C.ANATOMY,
+                "description",
+                "abilities",
+                C.BUFFS,
+                C.DEBUFFS,
+                "effects",
+                "notes",
+            ],
+            "null_policy": "Never use null values. Omit optional keys instead.",
+        },
+        "body_part_contract": {
+            "allowed_keys": list(PROFILE_BODY_PART_KEYS),
+            "required_keys": ["id", "layers"],
+            "layer_keys": [C.NAME, C.MAX_HP],
+            "identifier_style": "Use simple snake_case or short words only; no punctuation beyond spaces, underscores, or hyphens.",
+            "terminal_pattern": (
+                "Include one part with is_vital true and consequence_tags ['fatal_if_destroyed']; "
+                "this is the safest way to satisfy survival validation."
+            ),
+            "grouped_tags": {
+                C.CONSEQUENCE_MOBILITY_MEMBER: C.CONSEQUENCE_GROUP_LEGS,
+                C.CONSEQUENCE_VISION_MEMBER: C.CONSEQUENCE_GROUP_VISION,
+            },
+        },
+        "allowed_consequence_tags": list(C.CONSEQUENCE_ALLOWED_TAGS),
+        "nudge_guidance": PROFILE_NUDGE_GUIDANCE[nudge],
+        "body_plan_goal": (
+            "Do not return only the default humanoid target list. Include at least one targetable custom part "
+            "that supports the nudge and can matter mechanically."
+        ),
+        "valid_example": PROFILE_GENERATOR_EXAMPLE,
+        "requirements": [
+            "Return class, theme, loadout, environment, and body_parts.",
+            "Use body_parts, not anatomy.",
+            "Use only the allowed keys; no extra fields.",
+            "Use non-empty canonical body part ids.",
+            "Omit optional body part keys instead of setting them to null.",
+            "Include at least one vital body part or explicit terminal consequence tag.",
+            "Do not include starting effects.",
+        ],
+    }
+
+
 def _require_generated_profile_defaults(profile: FighterProfile) -> None:
     missing = [
         field_name
@@ -113,20 +236,7 @@ async def generate_fighter_profile(
     cfg = config or config_mod.CONFIG
     if nudge not in C.FIGHTER_CREATION_NUDGES:
         raise ValueError(f"Unknown fighter creation nudge: {nudge!r}")
-    opponent_id = C.FIGHTER_B if fighter_id == C.FIGHTER_A else C.FIGHTER_A
-
-    user_payload = {
-        "fighter_id": fighter_id,
-        "creation_nudge": nudge,
-        "configured_seed": _generation_seed_context(section, cfg, fighter_id),
-        "opponent_seed": _generation_seed_context(opponent_section, cfg, opponent_id),
-        "requirements": [
-            "Return class, theme, loadout, environment, and body_parts.",
-            "Use non-empty canonical body part ids.",
-            "Include at least one vital body part or explicit terminal consequence tag.",
-            "Do not include starting effects.",
-        ],
-    }
+    user_payload = _profile_generation_payload(fighter_id, section, opponent_section, nudge, cfg)
     messages = [
         {C.AGENT_ROLE: C.AGENT_SYSTEM, C.AGENT_CONTENT: PROFILE_GENERATOR_SYSTEM_PROMPT},
         {C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: json.dumps(user_payload, sort_keys=True)},
