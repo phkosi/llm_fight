@@ -4,6 +4,7 @@ import pytest
 
 from llm_fight.config import Config
 from llm_fight.engine import constants as C  # For constant keys
+from llm_fight.model_defaults import AUTO_TEMPERATURE, MODEL_DEFAULTS
 
 # Sample INI content for testing
 SAMPLE_INI_CONTENT = """
@@ -278,6 +279,73 @@ def test_config_reads_utf8_bom(tmp_path):
     cfg = Config(file_path)
 
     assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int) == 7
+
+
+def test_missing_ollama_model_raises_clear_error(tmp_path):
+    file_path = tmp_path / "no_model.ini"
+    file_path.write_text("[General]\nmax_retries = 2\n", encoding="utf-8")
+    cfg = Config(file_path)
+
+    with pytest.raises(ValueError, match="ollama_default_model is required"):
+        cfg.get_ollama_model()
+
+
+def test_known_model_defaults_apply_when_not_locally_overridden(tmp_path):
+    file_path = tmp_path / "known_model.ini"
+    file_path.write_text("[General]\nollama_default_model = qwen3.6:35b\n", encoding="utf-8")
+    cfg = Config(file_path)
+    defaults = MODEL_DEFAULTS["qwen3.6:35b"]
+
+    assert cfg.get_ollama_model() == "qwen3.6:35b"
+    assert cfg.get_ollama_temperature() == defaults.ollama_temperature
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == defaults.ollama_num_ctx
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int) == defaults.max_tokens_fighter
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int) == defaults.max_tokens_judge
+
+
+def test_unknown_model_uses_generic_limits_and_auto_temperature(tmp_path):
+    file_path = tmp_path / "unknown_model.ini"
+    file_path.write_text("[General]\nollama_default_model = local/creative-model\n", encoding="utf-8")
+    cfg = Config(file_path)
+
+    assert cfg.get_ollama_model() == "local/creative-model"
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 32768
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int) == 512
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int) == 4096
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, str) == AUTO_TEMPERATURE
+    assert cfg.get_ollama_temperature() is None
+
+
+def test_local_config_overrides_model_managed_defaults(tmp_path):
+    file_path = tmp_path / "local_overrides.ini"
+    file_path.write_text(
+        "[General]\n"
+        "ollama_default_model = gemma4:26b\n"
+        "ollama_num_ctx = 12345\n"
+        "max_tokens_fighter = 321\n"
+        "max_tokens_judge = 6543\n"
+        "ollama_temperature = 0.65\n",
+        encoding="utf-8",
+    )
+    cfg = Config(file_path)
+
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 12345
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, int) == 321
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_JUDGE, int) == 6543
+    assert cfg.get_ollama_temperature() == 0.65
+
+
+def test_runtime_model_switch_recomputes_managed_defaults(tmp_path):
+    cfg = Config(tmp_path / "missing.ini")
+
+    cfg.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, "qwen3.6:35b")
+    assert cfg.get_ollama_temperature() == 0.4
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 90000
+
+    cfg.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, "local/untested")
+    assert cfg.get_ollama_model() == "local/untested"
+    assert cfg.get_ollama_temperature() is None
+    assert cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, int) == 32768
 
 
 def test_use_config_restores_previous_global_config(tmp_path):

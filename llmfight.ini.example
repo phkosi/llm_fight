@@ -1,11 +1,13 @@
 [General]
+# Required: choose the local model to run. Tested models receive built-in
+# sampling/context/token defaults unless you uncomment the override lines below.
 ollama_default_model = qwen3.6:35b
 ollama_api_url = http://localhost:11434/api/chat
 ollama_keep_alive = 10m
-ollama_num_ctx = 32768
-max_tokens_fighter = 512
-max_tokens_judge = 4096
-ollama_temperature = 0.4
+# ollama_num_ctx = 90000
+# max_tokens_fighter = 512
+# max_tokens_judge = 4096
+# ollama_temperature = 0.4
 max_retries = 1
 fighter_creation_mode = configured
 fighter_A = A

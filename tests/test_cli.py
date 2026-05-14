@@ -27,8 +27,10 @@ def test_cli_missing_option_value():
     assert "requires an argument" in result.output
 
 
-def test_cli_invalid_path():
+def test_cli_invalid_path(tmp_path):
     runner = CliRunner()
+    cfg = tmp_path / "llmfight.ini"
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\n", encoding="utf-8")
     with (
         patch(
             "llm_fight.simulation.run_batch",
@@ -36,7 +38,7 @@ def test_cli_invalid_path():
         ),
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
     ):
-        result = runner.invoke(app, ["simulate", "--output-csv", "bad/out.csv"])
+        result = runner.invoke(app, ["simulate", "--config", str(cfg), "--output-csv", "bad/out.csv"])
     assert result.exit_code != 0
     assert "invalid path" in result.output
 
@@ -59,9 +61,11 @@ def test_cli_unexpected_argument():
     assert "unexpected extra argument" in result.output
 
 
-def test_cli_ollama_unreachable():
+def test_cli_ollama_unreachable(tmp_path):
     runner = CliRunner()
+    cfg = tmp_path / "llmfight.ini"
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\n", encoding="utf-8")
     with patch("llm_fight.cli.ping_ollama", new=AsyncMock(side_effect=ConnectionError("offline"))):
-        result = runner.invoke(app, ["play"])
+        result = runner.invoke(app, ["play", "--config", str(cfg)])
     assert result.exit_code != 0
     assert "offline" in result.output

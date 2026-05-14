@@ -8,18 +8,25 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .engine import constants as C
+from .model_defaults import (
+    AUTO_TEMPERATURE,
+    GENERIC_DEFAULTS,
+    MODEL_MANAGED_KEYS,
+    model_default_config_values,
+    normalize_model_name,
+)
 
 DEFAULTS = {
     C.CONFIG_GENERAL: {
-        C.CONFIG_LLAMA_DEFAULT_MODEL: "qwen3.6:35b",
+        C.CONFIG_LLAMA_DEFAULT_MODEL: "",
         C.CONFIG_LLAMA_API_URL: "http://localhost:11434/api/chat",
         C.CONFIG_OLLAMA_KEEP_ALIVE: "10m",
-        C.CONFIG_OLLAMA_NUM_CTX: "32768",
+        C.CONFIG_OLLAMA_NUM_CTX: GENERIC_DEFAULTS[C.CONFIG_OLLAMA_NUM_CTX],
         C.CONFIG_OLLAMA_PROXY_MODE: C.OLLAMA_PROXY_AUTO,
         C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY: C.P2_FAILURE_POLICY_FAIL_OPEN,
-        C.CONFIG_MAX_TOKENS_FIGHTER: "512",
-        C.CONFIG_MAX_TOKENS_JUDGE: "4096",
-        C.CONFIG_LLAMA_TEMPERATURE: "0.4",
+        C.CONFIG_MAX_TOKENS_FIGHTER: GENERIC_DEFAULTS[C.CONFIG_MAX_TOKENS_FIGHTER],
+        C.CONFIG_MAX_TOKENS_JUDGE: GENERIC_DEFAULTS[C.CONFIG_MAX_TOKENS_JUDGE],
+        C.CONFIG_LLAMA_TEMPERATURE: GENERIC_DEFAULTS[C.CONFIG_LLAMA_TEMPERATURE],
         C.CONFIG_BEST_OF_FIGHTER: "1",
         C.CONFIG_BEST_OF_JUDGE: "1",
         C.CONFIG_MAX_RETRIES: "1",
@@ -83,6 +90,7 @@ class Config:
             self._explicit_cp.read(self.path, encoding="utf-8-sig")
             self.cp.read(self.path, encoding="utf-8-sig")
             self._migrate_old_keys()
+        self._apply_model_defaults()
 
     def _migrate_old_keys(self):
         """Handle legacy option names for backwards compatibility."""
@@ -173,6 +181,46 @@ class Config:
         if not self._explicit_cp.has_section(section):
             self._explicit_cp.add_section(section)
         self._explicit_cp[section][key] = str(value)
+        if section == C.CONFIG_GENERAL and key == C.CONFIG_LLAMA_DEFAULT_MODEL:
+            self._apply_model_defaults()
+
+    def _explicit_has_option(self, section: str, key: str) -> bool:
+        return self._explicit_cp.has_section(section) and self._explicit_cp.has_option(section, key)
+
+    def _apply_model_defaults(self) -> None:
+        """Apply generic then known-model defaults without replacing explicit values."""
+        if not self.cp.has_section(C.CONFIG_GENERAL):
+            self.cp.add_section(C.CONFIG_GENERAL)
+        model = normalize_model_name(self.cp.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, fallback=""))
+        if model != self.cp.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, fallback=""):
+            self.cp.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, model)
+        values = {**GENERIC_DEFAULTS, **model_default_config_values(model)}
+        for key in MODEL_MANAGED_KEYS:
+            if not self._explicit_has_option(C.CONFIG_GENERAL, key):
+                self.cp.set(C.CONFIG_GENERAL, key, values[key])
+
+    def get_ollama_model(self) -> str:
+        """Return the configured model, raising a clear error when none is selected."""
+        model = normalize_model_name(self.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str, fallback=""))
+        if not model:
+            raise ValueError(
+                f"[{C.CONFIG_GENERAL}] {C.CONFIG_LLAMA_DEFAULT_MODEL} is required for LLM runs. "
+                "Set it in llmfight.ini or pass --config with a file that sets it."
+            )
+        return model
+
+    def get_ollama_temperature(self) -> float | None:
+        """Return configured temperature, or ``None`` when provider defaults should apply."""
+        raw_value = self.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, str, fallback=AUTO_TEMPERATURE)
+        value = str(raw_value).strip().lower()
+        if not value or value == AUTO_TEMPERATURE:
+            return None
+        try:
+            return float(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"[{C.CONFIG_GENERAL}] {C.CONFIG_LLAMA_TEMPERATURE} must be a number or '{AUTO_TEMPERATURE}'."
+            ) from exc
 
     def _explicit_section_value(self, section: str, key: str) -> str | None:
         """Return a user-authored/runtime value set directly on ``section``."""

@@ -269,7 +269,7 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
 def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_enabled(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "logs.ini"
-    cfg.write_text("[General]\nlog_combat_turns = true\n")
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\nlog_combat_turns = true\n")
     log = MagicMock(turns=[])
 
     from llm_fight import config as config_mod
@@ -300,7 +300,7 @@ def test_cli_play_suppresses_engine_logs_without_verbose_even_when_turn_logging_
 def test_cli_play_with_config(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "alt.ini"
-    cfg.write_text("[General]\nmax_retries = 9\n")
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\nmax_retries = 9\n")
 
     async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False, on_event=None):
         from llm_fight.config import CONFIG
@@ -334,7 +334,7 @@ def test_cli_play_with_config(tmp_path):
 def test_cli_play_restores_config_after_runtime_failure(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "failure.ini"
-    cfg.write_text("[General]\nmax_retries = 9\n", encoding="utf-8")
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\nmax_retries = 9\n", encoding="utf-8")
 
     from llm_fight import config as config_mod
 
@@ -347,10 +347,36 @@ def test_cli_play_restores_config_after_runtime_failure(tmp_path):
     assert config_mod.CONFIG is original
 
 
+def test_cli_play_explicit_config_requires_model_before_ping(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "no_model.ini"
+    cfg.write_text("[General]\nmax_retries = 9\n", encoding="utf-8")
+    ping = AsyncMock()
+
+    with patch("llm_fight.cli.ping_ollama", new=ping):
+        result = runner.invoke(app, ["play", "--config", str(cfg), "--simple-output"])
+
+    assert result.exit_code != 0
+    assert "ollama_default_model is required" in result.output
+    ping.assert_not_awaited()
+
+
+def test_cli_play_without_default_config_requires_model_before_ping(tmp_path):
+    runner = CliRunner()
+    ping = AsyncMock()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path), patch("llm_fight.cli.ping_ollama", new=ping):
+        result = runner.invoke(app, ["play", "--simple-output"])
+
+    assert result.exit_code != 0
+    assert "ollama_default_model is required" in result.output
+    ping.assert_not_awaited()
+
+
 def test_cli_play_seeds_rng_from_active_config_after_rng_import(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "seeded.ini"
-    cfg.write_text("[SIMULATION]\nseed = 31415\n", encoding="utf-8")
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\n\n[SIMULATION]\nseed = 31415\n", encoding="utf-8")
     observed_rolls = []
 
     from llm_fight import config as config_mod

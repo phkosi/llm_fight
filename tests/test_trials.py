@@ -99,6 +99,58 @@ def test_finalist_matrix_expands_expected_settings_and_seeds():
     assert len(gemma_candidates) == 6
 
 
+def test_default_finalization_matrix_requires_one_model_and_expands_qwen_candidates():
+    cells = iter_trial_matrix(
+        C.FIGHTER_CREATION_MODE_CONFIGURED,
+        matrix="default-finalization",
+        models=("qwen3.6:35b",),
+    )
+
+    assert len(cells) == 12
+    assert {cell.seed for cell in cells} == set(DEFAULT_FINALIST_SEEDS)
+    assert {cell.model for cell in cells} == {"qwen3.6:35b"}
+    assert [(cell.temperature, cell.token_preset.label) for cell in cells[:4]] == [
+        (0.4, "default"),
+        (0.2, "expansive"),
+        (0.4, "expansive"),
+        (0.4, "focused"),
+    ]
+    assert [cell.cell_id for cell in cells[:4]] == ["cell-0001", "cell-0002", "cell-0003", "cell-0004"]
+
+
+def test_default_finalization_matrix_expands_gemma_candidates():
+    cells = iter_trial_matrix(
+        C.FIGHTER_CREATION_MODE_GENERATED,
+        matrix="default-finalization",
+        models=("gemma4:26b",),
+    )
+
+    assert len(cells) == 18
+    assert {cell.seed for cell in cells} == set(DEFAULT_FINALIST_SEEDS)
+    assert {cell.model for cell in cells} == {"gemma4:26b"}
+    assert [(cell.temperature, cell.token_preset.label) for cell in cells[:6]] == [
+        (0.4, "default"),
+        (0.2, "expansive"),
+        (0.7, "focused"),
+        (0.2, "default"),
+        (0.4, "expansive"),
+        (0.7, "expansive"),
+    ]
+
+
+def test_default_finalization_matrix_rejects_missing_or_multiple_models():
+    with pytest.raises(ValueError, match="exactly one --model"):
+        iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, matrix="default-finalization")
+    with pytest.raises(ValueError, match="exactly one --model"):
+        iter_trial_matrix(
+            C.FIGHTER_CREATION_MODE_CONFIGURED,
+            matrix="default-finalization",
+            models=("qwen3.6:35b", "gemma4:26b"),
+        )
+    with pytest.raises(ValueError, match="Unknown trial model"):
+        iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, matrix="full", models=("custom-model",))
+
+
 def test_trial_matrix_custom_seeds_and_smoke_are_opt_in():
     default_cells = iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED)
     multi_seed_cells = iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, seeds=(7, 8))
@@ -115,6 +167,8 @@ def test_trial_matrix_custom_seeds_and_smoke_are_opt_in():
 def test_parse_seed_list_defaults_and_validation():
     assert parse_seed_list(None, matrix="full") == (42,)
     assert parse_seed_list(None, matrix="finalist") == DEFAULT_FINALIST_SEEDS
+    assert parse_seed_list(None, matrix="default-finalization") == DEFAULT_FINALIST_SEEDS
+    assert parse_seed_list(None, matrix="defaults") == DEFAULT_FINALIST_SEEDS
     assert parse_seed_list(" 101, 102,101 ") == (101, 102)
     with pytest.raises(ValueError, match="Invalid seed"):
         parse_seed_list("101,nope")
@@ -320,6 +374,7 @@ async def test_collect_trials_finalist_matrix_writes_seeded_manifest_and_pairs(t
 
     assert manifest["matrix"] == "finalist"
     assert manifest["seeds"] == [11]
+    assert manifest["models"] == ["gemma4:26b", "qwen3.6:35b"]
     assert len(manifest["cells"]) == 5
     assert len(manifest["pairs"]) == 3
     assert all(pair["seed"] == 11 for pair in manifest["pairs"])
@@ -535,6 +590,7 @@ def test_cli_collect_trials_wires_command(tmp_path):
         smoke=True,
         matrix="full",
         seeds=(42,),
+        models=None,
     )
 
 
@@ -569,4 +625,60 @@ def test_cli_collect_trials_wires_finalist_matrix_and_seeds(tmp_path):
         smoke=False,
         matrix="finalist",
         seeds=(101, 102),
+        models=None,
     )
+
+
+def test_cli_collect_trials_wires_default_finalization_model_and_seeds(tmp_path):
+    runner = CliRunner()
+    output_root = tmp_path / "trials"
+    returned_root = output_root / "fixed"
+
+    with (
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        patch("llm_fight.trials.collect_trials", new=AsyncMock(return_value=returned_root)) as collect,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "collect-trials",
+                "--output-root",
+                str(output_root),
+                "--matrix",
+                "default-finalization",
+                "--model",
+                "qwen3.6:35b",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Trial artifacts saved to" in result.output
+    collect.assert_awaited_once_with(
+        config_path=None,
+        output_root=output_root,
+        mode=C.FIGHTER_CREATION_MODE_CONFIGURED,
+        smoke=False,
+        matrix="default-finalization",
+        seeds=DEFAULT_FINALIST_SEEDS,
+        models=("qwen3.6:35b",),
+    )
+
+
+def test_cli_collect_trials_default_finalization_requires_model(tmp_path):
+    runner = CliRunner()
+    ping = AsyncMock()
+    collect = AsyncMock()
+
+    with (
+        patch("llm_fight.cli.ping_ollama", new=ping),
+        patch("llm_fight.trials.collect_trials", new=collect),
+    ):
+        result = runner.invoke(
+            app,
+            ["collect-trials", "--output-root", str(tmp_path / "trials"), "--matrix", "default-finalization"],
+        )
+
+    assert result.exit_code != 0
+    assert "requires exactly one --model" in result.output
+    ping.assert_not_awaited()
+    collect.assert_not_awaited()

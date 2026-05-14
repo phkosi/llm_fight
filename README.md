@@ -68,6 +68,8 @@ Useful `play` options:
 
 Copy [llmfight.ini.example](llmfight.ini.example) to `llmfight.ini`; local `.ini` files are ignored by Git.
 
+`[General] ollama_default_model` is required. Tested models such as `qwen3.6:35b` and `gemma4:26b` receive built-in context, token, and temperature defaults unless your local config explicitly overrides those values.
+
 The default config defines a named knight and assassin. `name` is display-only: prompts, output, and transcripts show the label, but mechanics and JSON keys still use stable ids `A` and `B`.
 
 ```ini

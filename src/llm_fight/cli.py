@@ -26,6 +26,7 @@ def _command_runtime(
     *,
     runs: int | None = None,
     max_turns: int | None = None,
+    require_model: bool = False,
 ):
     from . import config as config_mod
     from . import rng
@@ -35,6 +36,11 @@ def _command_runtime(
     try:
         with config_mod.use_config(runtime_config):
             _apply_simulation_overrides(runtime_config, runs=runs, max_turns=max_turns)
+            if require_model:
+                try:
+                    runtime_config.get_ollama_model()
+                except ValueError as exc:
+                    raise ClickException(str(exc)) from exc
             rng.seed_from_config(runtime_config)
             yield runtime_config
     finally:
@@ -344,7 +350,7 @@ def simulate(
     if not render.RICH_AVAILABLE:
         raise ClickException("The 'rich' library is required for this command")
 
-    with _command_runtime(config, runs=runs, max_turns=max_turns), cli_logging(update_level=False):
+    with _command_runtime(config, runs=runs, max_turns=max_turns, require_model=True), cli_logging(update_level=False):
         batch_runs, _ = _validate_batch_config()
         update_logger_level()
         log_turns = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LOG_COMBAT_TURNS, bool, fallback=False)
@@ -389,23 +395,30 @@ def collect_trials(
     matrix: str = typer.Option(
         "full",
         "--matrix",
-        help="Trial matrix: full or finalist",
+        help="Trial matrix: full, finalist, or default-finalization",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="Restrict trials to one tested model; required for --matrix default-finalization.",
     ),
     seeds: str | None = typer.Option(
         None,
         "--seeds",
-        help="Comma-separated integer seeds. Defaults to 42 for full, 42,43,44 for finalist.",
+        help="Comma-separated integer seeds. Defaults to 42 for full; 42,43,44 for finalist and default-finalization.",
     ),
 ):
     """Collect local parameter-trial artifacts and blind A/B packs."""
     from .engine.logger import cli_logging, update_logger_level
     from .trials import collect_trials as collect_trial_artifacts
-    from .trials.specs import normalize_matrix, normalize_mode, parse_seed_list
+    from .trials.specs import iter_trial_matrix, normalize_matrix, normalize_mode, parse_seed_list
 
     try:
         mode = normalize_mode(mode)
         matrix = normalize_matrix(matrix)
         parsed_seeds = parse_seed_list(seeds, matrix=matrix)
+        parsed_models = (model,) if model else None
+        iter_trial_matrix(mode, smoke=smoke, matrix=matrix, seeds=parsed_seeds, models=parsed_models)
     except ValueError as exc:
         raise ClickException(str(exc)) from exc
 
@@ -420,6 +433,7 @@ def collect_trials(
                 smoke=smoke,
                 matrix=matrix,
                 seeds=parsed_seeds,
+                models=parsed_models,
             )
         )
     typer.echo(f"Trial artifacts saved to {run_root}")
@@ -530,7 +544,7 @@ def play(
     if not render.RICH_AVAILABLE and not simple_output:
         raise ClickException("The 'rich' library is required for this command")
 
-    with _command_runtime(config, max_turns=max_turns), cli_logging(update_level=False):
+    with _command_runtime(config, max_turns=max_turns, require_model=True), cli_logging(update_level=False):
         update_logger_level()
         if not verbose:
             logger.setLevel(CRITICAL)

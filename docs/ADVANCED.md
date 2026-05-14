@@ -29,11 +29,14 @@ Use `collect-trials` when you need preserved fight evidence and blind A/B packs 
 uv run llmfight collect-trials --smoke
 uv run llmfight collect-trials --mode generated
 uv run llmfight collect-trials --matrix finalist
+uv run llmfight collect-trials --matrix default-finalization --model qwen3.6:35b
 ```
 
 Trial artifacts are written under `transcripts/trials/<timestamp>/`, which is ignored by Git. The private `manifest.json` contains unblinded model, parameter, path, retry, and reproduction metadata. Judge-facing packs under `blind_packs/` are generated from sanitized summaries and should be reviewed without opening the manifest.
 
 The default `full` matrix remains one seed across every model/temperature/token-preset cell. The opt-in `finalist` matrix runs the smaller retest set: `qwen3.6:35b` baseline plus `0.2/expansive`, and `gemma4:26b` baseline plus `0.2/expansive` and `0.7/focused`. It defaults to seeds `42,43,44`; use `--seeds 101,102,103` to choose explicit seeds.
+
+The `default-finalization` matrix is for model-default promotion evidence and intentionally runs one model at a time via `--model`. It compares `0.4/default` against the current candidate set for the selected tested model across the multi-seed default.
 
 Use `collect-profile-trials` when you need to measure generated-fighter profile reliability without running full fights:
 
@@ -59,12 +62,14 @@ Common first-run settings live in `llmfight.ini.example`. Less common controls c
 
 ```ini
 [General]
+ollama_default_model = qwen3.6:35b
 ollama_keep_alive = 10m
-ollama_num_ctx = 32768
 ollama_proxy_mode = auto
-max_tokens_fighter = 512
-max_tokens_judge = 4096
-ollama_temperature = 0.4
+# Built-in tested-model defaults manage these unless locally overridden:
+# ollama_num_ctx = 90000
+# max_tokens_fighter = 512
+# max_tokens_judge = 4096
+# ollama_temperature = 0.4
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
@@ -87,6 +92,8 @@ seed = 42
 concurrent_runs = 1
 max_turns = 6
 ```
+
+`ollama_default_model` is required for LLM runs. Known tested models use the built-in registry first, then local `llmfight.ini` values override it. Unknown models keep generic program-managed context/output limits and leave `ollama_temperature = auto` so the provider default is used unless the local config sets a numeric value.
 
 `profile` remains accepted as a legacy alias for `anatomy_profile`, but new examples and docs should use `anatomy_profile`.
 

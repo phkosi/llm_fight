@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from llm_fight.engine import constants as C
+from llm_fight.token_presets import TOKEN_PRESETS, TOKEN_PRESETS_BY_LABEL, TokenPreset
 
 TrialMode = Literal["configured", "generated"]
-TrialMatrix = Literal["full", "finalist"]
+TrialMatrix = Literal["full", "finalist", "default-finalization"]
 
 MODEL_ORDER = ("qwen3.6:35b", "gemma4:26b")
 TEMPERATURES = (0.2, 0.4, 0.7)
@@ -21,21 +22,6 @@ DEFAULT_OLLAMA_NUM_CTX = 90000
 DEFAULT_MAX_TURNS = 6
 
 
-@dataclass(frozen=True)
-class TokenPreset:
-    """Coupled fighter/judge completion budgets for one trial cell."""
-
-    label: str
-    fighter_tokens: int
-    judge_tokens: int
-
-
-TOKEN_PRESETS = (
-    TokenPreset("focused", fighter_tokens=384, judge_tokens=3072),
-    TokenPreset("default", fighter_tokens=512, judge_tokens=4096),
-    TokenPreset("expansive", fighter_tokens=768, judge_tokens=6144),
-)
-TOKEN_PRESETS_BY_LABEL = {preset.label: preset for preset in TOKEN_PRESETS}
 FINALIST_SETTINGS = {
     "qwen3.6:35b": (
         (BASELINE_TEMPERATURE, BASELINE_TOKEN_PRESET),
@@ -45,6 +31,22 @@ FINALIST_SETTINGS = {
         (BASELINE_TEMPERATURE, BASELINE_TOKEN_PRESET),
         (0.2, "expansive"),
         (0.7, "focused"),
+    ),
+}
+DEFAULT_FINALIZATION_SETTINGS = {
+    "qwen3.6:35b": (
+        (BASELINE_TEMPERATURE, BASELINE_TOKEN_PRESET),
+        (0.2, "expansive"),
+        (0.4, "expansive"),
+        (0.4, "focused"),
+    ),
+    "gemma4:26b": (
+        (BASELINE_TEMPERATURE, BASELINE_TOKEN_PRESET),
+        (0.2, "expansive"),
+        (0.7, "focused"),
+        (0.2, "default"),
+        (0.4, "expansive"),
+        (0.7, "expansive"),
     ),
 }
 
@@ -121,16 +123,18 @@ def normalize_mode(mode: str) -> TrialMode:
 
 def normalize_matrix(matrix: str) -> TrialMatrix:
     normalized = str(matrix).strip().lower()
-    if normalized in {"full", "finalist"}:
+    if normalized == "defaults":
+        normalized = "default-finalization"
+    if normalized in {"full", "finalist", "default-finalization"}:
         return cast(TrialMatrix, normalized)
-    raise ValueError("matrix must be 'full' or 'finalist'")
+    raise ValueError("matrix must be 'full', 'finalist', or 'default-finalization'")
 
 
 def parse_seed_list(seed_text: str | None, *, matrix: str = "full") -> tuple[int, ...]:
     """Parse a comma-separated seed list, applying matrix defaults when absent."""
     trial_matrix = normalize_matrix(matrix)
     if seed_text is None or not str(seed_text).strip():
-        return DEFAULT_FINALIST_SEEDS if trial_matrix == "finalist" else (DEFAULT_SEED,)
+        return DEFAULT_FINALIST_SEEDS if trial_matrix in {"finalist", "default-finalization"} else (DEFAULT_SEED,)
     seeds = []
     for raw_seed in str(seed_text).split(","):
         raw_seed = raw_seed.strip()
@@ -153,6 +157,7 @@ def iter_trial_matrix(
     smoke: bool = False,
     matrix: str = "full",
     seeds: Sequence[int] | None = None,
+    models: Sequence[str] | None = None,
 ) -> list[TrialCellSpec]:
     """Return the fixed qwen-then-gemma trial matrix."""
     trial_mode = normalize_mode(mode)
@@ -161,7 +166,7 @@ def iter_trial_matrix(
     cells = []
     index = 1
     for seed in matrix_seeds:
-        for model, temperature, preset in _matrix_settings(trial_matrix):
+        for model, temperature, preset in _matrix_settings(trial_matrix, models=models):
             cells.append(
                 TrialCellSpec(
                     index=index,
@@ -187,15 +192,36 @@ def iter_profile_matrix(*, smoke: bool = False) -> list[ProfileTrialSpec]:
     return profiles[:1] if smoke else profiles
 
 
-def _matrix_settings(matrix: TrialMatrix) -> list[tuple[str, float, TokenPreset]]:
+def _normalize_model_filter(matrix: TrialMatrix, models: Sequence[str] | None) -> tuple[str, ...]:
+    selected: tuple[str, ...]
+    if models is None:
+        selected = MODEL_ORDER
+    else:
+        selected = tuple(str(model).strip() for model in models if str(model).strip())
+        if not selected:
+            raise ValueError("At least one model is required when --model is used.")
+    unknown = [model for model in selected if model not in MODEL_ORDER]
+    if unknown:
+        allowed = ", ".join(MODEL_ORDER)
+        raise ValueError(f"Unknown trial model(s): {', '.join(unknown)}. Allowed models: {allowed}")
+    if matrix == "default-finalization" and len(selected) != 1:
+        raise ValueError("default-finalization matrix requires exactly one --model value.")
+    return selected
+
+
+def _matrix_settings(
+    matrix: TrialMatrix, *, models: Sequence[str] | None = None
+) -> list[tuple[str, float, TokenPreset]]:
     settings = []
+    selected_models = _normalize_model_filter(matrix, models)
     if matrix == "full":
-        for model in MODEL_ORDER:
+        for model in selected_models:
             for temperature in TEMPERATURES:
                 for preset in TOKEN_PRESETS:
                     settings.append((model, temperature, preset))
         return settings
-    for model in MODEL_ORDER:
-        for temperature, token_preset in FINALIST_SETTINGS[model]:
+    matrix_settings = DEFAULT_FINALIZATION_SETTINGS if matrix == "default-finalization" else FINALIST_SETTINGS
+    for model in selected_models:
+        for temperature, token_preset in matrix_settings[model]:
             settings.append((model, temperature, TOKEN_PRESETS_BY_LABEL[token_preset]))
     return settings

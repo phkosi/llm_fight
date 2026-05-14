@@ -1,11 +1,12 @@
 """Trial collection harness for parameter and generated-fighter comparisons."""
 
+from llm_fight.token_presets import TokenPreset
+
 from .analysis import analyze_trials
 from .profile_eval import collect_profile_trials
 from .runner import collect_trials
 from .specs import (
     ProfileTrialSpec,
-    TokenPreset,
     TrialCellSpec,
     iter_profile_matrix,
     iter_trial_matrix,

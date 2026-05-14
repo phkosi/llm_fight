@@ -37,6 +37,7 @@ async def collect_trials(
     smoke: bool = False,
     matrix: str = "full",
     seeds: Sequence[int] | None = None,
+    models: Sequence[str] | None = None,
     timestamp: str | None = None,
     fight_runner: FightRunner | None = None,
 ) -> Path:
@@ -45,7 +46,7 @@ async def collect_trials(
     trial_matrix = normalize_matrix(matrix)
     run_root = create_run_root(output_root, timestamp)
     cells = []
-    specs = iter_trial_matrix(trial_mode, smoke=smoke, matrix=trial_matrix, seeds=seeds)
+    specs = iter_trial_matrix(trial_mode, smoke=smoke, matrix=trial_matrix, seeds=seeds, models=models)
     for spec in specs:
         cells.append(await _collect_cell(run_root, config_path=config_path, spec=spec, fight_runner=fight_runner))
 
@@ -57,6 +58,7 @@ async def collect_trials(
         "matrix": trial_matrix,
         "smoke": smoke,
         "seeds": sorted({cell["seed"] for cell in cells}),
+        "models": sorted({cell["model"] for cell in cells}),
         "artifact_root": str(run_root),
         "cells": [_manifest_cell(cell) for cell in cells],
         "pairs": pairs,

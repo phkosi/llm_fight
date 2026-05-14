@@ -78,7 +78,7 @@ def test_cli_simulate_verbose(tmp_path):
 def test_cli_simulate_with_config(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "alt.ini"
-    cfg.write_text("[SIMULATION]\nseed = 77\n")
+    cfg.write_text("[General]\nollama_default_model = qwen3.6:35b\n\n[SIMULATION]\nseed = 77\n")
 
     async def fake_run_batch(output_csv, fighter_a_section=None, fighter_b_section=None):
         from llm_fight.config import CONFIG
@@ -111,8 +111,8 @@ def test_cli_simulate_scopes_configs_across_sequential_invocations(tmp_path):
     runner = CliRunner()
     cfg_one = tmp_path / "one.ini"
     cfg_two = tmp_path / "two.ini"
-    cfg_one.write_text("[SIMULATION]\nseed = 11\n", encoding="utf-8")
-    cfg_two.write_text("[SIMULATION]\nseed = 22\n", encoding="utf-8")
+    cfg_one.write_text("[General]\nollama_default_model = qwen3.6:35b\n\n[SIMULATION]\nseed = 11\n", encoding="utf-8")
+    cfg_two.write_text("[General]\nollama_default_model = qwen3.6:35b\n\n[SIMULATION]\nseed = 22\n", encoding="utf-8")
     seen = []
 
     async def fake_run_batch(output_csv, fighter_a_section=None, fighter_b_section=None):
@@ -300,7 +300,10 @@ def test_cli_simulate_prompt_budget_error_is_actionable():
 def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "bad_batch.ini"
-    cfg.write_text("[SIMULATION]\nconcurrent_runs = 0\n")
+    cfg.write_text(
+        "[General]\nollama_default_model = qwen3.6:35b\n\n[SIMULATION]\nconcurrent_runs = 0\n",
+        encoding="utf-8",
+    )
 
     from llm_fight import config as config_mod
 
@@ -320,6 +323,20 @@ def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
     assert "concurrent_runs" in result.output
     ping.assert_not_awaited()
     run_batch.assert_not_awaited()
+
+
+def test_cli_simulate_explicit_config_requires_model_before_ping(tmp_path):
+    runner = CliRunner()
+    cfg = tmp_path / "no_model.ini"
+    cfg.write_text("[SIMULATION]\nseed = 77\n", encoding="utf-8")
+    ping = AsyncMock()
+
+    with patch("llm_fight.cli.ping_ollama", new=ping):
+        result = runner.invoke(app, ["simulate", "--config", str(cfg)])
+
+    assert result.exit_code != 0
+    assert "ollama_default_model is required" in result.output
+    ping.assert_not_awaited()
 
 
 def test_cli_simulate_negative_runs_override_fails_before_ping():

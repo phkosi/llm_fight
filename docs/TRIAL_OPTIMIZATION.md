@@ -26,6 +26,19 @@ The configured finalist retest produced 15 completed cells and 9 same-model/same
 
 The generated-mode retest shows the prompt reliability pass worked for profile creation but not yet for parameter promotion. A narrow profile retry fix recovered invalid profile responses during the run; the full run completed 18/18 cells and 16 same-model blind pairs with 36 generated profiles, 0 fallback profiles, 3 P2 fallback turns, and pervasive custom generated anatomy. Blind judging settled at baseline 5, candidate 5, inconclusive 6. No setting promotes from this single-seed evidence. `qwen3.6:35b` `0.4/expansive` and `0.4/focused` are single-seed `retest`; most other qwen generated settings reject or remain inconclusive. `gemma4:26b` `0.2/default`, `0.4/expansive`, and `0.7/expansive` are single-seed `retest`; other gemma generated settings reject or remain inconclusive. Reviewers repeatedly found useful generated anatomy and silhouettes, but also target conflicts, dropped successful consequences, setup/status-only successful hits, P2 fallback, and `p=0.0` UX; treat these as generated-anatomy reliability findings rather than prompt-schema fallback findings.
 
+## Runtime Defaults
+
+Runtime model selection now uses a built-in registry with local config overrides. `[General] ollama_default_model` is required for LLM runs. Tested models currently receive provisional `0.4/default` settings with `max_tokens_fighter = 512`, `max_tokens_judge = 4096`, and `ollama_num_ctx = 90000`; unknown models use generic output/context limits and omit temperature so the provider default applies unless the local config sets a numeric temperature.
+
+Targeted default-finalization evidence should be collected one model at a time:
+
+```bash
+uv run llmfight collect-trials --matrix default-finalization --model qwen3.6:35b
+uv run llmfight collect-trials --matrix default-finalization --model gemma4:26b
+```
+
+Promotion rule: a candidate must beat baseline overall with no profile fallback, no review-result inconsistency, no parse-failure cells, and no worse P2 fallback rate than baseline. If no candidate clears that bar, keep `0.4/default`.
+
 ## Analysis Workflow
 
 `analyze-trials` writes ignored local reports under each run root or under `transcripts/trials/analysis/<timestamp>/` for combined runs:

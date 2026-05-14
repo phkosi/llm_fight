@@ -14,8 +14,20 @@ from llm_fight.config import (
 from llm_fight.engine import constants as C
 
 BASE_OLLAMA_URL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str, fallback="http://localhost:11434/api/chat")
-DEFAULT_MODEL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
-DEFAULT_TEMP = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
+DEFAULT_MODEL = "qwen3.6:35b"
+DEFAULT_TEMP = 0.4
+
+
+@pytest.fixture(autouse=True)
+def configured_agent_defaults(tmp_path):
+    cfg_path = tmp_path / "llmfight.ini"
+    cfg_path.write_text("[General]\nollama_default_model = qwen3.6:35b\n", encoding="utf-8")
+    old_config = config_mod.CONFIG
+    config_mod.CONFIG = Config(cfg_path)
+    try:
+        yield
+    finally:
+        config_mod.CONFIG = old_config
 
 
 @pytest.mark.asyncio
@@ -365,6 +377,71 @@ async def test_chat_native_payload_keeps_num_ctx_separate_from_generation_limit(
     assert payload[C.AGENT_OPTIONS][C.NUM_CTX] == 32768
     assert payload[C.AGENT_OPTIONS][C.AGENT_NUM_PREDICT] == 64
     assert payload[C.AGENT_KEEP_ALIVE] == "10m"
+
+
+@pytest.mark.asyncio
+async def test_chat_omits_temperature_for_unknown_model_without_explicit_setting(tmp_path):
+    cfg_path = tmp_path / "unknown.ini"
+    cfg_path.write_text("[General]\nollama_default_model = local/untested-model\n", encoding="utf-8")
+    old_config = config_mod.CONFIG
+    config_mod.CONFIG = Config(cfg_path)
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    try:
+        with patch.dict(os.environ, {"API_URL": BASE_OLLAMA_URL}):
+            await chat(
+                messages=[{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}], max_tokens=12, session=session
+            )
+    finally:
+        config_mod.CONFIG = old_config
+
+    payload = session.post.call_args.kwargs["json"]
+    assert payload[C.AGENT_MODEL] == "local/untested-model"
+    assert payload[C.AGENT_OPTIONS][C.AGENT_NUM_PREDICT] == 12
+    assert C.TEMPERATURE not in payload[C.AGENT_OPTIONS]
+
+
+@pytest.mark.asyncio
+async def test_chat_openai_compat_omits_temperature_for_unknown_model_without_explicit_setting(tmp_path):
+    cfg_path = tmp_path / "unknown-openai.ini"
+    cfg_path.write_text("[General]\nollama_default_model = local/untested-model\n", encoding="utf-8")
+    old_config = config_mod.CONFIG
+    config_mod.CONFIG = Config(cfg_path)
+    openai_url = "http://localhost:11434/v1/chat/completions"
+
+    mock_resp = AsyncMock()
+    mock_resp.json = AsyncMock(return_value={C.OLLAMA_CHOICES: [{C.OLLAMA_MESSAGE: {C.AGENT_CONTENT: "ok"}}]})
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_resp
+    session = MagicMock()
+    session.closed = False
+    session.close = AsyncMock()
+    session.post = MagicMock(return_value=mock_cm)
+
+    try:
+        with patch.dict(os.environ, {"API_URL": openai_url}):
+            await chat(
+                messages=[{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Hello"}], max_tokens=12, session=session
+            )
+    finally:
+        config_mod.CONFIG = old_config
+
+    payload = session.post.call_args.kwargs["json"]
+    assert payload[C.AGENT_MODEL] == "local/untested-model"
+    assert payload[C.AGENT_MAX_TOKENS] == 12
+    assert C.TEMPERATURE not in payload
 
 
 @pytest.mark.asyncio

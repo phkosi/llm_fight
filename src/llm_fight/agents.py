@@ -138,8 +138,8 @@ async def chat_with_metadata(
     """Return completions with real provider metadata when available."""
     tasks = []
     cfg = config_mod.CONFIG
-    model = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str)
-    temp = cfg.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_TEMPERATURE, float)
+    model = cfg.get_ollama_model()
+    temp = cfg.get_ollama_temperature()
     keep_alive = cfg.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, str, fallback="10m")
     endpoint = resolve_endpoint()
     use_openai = endpoint.mode == "openai_compat"
@@ -151,17 +151,19 @@ async def chat_with_metadata(
             if use_openai:
                 payload = {
                     C.AGENT_MODEL: model,
-                    C.TEMPERATURE: temp,
                     C.AGENT_MAX_TOKENS: max_tokens,
                     C.AGENT_MESSAGES: messages,
                 }
+                if temp is not None:
+                    payload[C.TEMPERATURE] = temp
                 if schema is not None:
                     payload[C.AGENT_RESPONSE_FORMAT] = _response_format(schema)
             else:
-                options = {
-                    C.TEMPERATURE: temp,
+                options: dict[str, Any] = {
                     C.AGENT_NUM_PREDICT: max_tokens,
                 }
+                if temp is not None:
+                    options[C.TEMPERATURE] = temp
                 if num_ctx is not None:
                     options[C.NUM_CTX] = num_ctx
                 payload = {
