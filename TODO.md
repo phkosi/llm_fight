@@ -4,15 +4,6 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Finalist Retest And Model Preset Recommendation
-
-Addresses: none
-
-- [ ] Implementation intent: Run the multi-seed configured finalist trials, analyze them, judge blind packs, and turn the results into provisional model-specific parameter recommendations.
-- [ ] Acceptance goals: `docs/TRIAL_OPTIMIZATION.md` names the recommended starting settings per tested model, evidence roots, review outcomes, reliability flags, and whether any setting remains `retest` instead of `promote`.
-- [ ] Required tests: No new code required unless analysis gaps are found; add tests only for any tooling fix needed during the retest.
-- [ ] Verification: `uv run llmfight analyze-trials <finalist roots...>`; standard quality gates if files change; 2-subagent review before commit.
-
 ### Generated-Mode Retest After Profile Reliability
 
 Addresses: DESIGN-002

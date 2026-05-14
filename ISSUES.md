@@ -36,6 +36,16 @@ No active issues.
 - Suggested fix: Split into focused modules such as `phase2_wounds.py`, `phase2_effect_repairs.py`, `phase2_narration.py`, and a small orchestration wrapper; split tests along the same boundaries with shared fighter/p1/p2 fixtures.
 - Tests: Preserve the existing Phase 2 authorization, prompt-safety, combat-log, render, and simulation-turn tests; add focused tests for each extracted helper module before deleting the large-file issue.
 
+### ISSUE-002: Judge Phase 2 effect payloads still cause fallback and authority oddities
+
+- Status: open
+- Task: none
+- Source: playtest
+- Evidence: Configured finalist retest `uv run llmfight collect-trials --matrix finalist` wrote accepted artifacts to `transcripts/trials/20260514_183917` after smoke root `transcripts/trials/20260514_183741`. `uv run llmfight analyze-trials transcripts/trials/20260514_183917` reported 6 total P2 fallback turns and flagged `baseline_p2_fallback` / `candidate_p2_fallback` across multiple pairs. Runtime warnings included invalid zero-value `stat_tick` mechanics, object-shaped `ttl` fields, and `on_tick: null`; blind reviewers also noted suspicious wrong-side poison/debuff application and invalid target acceptance such as throat attacks.
+- Impact: These failures do not block artifact collection, but they block parameter promotion by making otherwise strong samples land in `retest`, reduce trust in tactical causality, and make reviewer outcomes more disagreement-prone.
+- Suggested fix: Tighten Judge Phase 2 prompt/schema guidance around positive mechanic values, scalar integer `ttl`, required effect magnitude/value fields, source ownership, and canonical target parts; consider deterministic repair or dropping for zero-value/no-op mechanics before fallback.
+- Tests: Add focused Judge Phase 2 validation/repair tests for zero-valued mechanics, object-shaped TTLs, null text fields, wrong-side effect source, and non-canonical target names; preserve existing Phase 2 authorization and simulation-turn tests.
+
 ## P3
 
 No active issues.
