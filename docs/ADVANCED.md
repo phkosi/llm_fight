@@ -32,6 +32,15 @@ uv run llmfight collect-trials --mode generated
 
 Trial artifacts are written under `transcripts/trials/<timestamp>/`, which is ignored by Git. The private `manifest.json` contains unblinded model, parameter, path, retry, and reproduction metadata. Judge-facing packs under `blind_packs/` are generated from sanitized summaries and should be reviewed without opening the manifest.
 
+After blind reviews are recorded in `review_results.json`, use `analyze-trials` to build repeatable local reports without contacting Ollama:
+
+```bash
+uv run llmfight analyze-trials transcripts/trials/<timestamp>
+uv run llmfight analyze-trials transcripts/trials/<configured> transcripts/trials/<generated>
+```
+
+The command writes `analysis.json`, `analysis.md`, `settings.csv`, and `pairs.csv`. A single input root defaults to `<run_root>/analysis/`; multiple roots default to `transcripts/trials/analysis/<timestamp>/`. The reports recompute review totals from structured results, flag note/result contradictions, summarize generated-profile fallback, and mark generated-mode parameter conclusions as blocked while profile fallback remains high.
+
 ## Advanced Config
 
 Common first-run settings live in `llmfight.ini.example`. Less common controls can still be placed in `llmfight.ini`.

@@ -411,6 +411,29 @@ def collect_trials(
     typer.echo(f"Trial artifacts saved to {run_root}")
 
 
+@app.command("analyze-trials")
+def analyze_trials(
+    run_roots: list[Path] = typer.Argument(
+        ...,
+        help="One or more trial run roots containing manifest.json and review_results.json",
+    ),
+    output_dir: Path | None = typer.Option(
+        None,
+        "--output-dir",
+        help="Directory where analysis.json, analysis.md, settings.csv, and pairs.csv are written",
+    ),
+):
+    """Analyze preserved trial artifacts without contacting Ollama."""
+    from .trials import analyze_trials as analyze_trial_artifacts
+    from .trials.analysis import TrialAnalysisError
+
+    try:
+        analysis_dir = analyze_trial_artifacts(run_roots, output_dir=output_dir)
+    except TrialAnalysisError as exc:
+        raise ClickException(str(exc)) from exc
+    typer.echo(f"Trial analysis saved to {analysis_dir}")
+
+
 @app.command()
 def play(
     config: Path | None = typer.Option(
