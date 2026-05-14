@@ -4,15 +4,6 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Generated Profile Evaluation Harness
-
-Addresses: DESIGN-002
-
-- [ ] Implementation intent: Add a profile-only evaluation harness that samples generated fighter profiles without running full fights, records validation outcomes, fallback/error codes, nudges, model/settings, custom target parts, altered body plans, and schema-backed originality metrics under ignored `transcripts/`.
-- [ ] Acceptance goals: The command can evaluate `qwen3.6:35b` and `gemma4:26b` across the fixed creation nudges, produces JSON/Markdown/CSV reports, and gives a clear fallback-rate baseline before prompt changes.
-- [ ] Required tests: Unit tests for artifact writing, malformed profile responses, fallback accounting, originality metrics, and CLI wiring with fake profile generators.
-- [ ] Verification: `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src/llm_fight`; `uv run pytest -q`; run one live smoke profile sample if Ollama is intentionally available.
-
 ### Generated Profile Prompt Reliability Pass
 
 Addresses: DESIGN-002

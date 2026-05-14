@@ -32,6 +32,15 @@ uv run llmfight collect-trials --mode generated
 
 Trial artifacts are written under `transcripts/trials/<timestamp>/`, which is ignored by Git. The private `manifest.json` contains unblinded model, parameter, path, retry, and reproduction metadata. Judge-facing packs under `blind_packs/` are generated from sanitized summaries and should be reviewed without opening the manifest.
 
+Use `collect-profile-trials` when you need to measure generated-fighter profile reliability without running full fights:
+
+```bash
+uv run llmfight collect-profile-trials --smoke
+uv run llmfight collect-profile-trials
+```
+
+Profile evaluation artifacts are written under `transcripts/profile_trials/<timestamp>/`, which is ignored by Git. The command samples `qwen3.6:35b` and `gemma4:26b` across the fixed creation nudges, then writes `manifest.json`, `analysis.json`, `analysis.md`, `profiles.csv`, and `settings.csv` with validation outcomes, fallback/error codes, model settings, custom target parts, altered body-plan metrics, and schema-backed anatomy/consequence metrics. Use this before prompt changes so generated-mode trial conclusions are not based on fallback profiles.
+
 After blind reviews are recorded in `review_results.json`, use `analyze-trials` to build repeatable local reports without contacting Ollama:
 
 ```bash

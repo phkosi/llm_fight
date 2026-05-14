@@ -411,6 +411,42 @@ def collect_trials(
     typer.echo(f"Trial artifacts saved to {run_root}")
 
 
+@app.command("collect-profile-trials")
+def collect_profile_trials(
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file",
+    ),
+    output_root: Path = typer.Option(
+        Path("transcripts/profile_trials"),
+        "--output-root",
+        help="Directory where timestamped profile-evaluation artifacts are written",
+    ),
+    smoke: bool = typer.Option(
+        False,
+        "--smoke",
+        help="Run only the first model/nudge profile sample",
+    ),
+):
+    """Sample generated fighter profiles without running fights."""
+    from .engine.logger import cli_logging, update_logger_level
+    from .trials import collect_profile_trials as collect_profile_trial_artifacts
+
+    with _command_runtime(config), cli_logging(update_level=False):
+        update_logger_level()
+        _run_async(ping_ollama())
+        run_root = _run_async(
+            collect_profile_trial_artifacts(
+                config_path=config,
+                output_root=output_root,
+                smoke=smoke,
+            )
+        )
+    typer.echo(f"Profile trial artifacts saved to {run_root}")
+
+
 @app.command("analyze-trials")
 def analyze_trials(
     run_roots: list[Path] = typer.Argument(

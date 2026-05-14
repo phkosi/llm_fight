@@ -29,6 +29,7 @@ This is a compact archive of the completed root `TODO.md` history that was remov
 - Collected local trial evidence with `uv run llmfight collect-trials --smoke`, `uv run llmfight collect-trials`, `uv run llmfight collect-trials --mode generated --smoke`, and `uv run llmfight collect-trials --mode generated`.
 - Accepted configured-fighter artifacts at `transcripts/trials/20260513_231206` after smoke root `transcripts/trials/20260513_231032`; 18/18 cells completed, 16 blind same-model pairs were reviewed, and normalized judging settled at baseline 13, candidate 1, inconclusive 2.
 - Accepted generated-character artifacts at `transcripts/trials/20260513_233837` after smoke root `transcripts/trials/20260513_233748`; 18/18 cells completed, 16 blind same-model pairs were reviewed, structured judging settled at baseline 5, candidate 8, inconclusive 3, and generated profile metadata recorded 1 generated fighter profile plus 35 fallback fighter profiles.
+- Added `collect-profile-trials` for profile-only generated-fighter evaluation without running fights. The live baseline at `transcripts/profile_trials/20260514_180458` after smoke root `transcripts/profile_trials/20260514_180400` sampled `qwen3.6:35b` and `gemma4:26b` across all fixed creation nudges, wrote ignored JSON/Markdown/CSV reports, and measured 1 valid generated profile plus 11 fallbacks for a 0.9167 fallback rate before prompt changes.
 
 ## Repo And Test Hygiene
 

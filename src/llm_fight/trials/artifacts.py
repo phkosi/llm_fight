@@ -13,7 +13,7 @@ def timestamp_slug() -> str:
     return datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
 
-def create_run_root(output_root: Path, timestamp: str | None = None) -> Path:
+def create_timestamped_root(output_root: Path, timestamp: str | None = None) -> Path:
     base = output_root / (timestamp or timestamp_slug())
     root = base
     counter = 2
@@ -21,6 +21,11 @@ def create_run_root(output_root: Path, timestamp: str | None = None) -> Path:
         root = base.with_name(f"{base.name}-{counter}")
         counter += 1
     root.mkdir(parents=True, exist_ok=False)
+    return root
+
+
+def create_run_root(output_root: Path, timestamp: str | None = None) -> Path:
+    root = create_timestamped_root(output_root, timestamp)
     (root / "cells").mkdir()
     (root / "blind_packs").mkdir()
     return root

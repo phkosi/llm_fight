@@ -67,6 +67,34 @@ class TrialCellSpec:
         }
 
 
+@dataclass(frozen=True)
+class ProfileTrialSpec:
+    """One model/nudge sample for generated-profile evaluation."""
+
+    index: int
+    model: str
+    nudge: str
+    temperature: float = BASELINE_TEMPERATURE
+    token_preset: TokenPreset = TOKEN_PRESETS[1]
+    seed: int = DEFAULT_SEED
+
+    @property
+    def profile_id(self) -> str:
+        return f"profile-{self.index:04d}"
+
+    def to_manifest(self) -> dict[str, object]:
+        return {
+            "profile_id": self.profile_id,
+            "model": self.model,
+            "nudge": self.nudge,
+            "temperature": self.temperature,
+            "token_preset": self.token_preset.label,
+            "max_tokens_fighter": self.token_preset.fighter_tokens,
+            "max_tokens_judge": self.token_preset.judge_tokens,
+            "seed": self.seed,
+        }
+
+
 def normalize_mode(mode: str) -> TrialMode:
     normalized = str(mode).strip().lower()
     if normalized == C.FIGHTER_CREATION_MODE_CONFIGURED:
@@ -95,3 +123,14 @@ def iter_trial_matrix(mode: str, *, smoke: bool = False) -> list[TrialCellSpec]:
                 )
                 index += 1
     return cells[:1] if smoke else cells
+
+
+def iter_profile_matrix(*, smoke: bool = False) -> list[ProfileTrialSpec]:
+    """Return the fixed model/nudge matrix for profile-only evaluation."""
+    profiles = []
+    index = 1
+    for model in MODEL_ORDER:
+        for nudge in C.FIGHTER_CREATION_NUDGES:
+            profiles.append(ProfileTrialSpec(index=index, model=model, nudge=nudge))
+            index += 1
+    return profiles[:1] if smoke else profiles
