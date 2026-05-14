@@ -386,14 +386,26 @@ def collect_trials(
         "--smoke",
         help="Run only the first matrix cell for a quick harness smoke check",
     ),
+    matrix: str = typer.Option(
+        "full",
+        "--matrix",
+        help="Trial matrix: full or finalist",
+    ),
+    seeds: str | None = typer.Option(
+        None,
+        "--seeds",
+        help="Comma-separated integer seeds. Defaults to 42 for full, 42,43,44 for finalist.",
+    ),
 ):
     """Collect local parameter-trial artifacts and blind A/B packs."""
     from .engine.logger import cli_logging, update_logger_level
     from .trials import collect_trials as collect_trial_artifacts
-    from .trials.specs import normalize_mode
+    from .trials.specs import normalize_matrix, normalize_mode, parse_seed_list
 
     try:
         mode = normalize_mode(mode)
+        matrix = normalize_matrix(matrix)
+        parsed_seeds = parse_seed_list(seeds, matrix=matrix)
     except ValueError as exc:
         raise ClickException(str(exc)) from exc
 
@@ -406,6 +418,8 @@ def collect_trials(
                 output_root=output_root,
                 mode=mode,
                 smoke=smoke,
+                matrix=matrix,
+                seeds=parsed_seeds,
             )
         )
     typer.echo(f"Trial artifacts saved to {run_root}")

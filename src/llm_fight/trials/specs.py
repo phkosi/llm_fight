@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, cast
 
 from llm_fight.engine import constants as C
 
 TrialMode = Literal["configured", "generated"]
+TrialMatrix = Literal["full", "finalist"]
 
 MODEL_ORDER = ("qwen3.6:35b", "gemma4:26b")
 TEMPERATURES = (0.2, 0.4, 0.7)
 BASELINE_TEMPERATURE = 0.4
 BASELINE_TOKEN_PRESET = "default"
 DEFAULT_SEED = 42
+DEFAULT_FINALIST_SEEDS = (42, 43, 44)
 DEFAULT_OLLAMA_NUM_CTX = 90000
 DEFAULT_MAX_TURNS = 6
 
@@ -32,6 +35,18 @@ TOKEN_PRESETS = (
     TokenPreset("default", fighter_tokens=512, judge_tokens=4096),
     TokenPreset("expansive", fighter_tokens=768, judge_tokens=6144),
 )
+TOKEN_PRESETS_BY_LABEL = {preset.label: preset for preset in TOKEN_PRESETS}
+FINALIST_SETTINGS = {
+    "qwen3.6:35b": (
+        (BASELINE_TEMPERATURE, BASELINE_TOKEN_PRESET),
+        (0.2, "expansive"),
+    ),
+    "gemma4:26b": (
+        (BASELINE_TEMPERATURE, BASELINE_TOKEN_PRESET),
+        (0.2, "expansive"),
+        (0.7, "focused"),
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -104,24 +119,60 @@ def normalize_mode(mode: str) -> TrialMode:
     raise ValueError("mode must be 'configured' or 'generated'")
 
 
-def iter_trial_matrix(mode: str, *, smoke: bool = False) -> list[TrialCellSpec]:
+def normalize_matrix(matrix: str) -> TrialMatrix:
+    normalized = str(matrix).strip().lower()
+    if normalized in {"full", "finalist"}:
+        return cast(TrialMatrix, normalized)
+    raise ValueError("matrix must be 'full' or 'finalist'")
+
+
+def parse_seed_list(seed_text: str | None, *, matrix: str = "full") -> tuple[int, ...]:
+    """Parse a comma-separated seed list, applying matrix defaults when absent."""
+    trial_matrix = normalize_matrix(matrix)
+    if seed_text is None or not str(seed_text).strip():
+        return DEFAULT_FINALIST_SEEDS if trial_matrix == "finalist" else (DEFAULT_SEED,)
+    seeds = []
+    for raw_seed in str(seed_text).split(","):
+        raw_seed = raw_seed.strip()
+        if not raw_seed:
+            continue
+        try:
+            seed = int(raw_seed)
+        except ValueError as exc:
+            raise ValueError(f"Invalid seed value: {raw_seed!r}") from exc
+        if seed not in seeds:
+            seeds.append(seed)
+    if not seeds:
+        raise ValueError("At least one seed is required.")
+    return tuple(seeds)
+
+
+def iter_trial_matrix(
+    mode: str,
+    *,
+    smoke: bool = False,
+    matrix: str = "full",
+    seeds: Sequence[int] | None = None,
+) -> list[TrialCellSpec]:
     """Return the fixed qwen-then-gemma trial matrix."""
     trial_mode = normalize_mode(mode)
+    trial_matrix = normalize_matrix(matrix)
+    matrix_seeds = tuple(seeds) if seeds is not None else parse_seed_list(None, matrix=trial_matrix)
     cells = []
     index = 1
-    for model in MODEL_ORDER:
-        for temperature in TEMPERATURES:
-            for preset in TOKEN_PRESETS:
-                cells.append(
-                    TrialCellSpec(
-                        index=index,
-                        mode=trial_mode,
-                        model=model,
-                        temperature=temperature,
-                        token_preset=preset,
-                    )
+    for seed in matrix_seeds:
+        for model, temperature, preset in _matrix_settings(trial_matrix):
+            cells.append(
+                TrialCellSpec(
+                    index=index,
+                    mode=trial_mode,
+                    model=model,
+                    temperature=temperature,
+                    token_preset=preset,
+                    seed=seed,
                 )
-                index += 1
+            )
+            index += 1
     return cells[:1] if smoke else cells
 
 
@@ -134,3 +185,17 @@ def iter_profile_matrix(*, smoke: bool = False) -> list[ProfileTrialSpec]:
             profiles.append(ProfileTrialSpec(index=index, model=model, nudge=nudge))
             index += 1
     return profiles[:1] if smoke else profiles
+
+
+def _matrix_settings(matrix: TrialMatrix) -> list[tuple[str, float, TokenPreset]]:
+    settings = []
+    if matrix == "full":
+        for model in MODEL_ORDER:
+            for temperature in TEMPERATURES:
+                for preset in TOKEN_PRESETS:
+                    settings.append((model, temperature, preset))
+        return settings
+    for model in MODEL_ORDER:
+        for temperature, token_preset in FINALIST_SETTINGS[model]:
+            settings.append((model, temperature, TOKEN_PRESETS_BY_LABEL[token_preset]))
+    return settings

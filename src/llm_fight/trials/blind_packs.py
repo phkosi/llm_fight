@@ -46,30 +46,34 @@ def build_pair_specs(cells: list[dict[str, Any]]) -> list[dict[str, Any]]:
     next_index = 1
     for model in _ordered_models(completed_or_failed):
         model_cells = [cell for cell in completed_or_failed if cell.get("model") == model]
-        baseline = next(
-            (
-                cell
-                for cell in model_cells
-                if cell.get("temperature") == BASELINE_TEMPERATURE and cell.get("token_preset") == BASELINE_TOKEN_PRESET
-            ),
-            None,
-        )
-        if baseline is None:
-            continue
-        for candidate in model_cells:
-            if candidate["cell_id"] == baseline["cell_id"]:
-                continue
-            pairs.append(
-                {
-                    "pair_id": f"pair-{next_index:04d}",
-                    "model": model,
-                    "baseline_cell_id": baseline["cell_id"],
-                    "candidate_cell_id": candidate["cell_id"],
-                    "baseline": baseline,
-                    "candidate": candidate,
-                }
+        for seed in _ordered_seeds(model_cells):
+            seeded_cells = [cell for cell in model_cells if cell.get("seed") == seed]
+            baseline = next(
+                (
+                    cell
+                    for cell in seeded_cells
+                    if cell.get("temperature") == BASELINE_TEMPERATURE
+                    and cell.get("token_preset") == BASELINE_TOKEN_PRESET
+                ),
+                None,
             )
-            next_index += 1
+            if baseline is None:
+                continue
+            for candidate in seeded_cells:
+                if candidate["cell_id"] == baseline["cell_id"]:
+                    continue
+                pairs.append(
+                    {
+                        "pair_id": f"pair-{next_index:04d}",
+                        "model": model,
+                        "seed": seed,
+                        "baseline_cell_id": baseline["cell_id"],
+                        "candidate_cell_id": candidate["cell_id"],
+                        "baseline": baseline,
+                        "candidate": candidate,
+                    }
+                )
+                next_index += 1
     return pairs
 
 
@@ -154,6 +158,15 @@ def _ordered_models(cells: list[dict[str, Any]]) -> list[str]:
         model = str(cell.get("model", ""))
         if model and model not in ordered:
             ordered.append(model)
+    return ordered
+
+
+def _ordered_seeds(cells: list[dict[str, Any]]) -> list[object]:
+    ordered = []
+    for cell in cells:
+        seed = cell.get("seed")
+        if seed not in ordered:
+            ordered.append(seed)
     return ordered
 
 

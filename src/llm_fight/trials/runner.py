@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import random
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,6 +21,7 @@ from .specs import (
     DEFAULT_OLLAMA_NUM_CTX,
     TrialCellSpec,
     iter_trial_matrix,
+    normalize_matrix,
     normalize_mode,
 )
 from .summaries import build_summary, render_summary_markdown, sanitized_error
@@ -34,14 +35,17 @@ async def collect_trials(
     output_root: Path = Path("transcripts/trials"),
     mode: str = C.FIGHTER_CREATION_MODE_CONFIGURED,
     smoke: bool = False,
+    matrix: str = "full",
+    seeds: Sequence[int] | None = None,
     timestamp: str | None = None,
     fight_runner: FightRunner | None = None,
 ) -> Path:
     """Collect a configured or generated trial matrix and write ignored artifacts."""
     trial_mode = normalize_mode(mode)
+    trial_matrix = normalize_matrix(matrix)
     run_root = create_run_root(output_root, timestamp)
     cells = []
-    specs = iter_trial_matrix(trial_mode, smoke=smoke)
+    specs = iter_trial_matrix(trial_mode, smoke=smoke, matrix=trial_matrix, seeds=seeds)
     for spec in specs:
         cells.append(await _collect_cell(run_root, config_path=config_path, spec=spec, fight_runner=fight_runner))
 
@@ -50,7 +54,9 @@ async def collect_trials(
     manifest = {
         "schema_version": 1,
         "mode": trial_mode,
+        "matrix": trial_matrix,
         "smoke": smoke,
+        "seeds": sorted({cell["seed"] for cell in cells}),
         "artifact_root": str(run_root),
         "cells": [_manifest_cell(cell) for cell in cells],
         "pairs": pairs,

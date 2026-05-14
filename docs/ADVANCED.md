@@ -28,9 +28,12 @@ Use `collect-trials` when you need preserved fight evidence and blind A/B packs 
 ```bash
 uv run llmfight collect-trials --smoke
 uv run llmfight collect-trials --mode generated
+uv run llmfight collect-trials --matrix finalist
 ```
 
 Trial artifacts are written under `transcripts/trials/<timestamp>/`, which is ignored by Git. The private `manifest.json` contains unblinded model, parameter, path, retry, and reproduction metadata. Judge-facing packs under `blind_packs/` are generated from sanitized summaries and should be reviewed without opening the manifest.
+
+The default `full` matrix remains one seed across every model/temperature/token-preset cell. The opt-in `finalist` matrix runs the smaller retest set: `qwen3.6:35b` baseline plus `0.2/expansive`, and `gemma4:26b` baseline plus `0.2/expansive` and `0.7/focused`. It defaults to seeds `42,43,44`; use `--seeds 101,102,103` to choose explicit seeds.
 
 Use `collect-profile-trials` when you need to measure generated-fighter profile reliability without running full fights:
 

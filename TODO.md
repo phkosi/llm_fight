@@ -4,15 +4,6 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Multi-Seed Finalist Trial Support
-
-Addresses: none
-
-- [ ] Implementation intent: Extend trial collection to support a small finalist matrix and multiple seeds without changing default `collect-trials` behavior.
-- [ ] Acceptance goals: Can run configured finalists: `qwen3.6:35b` baseline plus `0.2/expansive`, and `gemma4:26b` baseline plus `0.2/expansive` and `0.7/focused`, across at least 3 seeds; artifacts remain ignored under `transcripts/`.
-- [ ] Required tests: Matrix/spec tests for default-vs-finalist behavior, seed expansion, manifest metadata, blind-pack pairing, and CLI wiring.
-- [ ] Verification: Standard quality gates plus a smoke finalist collection with fake/offline tests; live full collection only when models are intentionally available.
-
 ### Finalist Retest And Model Preset Recommendation
 
 Addresses: none

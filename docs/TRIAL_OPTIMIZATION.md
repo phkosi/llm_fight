@@ -37,9 +37,15 @@ Use `uv run llmfight collect-profile-trials` before changing generated-profile p
 
 - Configured `qwen3.6:35b`: baseline plus `0.2/expansive`.
 - Configured `gemma4:26b`: baseline plus `0.2/expansive` and `0.7/focused`.
-- Generated mode: profile fallback is below 20%; rerun generated-character trials after configured finalist support lands.
+- Generated mode: profile fallback is below 20%; rerun generated-character trials after the configured finalist retest completes.
 
-Use at least 3 seeds for finalist retests before changing defaults.
+Use at least 3 seeds for finalist retests before changing defaults. The configured finalist support is available as:
+
+```bash
+uv run llmfight collect-trials --matrix finalist
+```
+
+The command preserves the default `collect-trials` behavior unless `--matrix finalist` is passed. The finalist matrix defaults to seeds `42,43,44` and writes ignored artifacts under `transcripts/trials/`.
 
 ## Prompt Direction
 

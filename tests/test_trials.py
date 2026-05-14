@@ -11,13 +11,20 @@ from llm_fight.engine import constants as C
 from llm_fight.profiles import resolve_fighter_profile
 from llm_fight.trials.blind_packs import (
     build_blind_packs,
+    build_pair_specs,
     forbidden_terms,
     normalize_review_vote,
     scan_forbidden_terms,
     settle_review_votes,
 )
 from llm_fight.trials.runner import collect_trials, materialize_cell_config
-from llm_fight.trials.specs import TOKEN_PRESETS, TrialCellSpec, iter_trial_matrix
+from llm_fight.trials.specs import (
+    DEFAULT_FINALIST_SEEDS,
+    TOKEN_PRESETS,
+    TrialCellSpec,
+    iter_trial_matrix,
+    parse_seed_list,
+)
 from llm_fight.trials.summaries import build_summary, render_summary_markdown
 
 
@@ -56,6 +63,63 @@ def test_trial_matrix_order_and_baseline():
     ]
     assert [cell.cell_id for cell in cells[:2]] == ["cell-0001", "cell-0002"]
     assert [cell.cell_id for cell in cells if cell.is_baseline] == ["cell-0005", "cell-0014"]
+    assert {cell.seed for cell in cells} == {42}
+
+
+def test_finalist_matrix_expands_expected_settings_and_seeds():
+    cells = iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, matrix="finalist")
+
+    assert len(cells) == 15
+    assert {cell.seed for cell in cells} == set(DEFAULT_FINALIST_SEEDS)
+    assert [cell.cell_id for cell in cells[:5]] == [
+        "cell-0001",
+        "cell-0002",
+        "cell-0003",
+        "cell-0004",
+        "cell-0005",
+    ]
+    assert [(cell.model, cell.seed, cell.temperature, cell.token_preset.label) for cell in cells[:5]] == [
+        ("qwen3.6:35b", 42, 0.4, "default"),
+        ("qwen3.6:35b", 42, 0.2, "expansive"),
+        ("gemma4:26b", 42, 0.4, "default"),
+        ("gemma4:26b", 42, 0.2, "expansive"),
+        ("gemma4:26b", 42, 0.7, "focused"),
+    ]
+    qwen_candidates = [
+        cell
+        for cell in cells
+        if cell.model == "qwen3.6:35b" and (cell.temperature, cell.token_preset.label) == (0.2, "expansive")
+    ]
+    gemma_candidates = [
+        cell
+        for cell in cells
+        if cell.model == "gemma4:26b" and (cell.temperature, cell.token_preset.label) != (0.4, "default")
+    ]
+    assert len(qwen_candidates) == 3
+    assert len(gemma_candidates) == 6
+
+
+def test_trial_matrix_custom_seeds_and_smoke_are_opt_in():
+    default_cells = iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED)
+    multi_seed_cells = iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, seeds=(7, 8))
+    finalist_smoke = iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, matrix="finalist", smoke=True)
+
+    assert len(default_cells) == 18
+    assert len(multi_seed_cells) == 36
+    assert {cell.seed for cell in multi_seed_cells} == {7, 8}
+    assert len(finalist_smoke) == 1
+    assert finalist_smoke[0].is_baseline is True
+    assert finalist_smoke[0].seed == 42
+
+
+def test_parse_seed_list_defaults_and_validation():
+    assert parse_seed_list(None, matrix="full") == (42,)
+    assert parse_seed_list(None, matrix="finalist") == DEFAULT_FINALIST_SEEDS
+    assert parse_seed_list(" 101, 102,101 ") == (101, 102)
+    with pytest.raises(ValueError, match="Invalid seed"):
+        parse_seed_list("101,nope")
+    with pytest.raises(ValueError, match="matrix"):
+        parse_seed_list(None, matrix="wide")
 
 
 def test_materialize_cell_config_does_not_mutate_base_config(tmp_path):
@@ -218,6 +282,8 @@ async def test_collect_trials_writes_artifacts_manifest_and_blind_packs(tmp_path
 
     manifest = json.loads((run_root / "manifest.json").read_text(encoding="utf-8"))
     assert len(manifest["cells"]) == 18
+    assert manifest["matrix"] == "full"
+    assert manifest["seeds"] == [42]
     assert len(manifest["pairs"]) == 16
     first_cell = manifest["cells"][0]
     assert first_cell["model"] == "qwen3.6:35b"
@@ -237,6 +303,29 @@ async def test_collect_trials_writes_artifacts_manifest_and_blind_packs(tmp_path
     assert "focused" not in blind_text
     assert "cell-0001" not in blind_text
     assert "config.ini" not in blind_text
+
+
+@pytest.mark.asyncio
+async def test_collect_trials_finalist_matrix_writes_seeded_manifest_and_pairs(tmp_path):
+    run_root = await collect_trials(
+        output_root=tmp_path / "trials",
+        mode=C.FIGHTER_CREATION_MODE_CONFIGURED,
+        matrix="finalist",
+        seeds=(11,),
+        timestamp="finalist",
+        fight_runner=_fake_trial_fight,
+    )
+
+    manifest = json.loads((run_root / "manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest["matrix"] == "finalist"
+    assert manifest["seeds"] == [11]
+    assert len(manifest["cells"]) == 5
+    assert len(manifest["pairs"]) == 3
+    assert all(pair["seed"] == 11 for pair in manifest["pairs"])
+    assert {cell["seed"] for cell in manifest["cells"]} == {11}
+    assert {cell["is_baseline"] for cell in manifest["cells"]} == {True, False}
+    assert (run_root / "blind_packs" / "pair-0003" / "ba.md").exists()
 
 
 @pytest.mark.asyncio
@@ -369,6 +458,31 @@ def test_blind_pack_redaction_side_swapping_and_review_normalization(tmp_path):
     assert settle_review_votes(["baseline", "candidate"]) == "inconclusive"
 
 
+def test_blind_pack_pair_specs_use_same_seed_baselines_for_finalists():
+    cells = []
+    for spec in iter_trial_matrix(C.FIGHTER_CREATION_MODE_CONFIGURED, matrix="finalist"):
+        cells.append(
+            {
+                **spec.to_manifest(),
+                "status": "completed",
+                "summary": {"status": "completed", "fighters": {}, "turns": [], "result": {C.WINNER: C.DRAW}},
+                "attempts": [],
+            }
+        )
+
+    pairs = build_pair_specs(cells)
+
+    assert len(pairs) == 9
+    assert [pair["seed"] for pair in pairs[:3]] == [42, 43, 44]
+    for pair in pairs:
+        baseline = pair["baseline"]
+        candidate = pair["candidate"]
+        assert baseline["model"] == candidate["model"] == pair["model"]
+        assert baseline["seed"] == candidate["seed"] == pair["seed"]
+        assert baseline["is_baseline"] is True
+        assert candidate["is_baseline"] is False
+
+
 def test_blind_pack_forbidden_terms_allow_common_prose_and_roll_numbers():
     cells = [
         {
@@ -418,4 +532,40 @@ def test_cli_collect_trials_wires_command(tmp_path):
         output_root=output_root,
         mode=C.FIGHTER_CREATION_MODE_GENERATED,
         smoke=True,
+        matrix="full",
+        seeds=(42,),
+    )
+
+
+def test_cli_collect_trials_wires_finalist_matrix_and_seeds(tmp_path):
+    runner = CliRunner()
+    output_root = tmp_path / "trials"
+    returned_root = output_root / "fixed"
+
+    with (
+        patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        patch("llm_fight.trials.collect_trials", new=AsyncMock(return_value=returned_root)) as collect,
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "collect-trials",
+                "--output-root",
+                str(output_root),
+                "--matrix",
+                "finalist",
+                "--seeds",
+                "101,102,101",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Trial artifacts saved to" in result.output
+    collect.assert_awaited_once_with(
+        config_path=None,
+        output_root=output_root,
+        mode=C.FIGHTER_CREATION_MODE_CONFIGURED,
+        smoke=False,
+        matrix="finalist",
+        seeds=(101, 102),
     )
