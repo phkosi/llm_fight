@@ -143,11 +143,10 @@ def normalize_review_vote(
 
 
 def settle_review_votes(votes: list[str]) -> str:
-    meaningful = [vote for vote in votes if vote != "inconclusive"]
-    if not meaningful:
+    if not votes or any(vote == "inconclusive" for vote in votes):
         return "inconclusive"
-    first = meaningful[0]
-    if all(vote == first for vote in meaningful):
+    first = votes[0]
+    if all(vote == first for vote in votes):
         return first
     return "inconclusive"
 

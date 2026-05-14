@@ -46,6 +46,16 @@ No active issues.
 - Suggested fix: Tighten Judge Phase 2 prompt/schema guidance around positive mechanic values, scalar integer `ttl`, required effect magnitude/value fields, source ownership, and canonical target parts; consider deterministic repair or dropping for zero-value/no-op mechanics before fallback.
 - Tests: Add focused Judge Phase 2 validation/repair tests for zero-valued mechanics, object-shaped TTLs, null text fields, wrong-side effect source, and non-canonical target names; preserve existing Phase 2 authorization and simulation-turn tests.
 
+### ISSUE-003: Generated anatomy target resolution can drop successful consequences
+
+- Status: open
+- Task: none
+- Source: playtest
+- Evidence: Clean generated-mode retest `uv run llmfight collect-trials --mode generated` wrote accepted artifacts to `transcripts/trials/20260514_203736` after smoke root `transcripts/trials/20260514_203355`. `uv run llmfight analyze-trials transcripts/trials/20260514_203736` reported 18/18 completed cells, 3 P2 fallback turns, 16 reviewed blind pairs, and 36 generated profiles with 0 profile fallbacks, but reviewers repeatedly flagged generated-anatomy target conflicts, successful rolls with missing or partial damage consequences, setup/status-only outcomes after successful attacks, `valid` actions scored at `p=0.0`, target-ownership confusion, and custom target-name drift.
+- Impact: Generated anatomy now produces useful originality and custom silhouettes, but target/consequence drift blocks clean generated-mode parameter conclusions and weakens readable causality when non-humanoid body parts enter the fight loop.
+- Suggested fix: Tighten generated target-part canonicalization across fighter prompts, Judge Phase 1 probability text, Judge Phase 2 consequence mapping, and summaries; require successful rolls to produce a clear matching wound/effect or explicit no-effect reason; avoid `valid` actions with `p=0.0`; consider bounds or prompt guidance for early limb-severing severity.
+- Tests: Add generated-anatomy regressions for custom target acceptance, invalid/valid target consistency across turns, successful roll to consequence mapping, no-effect explanations, `p=0.0` probability handling, and high-damage generated limb outcomes.
+
 ## P3
 
 No active issues.

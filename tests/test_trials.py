@@ -456,6 +456,7 @@ def test_blind_pack_redaction_side_swapping_and_review_normalization(tmp_path):
     assert ba_vote == "candidate"
     assert settle_review_votes([ab_vote, ba_vote]) == "candidate"
     assert settle_review_votes(["baseline", "candidate"]) == "inconclusive"
+    assert settle_review_votes(["baseline", "inconclusive"]) == "inconclusive"
 
 
 def test_blind_pack_pair_specs_use_same_seed_baselines_for_finalists():

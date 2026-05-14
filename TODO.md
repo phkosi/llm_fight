@@ -4,14 +4,7 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Generated-Mode Retest After Profile Reliability
-
-Addresses: DESIGN-002
-
-- [ ] Implementation intent: After generated-profile fallback is below 20%, rerun generated-character trials, analyze the new artifacts, and re-review blocked or contradictory generated-mode pairs.
-- [ ] Acceptance goals: Generated-mode recommendations are no longer blocked by profile fallback; note/result contradictions are resolved or explicitly marked inconclusive; docs distinguish prompt-quality findings from parameter findings.
-- [ ] Required tests: Reuse existing trial/analysis tests; add regressions only if rerun evidence exposes tooling defects.
-- [ ] Verification: Generated smoke and full collection, `analyze-trials`, blind review results, standard quality gates for tracked updates, and 2-subagent review before commit.
+No active implementation tasks.
 
 ## Task Template
 

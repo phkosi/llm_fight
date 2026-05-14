@@ -144,3 +144,45 @@ async def test_generate_fighter_profile_payload_guides_valid_anatomy(tmp_path):
     assert C.CONSEQUENCE_FATAL_IF_DESTROYED in payload["allowed_consequence_tags"]
     assert "mana_core" in payload["nudge_guidance"]
     assert "valid_example" in payload
+
+
+@pytest.mark.asyncio
+async def test_generate_fighter_profile_accepts_third_validation_attempt(tmp_path):
+    cfg_path = tmp_path / "llmfight.ini"
+    cfg_path.write_text(
+        "\n".join(
+            [
+                "[General]",
+                "max_tokens_judge = 4096",
+                "ollama_num_ctx = 90000",
+                "",
+                "[A]",
+                "class = Knight",
+                "",
+                "[B]",
+                "class = Assassin",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cfg = Config(cfg_path)
+    responses = [
+        json.dumps({"class_": "Bad", C.BODY_PARTS: []}),
+        json.dumps({C.CONFIG_FIGHTER_CLASS: "Still Bad", C.THEME: "bad"}),
+        json.dumps(_valid_generated_profile()),
+    ]
+
+    async def fake_chat(*args, **kwargs):
+        return [responses.pop(0)]
+
+    with patch("llm_fight.profile_generation.chat", new=AsyncMock(side_effect=fake_chat)) as mock_chat:
+        profile = await generate_fighter_profile(
+            C.FIGHTER_A,
+            C.FIGHTER_A,
+            C.FIGHTER_B,
+            "monster",
+            config=cfg,
+        )
+
+    assert profile.class_ == "Rune Beast"
+    assert mock_chat.await_count == 3

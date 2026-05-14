@@ -255,7 +255,7 @@ async def generate_fighter_profile(
         logger.warning("Profile generation for fighter %s exceeded prompt budget: %s", fighter_id, exc)
         raise ProfileGenerationError(C.PROFILE_GENERATION_ERROR_FAILED) from exc
     transport_retries = cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
-    profile_retries = 1
+    profile_retries = 2
 
     async def _call() -> dict[str, Any]:
         if on_metadata is None:
@@ -295,7 +295,7 @@ async def generate_fighter_profile(
             last_invalid_error = exc
             if attempt < profile_retries:
                 logger.warning(
-                    "Generated profile for fighter %s failed validation; retrying once with sanitized error.",
+                    "Generated profile for fighter %s failed validation; retrying profile request.",
                     fighter_id,
                 )
                 continue
