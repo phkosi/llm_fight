@@ -26,6 +26,9 @@ This is a compact archive of the completed root `TODO.md` history that was remov
 - Streamed `play` progress with fighter design views, status updates, turn rendering, roll visibility, and mechanical diffs.
 - Added fight-scoped JSONL traces with event order, token metadata, rolls, deltas, state snapshots, sanitized errors, and final results.
 - Added batch failure accounting, incremental CSV writing, and visible Phase 2 fallback columns.
+- Collected local trial evidence with `uv run llmfight collect-trials --smoke`, `uv run llmfight collect-trials`, `uv run llmfight collect-trials --mode generated --smoke`, and `uv run llmfight collect-trials --mode generated`.
+- Accepted configured-fighter artifacts at `transcripts/trials/20260513_231206` after smoke root `transcripts/trials/20260513_231032`; 18/18 cells completed, 16 blind same-model pairs were reviewed, and normalized judging settled at baseline 13, candidate 1, inconclusive 2.
+- Accepted generated-character artifacts at `transcripts/trials/20260513_233837` after smoke root `transcripts/trials/20260513_233748`; 18/18 cells completed, 16 blind same-model pairs were reviewed, normalized judging settled at baseline 6, candidate 10, inconclusive 0, and generated profile metadata recorded 1 generated fighter profile plus 35 fallback fighter profiles.
 
 ## Repo And Test Hygiene
 

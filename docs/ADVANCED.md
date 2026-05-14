@@ -23,6 +23,15 @@ uv run llmfight simulate --runs 3 --max-turns 6 --continue-on-error
 
 Batch CSV rows include winners, display names, turn counts, and Phase 2 fallback accounting. `winner=error` rows make the command exit nonzero unless `--continue-on-error` is set.
 
+Use `collect-trials` when you need preserved fight evidence and blind A/B packs for parameter comparisons:
+
+```bash
+uv run llmfight collect-trials --smoke
+uv run llmfight collect-trials --mode generated
+```
+
+Trial artifacts are written under `transcripts/trials/<timestamp>/`, which is ignored by Git. The private `manifest.json` contains unblinded model, parameter, path, retry, and reproduction metadata. Judge-facing packs under `blind_packs/` are generated from sanitized summaries and should be reviewed without opening the manifest.
+
 ## Advanced Config
 
 Common first-run settings live in `llmfight.ini.example`. Less common controls can still be placed in `llmfight.ini`.

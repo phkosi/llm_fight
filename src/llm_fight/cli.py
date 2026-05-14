@@ -363,6 +363,54 @@ def simulate(
         _finish_simulation(path, summary, continue_on_error=continue_on_error)
 
 
+@app.command("collect-trials")
+def collect_trials(
+    config: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file",
+    ),
+    output_root: Path = typer.Option(
+        Path("transcripts/trials"),
+        "--output-root",
+        help="Directory where timestamped trial artifacts are written",
+    ),
+    mode: str = typer.Option(
+        C.FIGHTER_CREATION_MODE_CONFIGURED,
+        "--mode",
+        help="Trial mode: configured or generated",
+    ),
+    smoke: bool = typer.Option(
+        False,
+        "--smoke",
+        help="Run only the first matrix cell for a quick harness smoke check",
+    ),
+):
+    """Collect local parameter-trial artifacts and blind A/B packs."""
+    from .engine.logger import cli_logging, update_logger_level
+    from .trials import collect_trials as collect_trial_artifacts
+    from .trials.specs import normalize_mode
+
+    try:
+        mode = normalize_mode(mode)
+    except ValueError as exc:
+        raise ClickException(str(exc)) from exc
+
+    with _command_runtime(config), cli_logging(update_level=False):
+        update_logger_level()
+        _run_async(ping_ollama())
+        run_root = _run_async(
+            collect_trial_artifacts(
+                config_path=config,
+                output_root=output_root,
+                mode=mode,
+                smoke=smoke,
+            )
+        )
+    typer.echo(f"Trial artifacts saved to {run_root}")
+
+
 @app.command()
 def play(
     config: Path | None = typer.Option(

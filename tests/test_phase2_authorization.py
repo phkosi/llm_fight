@@ -732,6 +732,8 @@ def test_phase2_replaces_narration_that_contradicts_successful_rolls():
         C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
         C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
     }
+    fighters[C.FIGHTER_A].display_name = C.FIGHTER_A
+    fighters[C.FIGHTER_B].display_name = C.FIGHTER_B
     p1 = {
         f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
         f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True,
