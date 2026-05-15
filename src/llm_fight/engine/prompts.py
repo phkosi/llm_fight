@@ -82,6 +82,7 @@ Delta keys are the fighter receiving the consequence: successful B hit on A -> d
 Do not put attack damage under the attacking fighter unless the narration explicitly describes recoil, self-harm, or another self-cost.
 Called-shot wounds must use the named body part or canonical alias. Do not move a called shot to a different part.
 Smoke, feints, movement, positioning, intimidation, or setup actions may add temporary effects only when successful; do not convert them into weapon wounds without a concrete damaging hit.
+Effect payloads must be mechanically useful: use integer ttl values from 1 to 20 or -1, positive value/magnitude fields, positive mechanic values, string on_apply/on_tick text, and metadata.targeted_part only from the target fighter's valid_target_parts.
 Current fighter states and active effects are authoritative. Treat the recent combat log as history, not active state.
 """
     + TEMPORARY_EFFECT_JUDGE_P2_GUARDRAIL
@@ -102,7 +103,7 @@ The DeltaSchema for each fighter includes fields like:
 - "exhaustion_increase": object with {"source": "A"|"B", "value": integer 0-100}
 - "heat_increase": object with {"source": "A"|"B", "value": integer 0-100}
 - "wounds": array of objects, each with "source": "A"|"B", "targeted_part": string, "value": integer 1-200, "type": string (e.g., "piercing", "slashing", "fire", "blunt", "generic")
-- "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "poisoned", "value": 2.0, "ttl": 3, "on_apply": "Poison takes hold", "on_tick": "Poison weakens the body", "metadata": {"targeted_part": "torso"}, "mechanics": [{"kind": "stat_tick", "stat": "pain", "value": 2}], "tags": ["poison"]})
+- "effects_added": array of Effect objects, each also carrying "source": "A"|"B" (e.g., {"source": "A", "name": "poisoned", "value": 2.0, "ttl": 3, "on_apply": "Poison takes hold", "on_tick": "Poison weakens the body", "metadata": {"targeted_part": "torso"}, "mechanics": [{"kind": "stat_tick", "stat": "pain", "value": 2}], "tags": ["poison"]}); omit no-op effects instead of using value 0, ttl 0, null text, or empty mechanics with no consequence.
 - "effects_removed": array of objects, each with {"source": "A"|"B", "name": string, "type": "buffs"|"debuffs" optional, "targeted_part": string optional}
   - include "targeted_part" when treating or extinguishing one localized effect; omit it only for intentional remove-all by name/type
  - "status_change": object with {"source": "A"|"B", "value": one of "fighting", "unconscious", "dead"}

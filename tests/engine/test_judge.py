@@ -286,6 +286,61 @@ async def test_judge_phase2_retries_empty_structured_response_as_plain_json(mock
 
 
 @pytest.mark.asyncio
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_repairs_malformed_effects_before_schema_fallback(mock_chat):
+    payload = {
+        C.NARRATION: "A lands a clean hit and a malformed poison fizzles.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.WOUNDS: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.TARGETED_PART: "torso",
+                        C.VALUE: 5,
+                        C.TYPE: C.DamageType.PIERCING.value,
+                    }
+                ],
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "bad_ttl",
+                        C.VALUE: 1,
+                        C.EFFECT_TTL: {"turns": 3},
+                        C.EFFECT_ON_APPLY: "Bad ttl lands.",
+                    },
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "missing_value",
+                        C.EFFECT_TTL: 3,
+                        C.EFFECT_ON_APPLY: "Missing value lands.",
+                    },
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "poisoned",
+                        C.VALUE: 2,
+                        C.EFFECT_TTL: 3,
+                        C.EFFECT_ON_APPLY: "Poison takes hold.",
+                        C.EFFECT_ON_TICK: None,
+                    },
+                ],
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+    mock_chat.return_value = [json.dumps(payload)]
+
+    with patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 0)):
+        result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
+
+    effects = result[C.DELTA][C.FIGHTER_B][C.EFFECTS_ADDED]
+    assert [effect[C.NAME] for effect in effects] == ["poisoned"]
+    assert C.EFFECT_ON_TICK not in effects[0]
+    assert result[C.DELTA][C.FIGHTER_B][C.WOUNDS][0][C.VALUE] == 5
+    assert mock_chat.await_count == 1
+
+
+@pytest.mark.asyncio
 @patch("llm_fight.judge.guarded_call")
 @patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase1_trims_long_recent_log_newest_first(mock_chat, mock_guarded_call):

@@ -1,6 +1,7 @@
 """Judge orchestration (Phase-1 probability, RNG, Phase-2 narration)."""
 
 import json
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -121,6 +122,81 @@ def _strip_untrusted_phase2_metadata(result: dict[str, Any]) -> dict[str, Any]:
     sanitized.pop(C.METADATA, None)
     sanitized.pop(C.P2_ENGINE_FALLBACK_MARKER, None)
     return sanitized
+
+
+def _effect_has_valid_schema_magnitude(effect: dict[str, Any]) -> bool:
+    raw_value = effect.get(C.VALUE, effect.get("magnitude"))
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+        return False
+    value = float(raw_value)
+    return math.isfinite(value) and 0 < value <= C.EFFECT_MAX_MAGNITUDE
+
+
+def _effect_has_valid_schema_ttl(effect: dict[str, Any]) -> bool:
+    ttl = effect.get(C.EFFECT_TTL)
+    return isinstance(ttl, int) and not isinstance(ttl, bool) and (ttl == -1 or 1 <= ttl <= C.EFFECT_MAX_TTL)
+
+
+def _effect_has_valid_schema_mechanics(effect: dict[str, Any]) -> bool:
+    mechanics = effect.get(C.EFFECT_MECHANICS, [])
+    if mechanics in (None, []):
+        return True
+    if not isinstance(mechanics, list):
+        return False
+    for mechanic in mechanics:
+        if not isinstance(mechanic, dict):
+            return False
+        value = mechanic.get(C.VALUE)
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 1 or value > C.EFFECT_MECHANIC_MAX_VALUE
+        ):
+            return False
+    return True
+
+
+def _repair_phase2_effect_for_schema(effect: Any) -> dict[str, Any] | None:
+    """Drop malformed effects that would otherwise throw away a usable P2 turn."""
+    if not isinstance(effect, dict):
+        return None
+    if not _effect_has_valid_schema_magnitude(effect):
+        return None
+    if not _effect_has_valid_schema_ttl(effect):
+        return None
+    if not _effect_has_valid_schema_mechanics(effect):
+        return None
+    if effect.get(C.EFFECT_ON_APPLY) is None and C.EFFECT_ON_APPLY in effect:
+        return None
+    repaired = dict(effect)
+    if repaired.get(C.EFFECT_ON_TICK) is None:
+        repaired.pop(C.EFFECT_ON_TICK, None)
+    return repaired
+
+
+def _repair_phase2_effect_payloads_for_schema(result: dict[str, Any]) -> dict[str, Any]:
+    """Best-effort shape repair before strict JudgeP2Schema validation."""
+    delta = result.get(C.DELTA)
+    if not isinstance(delta, dict):
+        return result
+    repaired_result = dict(result)
+    repaired_delta = dict(delta)
+    for fighter_id, fighter_delta in list(repaired_delta.items()):
+        if not isinstance(fighter_delta, dict) or C.EFFECTS_ADDED not in fighter_delta:
+            continue
+        repaired_fighter_delta = dict(fighter_delta)
+        repaired_effects = [
+            effect
+            for effect in (
+                _repair_phase2_effect_for_schema(effect) for effect in fighter_delta.get(C.EFFECTS_ADDED, [])
+            )
+            if effect is not None
+        ]
+        if repaired_effects:
+            repaired_fighter_delta[C.EFFECTS_ADDED] = repaired_effects
+        else:
+            repaired_fighter_delta.pop(C.EFFECTS_ADDED, None)
+        repaired_delta[fighter_id] = repaired_fighter_delta
+    repaired_result[C.DELTA] = repaired_delta
+    return repaired_result
 
 
 def _phase2_failure_policy() -> str:
@@ -279,7 +355,7 @@ async def _call_judge_phase2_with_schema(
         on_metadata,
         schema=JudgeP2Schema,
     )
-    return _parse_first_json_response(response_texts)
+    return _repair_phase2_effect_payloads_for_schema(_parse_first_json_response(response_texts))
 
 
 async def _call_judge_phase2_repair(
@@ -294,7 +370,7 @@ async def _call_judge_phase2_repair(
         on_metadata,
         schema=None,
     )
-    return _parse_first_json_response(response_texts)
+    return _repair_phase2_effect_payloads_for_schema(_parse_first_json_response(response_texts))
 
 
 async def _call_judge_phase2_with_repair(

@@ -4,15 +4,6 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Harden Judge Phase 2 Effect Payloads
-
-Addresses: ISSUE-002
-
-- [ ] Implementation intent: Preserve the strict Phase 2 schema while improving prompt guidance, retry behavior, and deterministic authorization for invalid effect payloads and source/target oddities.
-- [ ] Acceptance goals: Zero-value/no-op effect mechanics, object or non-scalar TTLs, null text fields, missing effect magnitude/value, wrong-side source ownership, and non-canonical effect targets do not silently pass into state or hide otherwise usable turns behind fail-open fallback.
-- [ ] Required tests: Add validation/prompt/authorization tests for zero-valued mechanics, object-shaped TTLs, null text fields, missing magnitude/value, wrong-side effect source, and non-canonical target names.
-- [ ] Verification: Run targeted Phase 2 authorization, validation, prompt, render, and simulation tests.
-
 ### Fix Generated-Anatomy Target Consequences
 
 Addresses: ISSUE-003

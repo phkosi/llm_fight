@@ -968,3 +968,254 @@ def test_phase2_smoke_repair_ignores_weapon_target_part():
     obscured = sanitized[C.DELTA][C.FIGHTER_A][C.EFFECTS_ADDED][0]
     assert obscured[C.NAME] == "obscured"
     assert C.METADATA not in obscured
+
+
+def test_phase2_drops_effect_with_zero_value_mechanic():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {
+        C.NARRATION: "A creates useless poison.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "poisoned",
+                        C.VALUE: 1,
+                        C.EFFECT_TTL: 3,
+                        C.EFFECT_ON_APPLY: "Poison takes hold.",
+                        C.EFFECT_MECHANICS: [
+                            {
+                                C.EFFECT_MECHANIC_KIND: C.EFFECT_MECHANIC_STAT_TICK,
+                                C.EFFECT_MECHANIC_STAT: C.PAIN,
+                                C.VALUE: 0,
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I poison my opponent.", C.FIGHTER_B: "I wait."},
+    )
+
+    assert sanitized[C.DELTA] == {}
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_INVALID_EFFECT_PAYLOAD
+    assert sanitized[C.VALIDATION_WARNINGS][0]["reason"] == "invalid_or_noop_mechanics"
+
+
+def test_phase2_drops_effect_with_object_ttl_or_missing_magnitude():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {
+        C.NARRATION: "A applies malformed effects.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "bad_ttl",
+                        C.VALUE: 1,
+                        C.EFFECT_TTL: {"turns": 3},
+                        C.EFFECT_ON_APPLY: "Bad ttl lands.",
+                    },
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "missing_value",
+                        C.EFFECT_TTL: 3,
+                        C.EFFECT_ON_APPLY: "No value lands.",
+                    },
+                ]
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I poison my opponent.", C.FIGHTER_B: "I wait."},
+    )
+
+    assert sanitized[C.DELTA] == {}
+    reasons = [warning["reason"] for warning in sanitized[C.VALIDATION_WARNINGS]]
+    assert reasons == ["invalid_ttl", "missing_or_invalid_magnitude"]
+
+
+def test_phase2_repairs_null_on_tick_without_silently_passing_it():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {
+        C.NARRATION: "A poisons B.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "poisoned",
+                        C.VALUE: 2,
+                        C.EFFECT_TTL: 3,
+                        C.EFFECT_ON_APPLY: "Poison takes hold.",
+                        C.EFFECT_ON_TICK: None,
+                    }
+                ]
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I poison my opponent.", C.FIGHTER_B: "I wait."},
+    )
+
+    effect = sanitized[C.DELTA][C.FIGHTER_B][C.EFFECTS_ADDED][0]
+    assert effect[C.NAME] == "poisoned"
+    assert C.EFFECT_ON_TICK not in effect
+    assert sanitized[C.VALIDATION_WARNINGS][0]["reason"] == "null_on_tick_removed"
+
+
+def test_phase2_drops_self_debuff_when_source_attempt_targeted_opponent():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": False, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True}
+    rolls = {C.FIGHTER_A: False, C.FIGHTER_B: True}
+    p2 = {
+        C.NARRATION: "B somehow poisons himself while attacking A.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_B,
+                        C.NAME: "poisoned",
+                        C.VALUE: 2,
+                        C.EFFECT_TTL: 3,
+                        C.TYPE: C.DEBUFFS,
+                        C.EFFECT_ON_APPLY: "Poison takes hold.",
+                    }
+                ]
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I wait.", C.FIGHTER_B: "I stab my opponent with a poison dagger."},
+    )
+
+    assert sanitized[C.DELTA] == {}
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_P2_EFFECT_SOURCE_MISMATCH
+
+
+def test_phase2_drops_self_debuff_when_source_attempt_names_opponent_id():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": False, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": True}
+    rolls = {C.FIGHTER_A: False, C.FIGHTER_B: True}
+    p2 = {
+        C.NARRATION: "B somehow poisons himself while attacking A.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_B,
+                        C.NAME: "poisoned",
+                        C.VALUE: 2,
+                        C.EFFECT_TTL: 3,
+                        C.TYPE: C.DEBUFFS,
+                        C.EFFECT_ON_APPLY: "Poison takes hold.",
+                    }
+                ]
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I wait.", C.FIGHTER_B: "I stab A with a poison dagger."},
+    )
+
+    assert sanitized[C.DELTA] == {}
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_P2_EFFECT_SOURCE_MISMATCH
+
+
+def test_phase2_canonicalizes_effect_added_target_alias():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {
+        C.NARRATION: "A poisons B's left arm.",
+        C.DELTA: {
+            C.FIGHTER_B: {
+                C.EFFECTS_ADDED: [
+                    {
+                        C.SOURCE: C.FIGHTER_A,
+                        C.NAME: "poisoned",
+                        C.VALUE: 2,
+                        C.EFFECT_TTL: 3,
+                        C.TYPE: C.DEBUFFS,
+                        C.EFFECT_ON_APPLY: "Poison takes hold.",
+                        C.METADATA: {C.TARGETED_PART: "left arm"},
+                    }
+                ]
+            }
+        },
+        C.FIGHT_END: False,
+        C.WINNER: None,
+    }
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I poison my opponent's left arm.", C.FIGHTER_B: "I wait."},
+    )
+
+    effect = sanitized[C.DELTA][C.FIGHTER_B][C.EFFECTS_ADDED][0]
+    assert effect[C.METADATA][C.TARGETED_PART] == "left_arm"
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_CANONICALIZED_EFFECT_TARGET

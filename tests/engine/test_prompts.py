@@ -71,6 +71,13 @@ def test_judge_p2_prompt_documents_structured_targeted_effect_removal():
     assert "omit it only for intentional remove-all by name/type" in JUDGE_P2_SYSTEM_PROMPT
 
 
+def test_judge_p2_prompt_rejects_noop_or_malformed_effect_payloads():
+    assert "Effect payloads must be mechanically useful" in JUDGE_P2_SYSTEM_PROMPT
+    assert "integer ttl values from 1 to 20 or -1" in JUDGE_P2_SYSTEM_PROMPT
+    assert "positive value/magnitude fields" in JUDGE_P2_SYSTEM_PROMPT
+    assert "omit no-op effects instead of using value 0, ttl 0, null text" in JUDGE_P2_SYSTEM_PROMPT
+
+
 def test_fighter_prompt_does_not_add_article_before_environment():
     rendered = _render_fighter_prompt()
 
