@@ -30,6 +30,7 @@ DEFAULTS = {
         C.CONFIG_BEST_OF_FIGHTER: "1",
         C.CONFIG_BEST_OF_JUDGE: "1",
         C.CONFIG_MAX_RETRIES: "1",
+        C.CONFIG_INVALID_OUTPUT_RETRIES: "2",
         C.CONFIG_LOG_LEVEL: "INFO",
         C.CONFIG_LOG_COMBAT_TURNS: "false",
         C.CONFIG_SAVE_TRANSCRIPTS: "false",
@@ -274,6 +275,13 @@ class Config:
                 f"'{C.P2_FAILURE_POLICY_FAIL_OPEN}' or '{C.P2_FAILURE_POLICY_FAIL_CLOSED}'."
             )
         return policy
+
+    def get_invalid_output_retries(self) -> int:
+        """Return invalid LLM output retries in the supported 0-2 range."""
+        retries = self.get(C.CONFIG_GENERAL, C.CONFIG_INVALID_OUTPUT_RETRIES, int, fallback=2)
+        if retries < 0 or retries > 2:
+            raise ValueError(f"[{C.CONFIG_GENERAL}] {C.CONFIG_INVALID_OUTPUT_RETRIES} must be between 0 and 2.")
+        return retries
 
     def get_transcript_detail(self) -> str:
         """Return the configured transcript detail mode."""

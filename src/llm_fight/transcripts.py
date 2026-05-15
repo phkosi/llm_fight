@@ -139,6 +139,8 @@ class TraceWriter:
 def _phase_for_event(event_name: str, data: dict[str, Any]) -> str:
     if event_name == C.FIGHT_EVENT_TOKEN_METADATA:
         return str(data.get("phase") or "llm")
+    if event_name == C.FIGHT_EVENT_LLM_OUTPUT_RETRY:
+        return str(data.get("phase") or "llm")
     if event_name.startswith("profile_generation"):
         return "profile_generation"
     if event_name == C.FIGHT_EVENT_FIGHTERS_READY:

@@ -66,13 +66,13 @@ No active issues.
 
 ### ISSUE-004: Generated play can silently fall back to preset anatomy for one fighter
 
-- Status: tasked
-- Task: TODO.md - Standardize LLM Invalid-Output Retries
+- Status: resolved
+- Task: completed - Standardize LLM Invalid-Output Retries
 - Source: playtest
 - Evidence: Single live play session on 2026-05-15 used a temporary copy of `llmfight.ini` with `[General] fighter_creation_mode = generated`, `save_transcripts = true`, and `transcript_dir = transcripts/generated_playtest_tmp`, then ran `uv run llmfight play --config <temp-generated-config> --simple-output --max-turns 4`. The setup trace recorded Fighter A profile generation ending with `{"mode":"fallback","nudge":"original","error":"invalid_generated_profile"}`, while Fighter B finished with `{"mode":"generated","nudge":"warrior","error":null}`. The same setup snapshot showed A on the default humanoid part set (`head, heart, left_arm, left_eye, left_leg, right_arm, right_eye, right_leg, torso`) and B on a generated custom set including `armor_core`.
 - Impact: A user can intentionally run generated mode and still get a mixed fallback/generated matchup without the session failing fast. That weakens trust in generated-mode playtests, makes one-off UX checks easy to misread, and can hide prompt-regression risk behind a superficially successful fight.
-- Suggested fix: Make generated-mode fallback much louder in `play` output and transcript summaries, and consider an opt-in strict mode that aborts or exits nonzero when either fighter falls back instead of silently continuing the fight with preset anatomy.
-- Tests: Add CLI/simulation coverage for generated-mode `play` sessions where one fighter falls back and the other generates successfully; assert that the fallback is surfaced clearly in output/metadata, and add a strict-mode test if abort-on-fallback is implemented.
+- Suggested fix: Resolved by adding a shared `invalid_output_retries` policy, visible retry events for generated profiles, fighter actions, Judge Phase 1, and Judge Phase 2, and explicit generated-profile fallback warnings in play output.
+- Tests: Added config, validation, generated-profile, fighter-action, Judge Phase 1, Judge Phase 2, simulation, CLI play, creativity-gate, and simulation-turn coverage. Verified with `uv run pytest -q tests/test_config.py tests/test_validation.py tests/test_profile_generation.py tests/engine/test_fighter.py tests/engine/test_judge.py tests/test_simulation.py tests/test_cli_play.py tests/test_creativity_gate.py tests/test_simulation_turns.py -p no:cacheprovider` (228 passed), `uv run ruff format --check .`, `uv run ruff check .`, and `uv run mypy src/llm_fight`.
 
 ## P3
 

@@ -36,7 +36,7 @@ async def test_judge_phase1_calls_chat_and_guarded_call(mock_chat, mock_guarded_
     ]
 
     # Mock guarded_call to return the first (and only) parsed chat response
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -118,7 +118,7 @@ async def test_judge_phase2_calls_chat_and_guarded_call(mock_chat, mock_guarded_
         )
     ]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -168,13 +168,50 @@ async def test_judge_phase1_parses_fenced_json(mock_chat, mock_guarded_call):
 ```"""
     mock_chat.return_value = [fenced]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
 
     result = await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B)
     assert result["judgement_text"] == "ok"
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.validation.asyncio.sleep", new_callable=AsyncMock)
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase1_retries_invalid_output_with_visible_callback(mock_chat, mock_sleep):
+    mock_chat.side_effect = [
+        [json.dumps({"wrong": "shape"})],
+        [
+            json.dumps(
+                {
+                    "judgement_text": "A presses forward.",
+                    "attempt_A_valid": True,
+                    "attempt_A_prob": "0.5",
+                    "attempt_B_valid": True,
+                    "attempt_B_prob": "0.4",
+                    "explanation": "Both attempts are plausible.",
+                }
+            )
+        ],
+    ]
+    retry_events = []
+
+    result = await judge_phase1(MOCK_STATE_SUMMARY, MOCK_ATTEMPT_A, MOCK_ATTEMPT_B, on_retry=retry_events.append)
+
+    assert result["judgement_text"] == "A presses forward."
+    assert mock_chat.await_count == 2
+    assert retry_events == [
+        {
+            "attempt": 1,
+            "next_attempt": 2,
+            "max_attempts": 3,
+            "reason": "invalid_output",
+            "error_type": "ValidationError",
+        }
+    ]
+    mock_sleep.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
@@ -191,7 +228,7 @@ async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
     fenced = f"```json\n{json.dumps(payload)}\n```"
     mock_chat.return_value = [fenced]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -199,6 +236,33 @@ async def test_judge_phase2_parses_fenced_json(mock_chat, mock_guarded_call):
     result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
     assert result["narration"] == "done"
     assert C.METADATA not in result
+
+
+@pytest.mark.asyncio
+@patch("llm_fight.validation.asyncio.sleep", new_callable=AsyncMock)
+@patch("llm_fight.judge.chat", new_callable=AsyncMock)
+async def test_judge_phase2_retries_invalid_output_with_visible_callback(mock_chat, mock_sleep):
+    mock_chat.side_effect = [
+        [""],
+        [""],
+        [json.dumps({C.NARRATION: "Clean result.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None})],
+    ]
+    retry_events = []
+
+    result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS, on_retry=retry_events.append)
+
+    assert result[C.NARRATION] == "Clean result."
+    assert mock_chat.await_count == 3
+    assert retry_events == [
+        {
+            "attempt": 1,
+            "next_attempt": 2,
+            "max_attempts": 3,
+            "reason": "invalid_output",
+            "error_type": "JSONDecodeError",
+        }
+    ]
+    mock_sleep.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
@@ -237,7 +301,7 @@ async def test_judge_phase1_trims_long_recent_log_newest_first(mock_chat, mock_g
         )
     ]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -261,7 +325,7 @@ async def test_judge_phase1_trims_long_recent_log_newest_first(mock_chat, mock_g
 async def test_judge_phase2_trims_long_recent_log_newest_first(mock_chat, mock_guarded_call):
     mock_chat.return_value = [json.dumps({C.NARRATION: "done", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None})]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -351,7 +415,7 @@ async def test_judge_phase2_required_payload_budget_error_does_not_call_chat(moc
 @pytest.mark.asyncio
 @patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_returns_noop_when_all_json_attempts_fail(mock_chat):
-    mock_chat.side_effect = [[""], [""]]
+    mock_chat.return_value = [""]
 
     with patch("llm_fight.judge._judge_settings", return_value=(2048, 1, 0)):
         result = await judge_phase2(MOCK_P2_INPUT_STATE, MOCK_ROLLS)
@@ -370,7 +434,7 @@ async def test_judge_phase2_returns_noop_when_all_json_attempts_fail(mock_chat):
 @pytest.mark.asyncio
 @patch("llm_fight.judge.chat", new_callable=AsyncMock)
 async def test_judge_phase2_fail_closed_raises_after_json_attempts_fail(mock_chat):
-    mock_chat.side_effect = [[""], [""]]
+    mock_chat.return_value = [""]
     original_policy = config_mod.CONFIG.get_judge_phase2_failure_policy()
     config_mod.CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_JUDGE_PHASE2_FAILURE_POLICY, C.P2_FAILURE_POLICY_FAIL_CLOSED)
     try:
@@ -395,8 +459,8 @@ async def test_judge_phase2_caps_parse_retries_for_empty_responses(mock_chat, mo
     assert result[C.DELTA] == {}
     assert result[C.FIGHT_END] is False
     assert result[C.WINNER] is None
-    assert mock_chat.call_count == 2
-    mock_sleep.assert_not_awaited()
+    assert mock_chat.call_count == 6
+    assert [call.args[0] for call in mock_sleep.await_args_list] == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -432,7 +496,7 @@ async def test_rejected_effect_text_absent_from_judge_phase1_payload(mock_chat, 
         )
     ]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic
@@ -487,7 +551,7 @@ async def test_judge_phase1_payload_includes_dynamic_effect_details(mock_chat, m
         )
     ]
 
-    async def mock_gc_logic(call_func, schema, max_retries=None):
+    async def mock_gc_logic(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     mock_guarded_call.side_effect = mock_gc_logic

@@ -123,6 +123,33 @@ def _trace_event_callback(trace_writer, external_on_event, hooks: SingleFightHoo
     return None
 
 
+def _emit_llm_output_retry(
+    hooks: SingleFightHooks,
+    on_event,
+    *,
+    phase: str,
+    retry: dict[str, Any],
+    turn: int | None = None,
+    fighter_id: str | None = None,
+) -> None:
+    hooks.emit_event(
+        on_event,
+        hooks.fight_event_type(
+            C.FIGHT_EVENT_LLM_OUTPUT_RETRY,
+            turn=turn,
+            fighter_id=fighter_id,
+            data={
+                "phase": phase,
+                "attempt": retry.get("attempt"),
+                "next_attempt": retry.get("next_attempt"),
+                "max_attempts": retry.get("max_attempts"),
+                "reason": retry.get("reason", "invalid_output"),
+                "error_type": retry.get("error_type", "InvalidOutput"),
+            },
+        ),
+    )
+
+
 async def _fighter_attempt(
     fighter: FighterState,
     opponent: FighterState,
@@ -151,6 +178,14 @@ async def _fighter_attempt(
                 turn=turn,
                 fighter_id=fighter.id,
             )
+        attempt_kwargs["on_retry"] = lambda retry: _emit_llm_output_retry(
+            hooks,
+            on_event,
+            phase="fighter_action",
+            retry=retry,
+            turn=turn,
+            fighter_id=fighter.id,
+        )
         with (
             active_trace(trace_writer),
             llm_trace_context(phase="fighter_action", turn=turn, fighter_id=fighter.id),
@@ -237,6 +272,13 @@ async def _judge_phase1_result(
             metadata=metadata,
             turn=turn,
         )
+    p1_kwargs["on_retry"] = lambda retry: _emit_llm_output_retry(
+        hooks,
+        on_event,
+        phase="judge_phase1",
+        retry=retry,
+        turn=turn,
+    )
     with active_trace(trace_writer), llm_trace_context(phase="judge_phase1", turn=turn):
         p1 = await hooks.judge_phase1({"A": A.to_json(), "B": B.to_json()}, attemptA, attemptB, **p1_kwargs)
     p1 = hooks.apply_effect_roll_modifiers(p1, {C.FIGHTER_A: A, C.FIGHTER_B: B})
@@ -292,6 +334,13 @@ async def _judge_phase2_result(
             metadata=metadata,
             turn=turn,
         )
+    p2_kwargs["on_retry"] = lambda retry: _emit_llm_output_retry(
+        hooks,
+        on_event,
+        phase="judge_phase2",
+        retry=retry,
+        turn=turn,
+    )
     with active_trace(trace_writer), llm_trace_context(phase="judge_phase2", turn=turn):
         p2 = await hooks.judge_phase2(p2_input_state, rolls, **p2_kwargs)
     p2 = hooks.authorize_phase2_result(p2, p1, rolls, fighters, attempts=attempts)

@@ -148,7 +148,7 @@ async def test_single_fight_runs_to_completion(
         "explanation": "",
     }
 
-    async def p2_side_effect(p2_input_state, rolls):
+    async def p2_side_effect(p2_input_state, rolls, **kwargs):
         # This delta will be passed to fighter_b_mock.apply_delta
         return {
             "narration": "A lands a decisive blow! B is knocked out!",
@@ -532,6 +532,8 @@ async def test_invalid_generated_profiles_fallback_without_transcript_leak(tmp_p
     trace_text = trace_files[0].read_text(encoding="utf-8")
     assert raw_unsafe not in trace_text
     assert "profile_generation_start" in trace_text
+    assert "llm_output_retry" in trace_text
+    assert "invalid_generated_profile" in trace_text
     assert "profile_generation_end" in trace_text
     assert not (transcript_dir / "leak.json").exists()
     serialized_state = json.dumps(p1_states[0], default=str)

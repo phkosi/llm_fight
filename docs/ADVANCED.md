@@ -73,6 +73,7 @@ ollama_proxy_mode = auto
 best_of_fighter = 1
 best_of_judge = 1
 max_retries = 1
+invalid_output_retries = 2
 judge_phase2_failure_policy = fail_open
 log_level = INFO
 log_combat_turns = false
@@ -96,6 +97,8 @@ max_turns = 6
 `ollama_default_model` is required for LLM runs. Known tested models use the built-in registry first, then local `llmfight.ini` values override it. `qwen3.6:35b` defaults to `0.4/expansive` (`768` fighter tokens, `6144` judge tokens); `gemma4:26b` defaults to the conservative `0.4/default` (`512` fighter tokens, `4096` judge tokens). Unknown models keep generic program-managed context/output limits and leave `ollama_temperature = auto` so the provider default is used unless the local config sets a numeric value.
 
 `profile` remains accepted as a legacy alias for `anatomy_profile`, but new examples and docs should use `anatomy_profile`.
+
+`max_retries` controls transport/API retries. `invalid_output_retries` controls model-output validation retries for JSON/schema failures, generated-profile validation failures, and empty fighter actions; the supported range is `0` to `2`, and the default is `2`.
 
 ## Endpoint Modes
 

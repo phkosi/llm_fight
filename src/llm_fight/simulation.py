@@ -69,6 +69,33 @@ def _emit_token_metadata(
     )
 
 
+def _emit_llm_output_retry(
+    on_event: FightEventCallback | None,
+    *,
+    phase: str,
+    retry: dict[str, Any],
+    turn: int | None = None,
+    fighter_id: str | None = None,
+) -> None:
+    data = {
+        "phase": phase,
+        "attempt": retry.get("attempt"),
+        "next_attempt": retry.get("next_attempt"),
+        "max_attempts": retry.get("max_attempts"),
+        "reason": retry.get("reason", "invalid_output"),
+        "error_type": retry.get("error_type", "InvalidOutput"),
+    }
+    _emit_event(
+        on_event,
+        FightEvent(
+            C.FIGHT_EVENT_LLM_OUTPUT_RETRY,
+            turn=turn,
+            fighter_id=fighter_id,
+            data=data,
+        ),
+    )
+
+
 def _status_outcome(A: FighterState, B: FighterState) -> str | None:
     a_out = A.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}
     b_out = B.status in {C.FighterStatus.DEAD, C.FighterStatus.UNCONSCIOUS}
@@ -250,6 +277,12 @@ async def _build_match_fighter(
                 on_event,
                 phase="profile_generation",
                 metadata=metadata,
+                fighter_id=fighter_id,
+            )
+            generation_kwargs["on_retry"] = lambda retry: _emit_llm_output_retry(
+                on_event,
+                phase="profile_generation",
+                retry=retry,
                 fighter_id=fighter_id,
             )
         profile = await generate_fighter_profile(

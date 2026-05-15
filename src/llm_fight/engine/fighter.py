@@ -154,6 +154,7 @@ def _fighter_prompt_settings(turn_window: int) -> _FighterPromptSettings:
     )
     best_of = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_BEST_OF_FIGHTER, int, fallback=1)
     max_retries = config_mod.CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
+    invalid_output_retries = config_mod.CONFIG.get_invalid_output_retries()
     return _FighterPromptSettings(
         turn_window=turn_window,
         sentence_limit=sentence_limit,
@@ -162,7 +163,7 @@ def _fighter_prompt_settings(turn_window: int) -> _FighterPromptSettings:
         context_limit=context_limit,
         best_of=best_of,
         max_retries=max_retries,
-        empty_action_retries=min(max_retries, 1),
+        empty_action_retries=invalid_output_retries,
     )
 
 
@@ -307,6 +308,7 @@ async def get_fighter_attempt(
     combat_log: CombatLog | str | None = None,
     turn_window: int | None = None,
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
+    on_retry: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     """Generates a fighter's attempted action for the current turn.
 
@@ -332,6 +334,16 @@ async def get_fighter_attempt(
             attempt + 1,
             context.settings.empty_action_retries + 1,
         )
+        if attempt < context.settings.empty_action_retries and on_retry is not None:
+            on_retry(
+                {
+                    "attempt": attempt + 1,
+                    "next_attempt": attempt + 2,
+                    "max_attempts": context.settings.empty_action_retries + 1,
+                    "reason": "empty_fighter_action",
+                    "error_type": "EmptyAction",
+                }
+            )
 
     logger.warning("Fighter %s produced no usable action; using fallback guard action.", fighter.id)
     return _EMPTY_ACTION_FALLBACK

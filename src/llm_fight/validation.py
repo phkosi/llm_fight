@@ -387,6 +387,12 @@ JudgeP2Schema = {
 }
 
 
-async def guarded_call(func: Callable[[], Any], schema: dict[str, Any], max_retries: int | None = None) -> Any:
+async def guarded_call(
+    func: Callable[[], Any],
+    schema: dict[str, Any],
+    max_retries: int | None = None,
+    *,
+    on_retry: Callable[[dict[str, Any]], None] | None = None,
+) -> Any:
     """Compatibility wrapper for the runtime guarded-call helper."""
-    return await _guarded_call(func, schema, max_retries=max_retries, sleep=asyncio.sleep)
+    return await _guarded_call(func, schema, max_retries=max_retries, sleep=asyncio.sleep, on_retry=on_retry)

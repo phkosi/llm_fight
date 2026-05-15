@@ -9,6 +9,7 @@ ollama_keep_alive = 10m
 # max_tokens_judge = 6144
 # ollama_temperature = 0.4
 max_retries = 1
+invalid_output_retries = 2
 fighter_creation_mode = configured
 fighter_A = A
 fighter_B = B

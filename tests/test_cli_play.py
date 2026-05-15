@@ -16,6 +16,10 @@ def _plain_cli_output(result):
     return " ".join(unstyle(result.output).split())
 
 
+def _mock_required_model():
+    return patch("llm_fight.config.Config.get_ollama_model", return_value="qwen3.6:35b")
+
+
 def test_cli_play():
     runner = CliRunner()
     log = MagicMock(turns=[MagicMock()])
@@ -26,6 +30,7 @@ def test_cli_play():
         ) as mock_fight,
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play"])
@@ -50,6 +55,7 @@ def test_cli_play_verbose():
         ) as mock_fight,
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play", "--verbose"])
@@ -78,6 +84,7 @@ def test_cli_play_verbose_routes_engine_logs_to_stderr():
     with (
         patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)),
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         result = runner.invoke(app, ["play", "--verbose", "--simple-output"])
 
@@ -96,6 +103,7 @@ def test_cli_play_simple_output():
         ) as mock_fight,
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play", "--simple-output"])
@@ -121,6 +129,7 @@ def test_cli_play_formats_configured_winner_display_name():
         patch("llm_fight.simulation._single_fight", new=AsyncMock(return_value=(result_payload, log))),
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = True
         result = runner.invoke(app, ["play"])
@@ -139,6 +148,7 @@ def test_cli_play_simple_output_no_rich():
         ) as mock_fight,
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--simple-output"])
@@ -176,6 +186,7 @@ def test_cli_play_simple_output_separates_turn_phases():
             new=AsyncMock(return_value=({C.WINNER: C.DRAW, C.LOG_TURN: "1"}, log)),
         ),
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         result = runner.invoke(app, ["play", "--simple-output"])
 
@@ -223,6 +234,7 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
             "parts": {"left_wing": {}, "second_head": {}},
             C.BUFFS: [],
             C.DEBUFFS: [],
+            C.PROFILE_GENERATION: {"mode": "fallback", "nudge": "monster", "error": "invalid_generated_profile"},
         },
         C.FIGHTER_B: {
             "class_": "Knight",
@@ -236,6 +248,19 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
 
     async def fake_fight(fighter_a_section=None, fighter_b_section=None, return_log=False, on_event=None):
         on_event(FightEvent(C.FIGHT_EVENT_PROFILE_GENERATION_START, fighter_id=C.FIGHTER_A))
+        on_event(
+            FightEvent(
+                C.FIGHT_EVENT_LLM_OUTPUT_RETRY,
+                fighter_id=C.FIGHTER_A,
+                data={
+                    "phase": "profile_generation",
+                    "attempt": 1,
+                    "next_attempt": 2,
+                    "max_attempts": 3,
+                    "reason": "invalid_generated_profile",
+                },
+            )
+        )
         on_event(FightEvent(C.FIGHT_EVENT_PROFILE_GENERATION_END, fighter_id=C.FIGHTER_A))
         on_event(FightEvent(C.FIGHT_EVENT_FIGHTERS_READY, data={"fighters": fighters}))
         on_event(
@@ -251,14 +276,17 @@ def test_cli_play_simple_output_streams_progress_design_turns_and_tokens():
     with (
         patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=fake_fight)),
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         result = runner.invoke(app, ["play", "--simple-output"])
 
     assert result.exit_code == 0
     assert "Generating fighter profile (Fighter A)" in result.output
+    assert "Warning: profile_generation output invalid; retrying (2/3) (Fighter A)" in result.output
     assert "Fighter Designs" in result.output
     assert "Fighter A (Wings)" in result.output
     assert "Winged Duelist" in result.output
+    assert "Warning: generated profile fallback used (invalid_generated_profile)" in result.output
     assert "Turn 1:" in result.output
     assert "Rolls:" in result.output
     assert "Fighter A: success" in result.output
@@ -326,6 +354,7 @@ def test_cli_play_with_config(tmp_path):
         ) as mock_fight,
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--config", str(cfg), "--max-turns", "3", "--simple-output"])
@@ -420,6 +449,7 @@ def test_cli_fighter_options():
         ) as mock_fight,
         patch("llm_fight.cli.render") as mock_render,
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         mock_render.RICH_AVAILABLE = False
         result = runner.invoke(app, ["play", "--fighter-a", "X", "--fighter-b", "Y", "--simple-output"])
@@ -437,6 +467,7 @@ def test_cli_play_phase2_fail_closed_error_is_actionable():
             ),
         ),
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
+        _mock_required_model(),
     ):
         result = runner.invoke(app, ["play"])
 
@@ -452,6 +483,7 @@ def test_cli_llm_validation_failure_is_actionable():
             "llm_fight.simulation._single_fight",
             new=AsyncMock(side_effect=RuntimeError("Validation/JSON parsing failed after 2 attempts")),
         ),
+        _mock_required_model(),
     ):
         result = runner.invoke(app, ["play", "--simple-output"])
 
@@ -475,6 +507,7 @@ def test_cli_prompt_budget_error_is_actionable():
     with (
         patch("llm_fight.cli.ping_ollama", new=AsyncMock()),
         patch("llm_fight.simulation._single_fight", new=AsyncMock(side_effect=error)),
+        _mock_required_model(),
     ):
         result = runner.invoke(app, ["play", "--simple-output"])
 

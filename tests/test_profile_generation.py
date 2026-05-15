@@ -175,6 +175,8 @@ async def test_generate_fighter_profile_accepts_third_validation_attempt(tmp_pat
     async def fake_chat(*args, **kwargs):
         return [responses.pop(0)]
 
+    retry_events = []
+
     with patch("llm_fight.profile_generation.chat", new=AsyncMock(side_effect=fake_chat)) as mock_chat:
         profile = await generate_fighter_profile(
             C.FIGHTER_A,
@@ -182,7 +184,24 @@ async def test_generate_fighter_profile_accepts_third_validation_attempt(tmp_pat
             C.FIGHTER_B,
             "monster",
             config=cfg,
+            on_retry=retry_events.append,
         )
 
     assert profile.class_ == "Rune Beast"
     assert mock_chat.await_count == 3
+    assert retry_events == [
+        {
+            "attempt": 1,
+            "next_attempt": 2,
+            "max_attempts": 3,
+            "reason": "invalid_generated_profile",
+            "error_type": "RuntimeError",
+        },
+        {
+            "attempt": 2,
+            "next_attempt": 3,
+            "max_attempts": 3,
+            "reason": "invalid_generated_profile",
+            "error_type": "RuntimeError",
+        },
+    ]

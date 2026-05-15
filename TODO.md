@@ -4,15 +4,6 @@ This file tracks active implementation work only. Completed historical work from
 
 ## Active Tasks
 
-### Standardize LLM Invalid-Output Retries
-
-Addresses: ISSUE-004
-
-- [ ] Implementation intent: Add a shared invalid-output retry policy for generated profiles, fighter actions, Judge Phase 1, and Judge Phase 2. Define the policy as initial attempt plus up to 2 invalid-output retries before fallback/error, and surface each retry plus any final generated-profile preset fallback outside verbose-only logger output.
-- [ ] Acceptance goals: Generated profile invalid outputs retry up to 2 times; every retry and final fallback is visible in `play` output/simple output and transcript events or metadata; non-verbose mode still shows these warnings; existing successful generated-profile and configured-fighter paths remain unchanged.
-- [ ] Required tests: Add unit/CLI tests for profile retry warnings, final generated-profile fallback warnings, fighter empty-action retry warnings, Judge P1 invalid JSON/schema retries, and Judge P2 invalid JSON/schema retries.
-- [ ] Verification: Run targeted retry tests, then `uv run pytest -q tests/test_profile_generation.py tests/test_simulation.py tests/test_cli_play.py tests/test_validation.py -p no:cacheprovider`.
-
 ### Harden Judge Phase 2 Effect Payloads
 
 Addresses: ISSUE-002

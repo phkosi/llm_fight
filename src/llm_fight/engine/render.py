@@ -96,6 +96,9 @@ def _fighter_design_lines(fighter_id: str, state: dict[str, Any]) -> list[str]:
     profile_generation = state.get(C.PROFILE_GENERATION)
     if profile_generation:
         lines.append(f"  Profile generation: {profile_generation}")
+        if isinstance(profile_generation, dict) and profile_generation.get("mode") == "fallback":
+            error = profile_generation.get("error") or "unknown_error"
+            lines.append(f"  Warning: generated profile fallback used ({error}); configured profile is active.")
     return lines
 
 
@@ -134,11 +137,27 @@ _EVENT_STATUS_LABELS = {
     C.FIGHT_EVENT_EFFECTS_END: "Effects ticked",
     C.FIGHT_EVENT_TURN_COMPLETE: "Turn complete",
     C.FIGHT_EVENT_FIGHT_COMPLETE: "Fight complete",
+    C.FIGHT_EVENT_LLM_OUTPUT_RETRY: "Warning: LLM output invalid; retrying",
 }
 
 
 def format_fight_event_status(event: Any) -> str:
     """Return a short user-facing status line for a play event."""
+    if getattr(event, "name", "") == C.FIGHT_EVENT_LLM_OUTPUT_RETRY:
+        data = getattr(event, "data", {}) or {}
+        phase = str(data.get("phase") or "llm")
+        next_attempt = data.get("next_attempt")
+        max_attempts = data.get("max_attempts")
+        retry_text = f" ({next_attempt}/{max_attempts})" if next_attempt and max_attempts else ""
+        suffixes = []
+        fighter_id = getattr(event, "fighter_id", None)
+        turn = getattr(event, "turn", None)
+        if fighter_id:
+            suffixes.append(f"Fighter {fighter_id}")
+        if turn is not None:
+            suffixes.append(f"turn {turn}")
+        suffix = f" ({', '.join(suffixes)})" if suffixes else ""
+        return f"Warning: {phase} output invalid; retrying{retry_text}{suffix}"
     label = _EVENT_STATUS_LABELS.get(getattr(event, "name", ""), str(getattr(event, "name", "event")))
     fighter_id = getattr(event, "fighter_id", None)
     turn = getattr(event, "turn", None)

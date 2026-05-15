@@ -74,7 +74,7 @@ async def test_non_humanoid_anatomy_survives_state_prompts_judge_and_log(tmp_pat
     captured_p1_states = []
     captured_p2_inputs = []
 
-    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0):
+    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0, **kwargs):
         prompt_log = CombatLog() if combat_log is None else combat_log
         with patch("llm_fight.engine.fighter.chat", new=AsyncMock(return_value=["I strike."])) as mock_chat:
             await get_fighter_attempt(fighter, opponent, combat_log=prompt_log, turn_window=turn_window)
@@ -164,7 +164,7 @@ async def test_non_hard_coded_declarative_effect_survives_prompts_ticks_and_expi
         await get_fighter_attempt(fighter, opponent, combat_log="", turn_window=0)
     captured_fighter_prompts.append(mock_fighter_chat.call_args[0][0][0][C.AGENT_CONTENT])
 
-    async def mock_guarded_call(call_func, schema, max_retries=None):
+    async def mock_guarded_call(call_func, schema, max_retries=None, **kwargs):
         return await call_func()
 
     with (

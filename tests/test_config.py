@@ -229,6 +229,18 @@ def test_default_judge_phase2_failure_policy_loaded(temp_config_instance):
     assert temp_config_instance.get_judge_phase2_failure_policy() == C.P2_FAILURE_POLICY_FAIL_OPEN
 
 
+def test_default_invalid_output_retries_loaded(temp_config_instance):
+    assert temp_config_instance.get_invalid_output_retries() == 2
+
+
+def test_invalid_output_retries_must_be_supported_range(tmp_path):
+    file_path = tmp_path / "bad_invalid_output_retries.ini"
+    file_path.write_text("[General]\ninvalid_output_retries = 3\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid_output_retries"):
+        Config(file_path).get_invalid_output_retries()
+
+
 def test_default_transcript_detail_loaded(temp_config_instance):
     assert temp_config_instance.get_transcript_detail() == C.TRANSCRIPT_DETAIL_COMPACT
 

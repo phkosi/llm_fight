@@ -147,7 +147,7 @@ def _phase2_noop_result(exc: Exception | None = None, *, policy: str = C.P2_FAIL
 
 def _judge_phase2_settings() -> _JudgePhase2Settings:
     max_tokens, best_of, max_retries = _judge_settings()
-    parse_retries = 0
+    parse_retries = config_mod.CONFIG.get_invalid_output_retries()
     context_limit = _ollama_num_ctx(max_tokens)
     return _JudgePhase2Settings(
         max_tokens=max_tokens,
@@ -327,6 +327,7 @@ async def judge_phase1(
     *,
     recent_log: str = "",
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
+    on_retry: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Judge Phase 1: Evaluates two fighter attempts for validity and success probability.
@@ -395,7 +396,12 @@ async def judge_phase1(
                     on_metadata(result.metadata)
         return _parse_first_json_response(response_texts)
 
-    result = await guarded_call(_call, JudgeP1Schema, max_retries=max_retries)
+    result = await guarded_call(
+        _call,
+        JudgeP1Schema,
+        max_retries=config_mod.CONFIG.get_invalid_output_retries(),
+        on_retry=on_retry,
+    )
     return result
 
 
@@ -404,6 +410,7 @@ async def judge_phase2(
     rolls: dict[str, bool],
     *,
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
+    on_retry: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """
     Judge Phase 2: Narrates combat outcomes and calculates state changes (deltas).
@@ -424,6 +431,7 @@ async def judge_phase2(
             lambda: _call_judge_phase2_with_repair(context, on_metadata),
             JudgeP2Schema,
             max_retries=context.settings.parse_retries,
+            on_retry=on_retry,
         )
     except RuntimeError as exc:
         return _handle_phase2_guarded_failure(exc)

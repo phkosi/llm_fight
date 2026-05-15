@@ -95,7 +95,7 @@ def _run_async(coro):
         if "Validation/JSON parsing failed" in str(exc):
             raise ClickException(
                 f"LLM output could not be parsed after retries: {exc}. "
-                "Try a stronger model, increasing max_tokens_judge, or increasing max_retries."
+                "Try a stronger model, increasing max_tokens_judge, or increasing invalid_output_retries."
             ) from exc
         raise
 
@@ -164,6 +164,9 @@ def _handle_play_event(state: _PlayRenderState, event) -> None:
         return
     if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
         return
+    if event.name == C.FIGHT_EVENT_LLM_OUTPUT_RETRY:
+        state.console.print(render.format_fight_event_status(event))
+        return
     if state.simple_output:
         state.console.print(render.format_fight_event_status(event))
 
@@ -178,6 +181,10 @@ def _handle_rich_play_event(state: _PlayRenderState, status, event) -> None:
         _handle_play_event(state, event)
         if event.name == C.FIGHT_EVENT_FIGHT_COMPLETE:
             status.update("Fight complete")
+        return
+    if event.name == C.FIGHT_EVENT_LLM_OUTPUT_RETRY:
+        _handle_play_event(state, event)
+        status.update(render.format_fight_event_status(event))
         return
     status.update(render.format_fight_event_status(event))
 

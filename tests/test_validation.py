@@ -109,9 +109,9 @@ async def test_guarded_call_exponential_backoff(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_guarded_call_reads_retry_config_at_call_time(tmp_path, monkeypatch):
+async def test_guarded_call_reads_invalid_output_retry_config_at_call_time(tmp_path, monkeypatch):
     cfg_path = tmp_path / "llmfight.ini"
-    cfg_path.write_text("[General]\nmax_retries = 2\n")
+    cfg_path.write_text("[General]\ninvalid_output_retries = 2\n")
     old_config = config_mod.CONFIG
     config_mod.CONFIG = Config(cfg_path)
     monkeypatch.setattr("llm_fight.validation.asyncio.sleep", AsyncMock())
@@ -130,6 +130,33 @@ async def test_guarded_call_reads_retry_config_at_call_time(tmp_path, monkeypatc
 
     assert result == {"key": "ok"}
     assert mock_func.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_reports_retry_without_raw_error(monkeypatch):
+    sleep = AsyncMock()
+    monkeypatch.setattr("llm_fight.validation.asyncio.sleep", sleep)
+    schema = {
+        C.SCHEMA_TYPE: C.SCHEMA_OBJECT,
+        C.SCHEMA_PROPERTIES: {"key": {C.SCHEMA_TYPE: C.SCHEMA_STRING}},
+        C.SCHEMA_REQUIRED: ["key"],
+    }
+    retry_events = []
+    mock_func = MockAsyncCallable(return_values=[{"wrong": "value"}, {"key": "ok"}])
+
+    result = await guarded_call(mock_func, schema, max_retries=1, on_retry=retry_events.append)
+
+    assert result == {"key": "ok"}
+    assert retry_events == [
+        {
+            "attempt": 1,
+            "next_attempt": 2,
+            "max_attempts": 2,
+            "reason": "invalid_output",
+            "error_type": "ValidationError",
+        }
+    ]
+    sleep.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
@@ -637,7 +664,7 @@ async def test_judge_phase1_passes_schema_to_chat(mock_chat, mock_guarded_call):
         )
     ]
 
-    async def passthrough(func, schema, max_retries=None):
+    async def passthrough(func, schema, max_retries=None, **kwargs):
         return await func()
 
     mock_guarded_call.side_effect = passthrough
@@ -653,7 +680,7 @@ async def test_judge_phase1_passes_schema_to_chat(mock_chat, mock_guarded_call):
 async def test_judge_phase2_passes_schema_to_chat(mock_chat, mock_guarded_call):
     mock_chat.return_value = [json.dumps({"narration": "", "delta": {}, "fight_end": False, "winner": None})]
 
-    async def passthrough(func, schema, max_retries=None):
+    async def passthrough(func, schema, max_retries=None, **kwargs):
         return await func()
 
     mock_guarded_call.side_effect = passthrough

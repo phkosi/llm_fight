@@ -231,6 +231,7 @@ async def generate_fighter_profile(
     *,
     config=None,
     on_metadata: Callable[[dict[str, Any]], None] | None = None,
+    on_retry: Callable[[dict[str, Any]], None] | None = None,
 ) -> FighterProfile:
     """Generate and validate one fighter profile, raising sanitized failures."""
     cfg = config or config_mod.CONFIG
@@ -255,7 +256,7 @@ async def generate_fighter_profile(
         logger.warning("Profile generation for fighter %s exceeded prompt budget: %s", fighter_id, exc)
         raise ProfileGenerationError(C.PROFILE_GENERATION_ERROR_FAILED) from exc
     transport_retries = cfg.get(C.CONFIG_GENERAL, C.CONFIG_MAX_RETRIES, int, fallback=0)
-    profile_retries = 2
+    profile_retries = cfg.get_invalid_output_retries()
 
     async def _call() -> dict[str, Any]:
         if on_metadata is None:
@@ -298,6 +299,16 @@ async def generate_fighter_profile(
                     "Generated profile for fighter %s failed validation; retrying profile request.",
                     fighter_id,
                 )
+                if on_retry is not None:
+                    on_retry(
+                        {
+                            "attempt": attempt + 1,
+                            "next_attempt": attempt + 2,
+                            "max_attempts": profile_retries + 1,
+                            "reason": "invalid_generated_profile",
+                            "error_type": type(exc).__name__,
+                        }
+                    )
                 continue
         except Exception as exc:
             logger.warning("Profile generation for fighter %s failed; falling back.", fighter_id)

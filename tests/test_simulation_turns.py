@@ -168,6 +168,9 @@ async def test_action_modifier_invalidates_blocked_action_before_roll():
 @pytest.mark.asyncio
 async def test_single_fight_uses_one_fixed_ollama_context_for_all_native_calls():
     old_values = {
+        (C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL): CONFIG.get(
+            C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, str
+        ),
         (C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, str),
         (C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, str),
         (C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, str),
@@ -178,6 +181,7 @@ async def test_single_fight_uses_one_fixed_ollama_context_for_all_native_calls()
         (C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS): CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_SAVE_TRANSCRIPTS, str),
         (C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS): CONFIG.get(C.CONFIG_SIMULATION, C.CONFIG_MAX_TURNS, str),
     }
+    CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_LLAMA_DEFAULT_MODEL, "qwen3.6:35b")
     CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_NUM_CTX, "32768")
     CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_OLLAMA_KEEP_ALIVE, "10m")
     CONFIG.set(C.CONFIG_GENERAL, C.CONFIG_MAX_TOKENS_FIGHTER, "64")
@@ -552,7 +556,7 @@ async def test_new_ttl_one_effect_reaches_next_turn_prompts_before_expiring():
     captured_p1_states = []
     captured_p2_states = []
 
-    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0):
+    async def fake_get_attempt(fighter, opponent, combat_log=None, turn_window=0, **kwargs):
         captured_fighter_prompts.append(fighter.to_json())
         return "attack"
 
@@ -569,7 +573,7 @@ async def test_new_ttl_one_effect_reaches_next_turn_prompts_before_expiring():
 
     p2_turn = 0
 
-    async def fake_judge_p2(p2_input_state, rolls):
+    async def fake_judge_p2(p2_input_state, rolls, **kwargs):
         nonlocal p2_turn
         p2_turn += 1
         captured_p2_states.append(p2_input_state)

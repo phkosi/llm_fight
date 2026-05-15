@@ -245,6 +245,8 @@ async def test_get_fighter_attempt_retries_empty_responses(mock_fighter_state, m
 
     mock_config_get.side_effect = config_get_side_effect
 
+    retry_events = []
+
     with (
         patch(
             "llm_fight.engine.fighter.chat",
@@ -258,10 +260,20 @@ async def test_get_fighter_attempt_retries_empty_responses(mock_fighter_state, m
             opponent=mock_opponent_state,
             combat_log="Nothing happened.",
             turn_window=1,
+            on_retry=retry_events.append,
         )
 
     assert actual_response == "I slash at the opening."
     assert mock_chat_func.call_count == 2
+    assert retry_events == [
+        {
+            "attempt": 1,
+            "next_attempt": 2,
+            "max_attempts": 3,
+            "reason": "empty_fighter_action",
+            "error_type": "EmptyAction",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -384,7 +396,7 @@ async def test_get_fighter_attempt_uses_fallback_after_empty_retries(mock_fighte
         )
 
     assert actual_response == "I keep my guard up and look for an opening."
-    assert mock_chat_func.call_count == 2
+    assert mock_chat_func.call_count == 3
 
 
 @pytest.mark.asyncio
