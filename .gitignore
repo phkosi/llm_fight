@@ -199,3 +199,6 @@ cython_debug/
 
 # transcripts
 transcripts/
+
+# local simulation output
+sim_results.csv

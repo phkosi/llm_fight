@@ -10,6 +10,12 @@ from llm_fight.agents import chat
 from llm_fight.engine import constants as C
 
 
+@pytest.fixture(autouse=True)
+def configured_model():
+    with patch("llm_fight.config.Config.get_ollama_model", return_value="qwen3.6:35b"):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_chat_http_error_raises_exception():
     messages = [{C.AGENT_ROLE: C.AGENT_USER, C.AGENT_CONTENT: "Test"}]

@@ -11,6 +11,12 @@ from llm_fight.engine import constants as C
 BASE_OLLAMA_URL = CONFIG.get(C.CONFIG_GENERAL, C.CONFIG_LLAMA_API_URL, str, fallback="http://localhost:11434/api/chat")
 
 
+@pytest.fixture(autouse=True)
+def configured_model():
+    with patch("llm_fight.config.Config.get_ollama_model", return_value="qwen3.6:35b"):
+        yield
+
+
 def test_get_ollama_url_no_env(monkeypatch):
     """When API_URL is unset, default config fallback is used."""
     monkeypatch.delenv("API_URL", raising=False)

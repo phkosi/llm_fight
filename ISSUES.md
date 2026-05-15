@@ -36,13 +36,13 @@ No active issues.
 
 ### ISSUE-001: Split Phase 2 authorization and tests
 
-- Status: tasked
-- Task: TODO.md - Split Phase 2 Authorization And Tests
+- Status: resolved
+- Task: completed - Split Phase 2 Authorization And Tests
 - Source: implementation review
-- Evidence: `src/llm_fight/phase2_authorization.py` is 1103 physical LOC; largest functions are `_authorize_fighter_delta` (177 LOC), `authorize_phase2_result` (113 LOC), `_repair_missing_successful_setup` (84 LOC), `_setup_effect_payload` (55 LOC), and `_authorized_scalar_value` (42 LOC). `tests/test_phase2_authorization.py` is 968 physical LOC, above the 800 LOC test-module threshold.
+- Evidence: Resolved by splitting Phase 2 helpers into `src/llm_fight/phase2_common.py` (89 LOC), `src/llm_fight/phase2_text.py` (298 LOC), `src/llm_fight/phase2_effects.py` (261 LOC), `src/llm_fight/phase2_repairs.py` (277 LOC), and `src/llm_fight/phase2_wounds.py` (255 LOC), leaving `src/llm_fight/phase2_authorization.py` at 547 LOC. Split `tests/test_phase2_authorization.py` into focused modules of 444, 362, and 519 LOC.
 - Impact: Phase 2 authorization now carries source validation, target canonicalization, narration repair, deterministic damage repair, and setup-effect repair in one module, making future gameplay guardrail changes harder to review safely.
-- Suggested fix: Split into focused modules such as `phase2_wounds.py`, `phase2_effect_repairs.py`, `phase2_narration.py`, and a small orchestration wrapper; split tests along the same boundaries with shared fighter/p1/p2 fixtures.
-- Tests: Preserve the existing Phase 2 authorization, prompt-safety, combat-log, render, and simulation-turn tests; add focused tests for each extracted helper module before deleting the large-file issue.
+- Suggested fix: Resolved with a behavior-preserving split for shared validation helpers, text/target-intent helpers, wound authorization, effect-payload authorization, deterministic repair helpers, and Phase 2 orchestration.
+- Tests: Verified the split with `uv run pytest -q tests/test_phase2_authorization.py tests/test_phase2_authorization_rules.py tests/test_phase2_authorization_repairs.py -p no:cacheprovider` (26 passed). Full quality gates are tracked in the completing task commit.
 
 ### ISSUE-002: Judge Phase 2 effect payloads still cause fallback and authority oddities
 

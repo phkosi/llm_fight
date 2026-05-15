@@ -52,6 +52,7 @@ where = ["src"]
 markers = [
     "live: requires an explicitly configured live Ollama endpoint",
     "perf: long-running local performance checks",
+    "requires_missing_model: opts out of mocked test model fixtures to verify missing-model errors",
 ]
 
 [tool.ruff]

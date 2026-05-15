@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import llm_fight.fight_loop as fight_loop_module
 import llm_fight.simulation as sim_module
 from llm_fight.agents import ChatResult
 from llm_fight.config import CONFIG
@@ -511,7 +512,7 @@ async def test_mixed_success_applies_only_authorized_source_consequences():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("winner", [C.FIGHTER_A, None])
-async def test_judge_only_fight_end_continues_when_state_is_not_terminal(winner):
+async def test_unsupported_judge_fight_end_continues_when_state_is_not_terminal(winner):
     async def fake_judge_p1(*args, **kwargs):
         return {
             f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
@@ -539,7 +540,6 @@ async def test_judge_only_fight_end_continues_when_state_is_not_terminal(winner)
         patch.object(sim_module, "judge_phase1", new=AsyncMock(side_effect=fake_judge_p1)),
         patch.object(sim_module, "judge_phase2", new=judge_p2),
         patch.object(sim_module, "rand", MagicMock(return_value=0.0), create=True),
-        patch.object(sim_module.logger, "warning") as mock_warning,
     ):
         result = await sim_module._single_fight()
 
@@ -547,6 +547,27 @@ async def test_judge_only_fight_end_continues_when_state_is_not_terminal(winner)
 
     assert result[C.WINNER] == C.DRAW
     assert judge_p2.await_count == 2
+
+
+def test_fight_loop_warns_when_judge_only_outcome_is_not_terminal():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_preset(C.FIGHTER_B, "humanoid"),
+    }
+    hooks = MagicMock()
+    hooks.status_outcome.return_value = None
+    hooks.judge_outcome.return_value = C.FIGHTER_A
+
+    with patch.object(fight_loop_module.logger, "warning") as mock_warning:
+        outcome = fight_loop_module._resolve_outcome(
+            fighters[C.FIGHTER_A],
+            fighters[C.FIGHTER_B],
+            {C.FIGHT_END: True, C.WINNER: C.FIGHTER_A},
+            1,
+            hooks,
+        )
+
+    assert outcome is None
     assert any("Ignoring judge-only outcome" in call.args[0] for call in mock_warning.call_args_list)
 
 

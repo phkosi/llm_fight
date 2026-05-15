@@ -2,12 +2,22 @@ import csv
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from click import unstyle
 from typer.testing import CliRunner
 
 from llm_fight.cli import app
 from llm_fight.engine import constants as C
 from llm_fight.utils.token_counter import PromptBudgetError
+
+
+@pytest.fixture(autouse=True)
+def configured_model(request):
+    if request.node.get_closest_marker("requires_missing_model"):
+        yield
+        return
+    with patch("llm_fight.config.Config.get_ollama_model", return_value="qwen3.6:35b"):
+        yield
 
 
 def _write_batch_csv(path, rows):
@@ -328,6 +338,7 @@ def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
     run_batch.assert_not_awaited()
 
 
+@pytest.mark.requires_missing_model
 def test_cli_simulate_explicit_config_requires_model_before_ping(tmp_path):
     runner = CliRunner()
     cfg = tmp_path / "no_model.ini"
