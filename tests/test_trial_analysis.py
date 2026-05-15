@@ -167,6 +167,16 @@ def test_analyze_trials_recomputes_totals_and_flags_note_mismatch(tmp_path):
     assert "note_polarity_mismatch" in (output_dir / "analysis.md").read_text(encoding="utf-8")
 
 
+def test_analysis_markdown_next_retest_matrix_reflects_finalized_qwen(tmp_path):
+    root = _make_run(tmp_path / "run")
+    output_dir = analyze_trials([root])
+    markdown = (output_dir / "analysis.md").read_text(encoding="utf-8")
+
+    assert "qwen3.6:35b: default finalized at 0.4/expansive" in markdown
+    assert "Configured qwen3.6:35b: baseline plus 0.2/expansive" not in markdown
+    assert "profile fallback is unblocked" in markdown
+
+
 def test_analyze_trials_blocks_generated_fallback_and_measures_creativity(tmp_path):
     root = _make_run(
         tmp_path / "generated",

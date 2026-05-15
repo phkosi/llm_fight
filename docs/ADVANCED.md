@@ -67,8 +67,8 @@ ollama_keep_alive = 10m
 ollama_proxy_mode = auto
 # Built-in tested-model defaults manage these unless locally overridden:
 # ollama_num_ctx = 90000
-# max_tokens_fighter = 512
-# max_tokens_judge = 4096
+# max_tokens_fighter = 768
+# max_tokens_judge = 6144
 # ollama_temperature = 0.4
 best_of_fighter = 1
 best_of_judge = 1
@@ -93,7 +93,7 @@ concurrent_runs = 1
 max_turns = 6
 ```
 
-`ollama_default_model` is required for LLM runs. Known tested models use the built-in registry first, then local `llmfight.ini` values override it. Unknown models keep generic program-managed context/output limits and leave `ollama_temperature = auto` so the provider default is used unless the local config sets a numeric value.
+`ollama_default_model` is required for LLM runs. Known tested models use the built-in registry first, then local `llmfight.ini` values override it. `qwen3.6:35b` currently defaults to `0.4/expansive` (`768` fighter tokens, `6144` judge tokens); `gemma4:26b` remains provisional on `0.4/default`. Unknown models keep generic program-managed context/output limits and leave `ollama_temperature = auto` so the provider default is used unless the local config sets a numeric value.
 
 `profile` remains accepted as a legacy alias for `anatomy_profile`, but new examples and docs should use `anatomy_profile`.
 

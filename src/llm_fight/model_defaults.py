@@ -56,13 +56,17 @@ MODEL_DEFAULTS = {
     "qwen3.6:35b": ModelDefaults(
         model="qwen3.6:35b",
         ollama_temperature=0.4,
-        max_tokens_fighter=DEFAULT_TOKEN_PRESET.fighter_tokens,
-        max_tokens_judge=DEFAULT_TOKEN_PRESET.judge_tokens,
+        max_tokens_fighter=TOKEN_PRESETS_BY_LABEL["expansive"].fighter_tokens,
+        max_tokens_judge=TOKEN_PRESETS_BY_LABEL["expansive"].judge_tokens,
         ollama_num_ctx=90000,
-        token_preset=DEFAULT_TOKEN_PRESET_LABEL,
-        evidence_status="provisional_default",
-        evidence_root="transcripts/trials/20260514_183917; transcripts/trials/20260514_203736",
-        notes="Keep 0.4/default until targeted default-finalization retests clear reliability gates.",
+        token_preset="expansive",
+        evidence_status="finalized_default",
+        evidence_root=(
+            "transcripts/trials/20260514_235729; "
+            "transcripts/trials/20260515_000524; "
+            "transcripts/trials/analysis/20260515_003931"
+        ),
+        notes="Promoted 0.4/expansive after configured and generated three-seed default-finalization retests.",
     ),
     "gemma4:26b": ModelDefaults(
         model="gemma4:26b",

@@ -359,11 +359,11 @@ def _render_markdown(payload: dict[str, Any]) -> str:
             "",
             "## Next Retest Matrix",
             "",
-            "- Configured qwen3.6:35b: baseline plus 0.2/expansive.",
-            "- Configured gemma4:26b: baseline plus 0.2/expansive and 0.7/focused.",
+            "- qwen3.6:35b: default finalized at 0.4/expansive; no immediate retest unless regressions appear.",
+            "- gemma4:26b: run the default-finalization matrix before changing its provisional 0.4/default.",
             (
-                "- Generated mode: rerun only after generated-profile fallback is below 20% in a dedicated "
-                "profile-generation sample."
+                "- Generated-mode prompt work: profile fallback is unblocked; focus next on generated-anatomy "
+                "target/consequence reliability before adding new mechanics."
             ),
         ]
     )

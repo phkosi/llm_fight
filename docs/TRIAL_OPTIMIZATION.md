@@ -12,6 +12,7 @@ Optimize for tactical emergence: multi-turn adaptation, mechanical consequences,
 - Generated-profile prompt pass: `transcripts/profile_trials/20260514_181840`, collected with `uv run llmfight collect-profile-trials` after smoke root `transcripts/profile_trials/20260514_181802`.
 - Configured finalist retest: `transcripts/trials/20260514_183917`, collected with `uv run llmfight collect-trials --matrix finalist` after smoke root `transcripts/trials/20260514_183741`; analyzed with `uv run llmfight analyze-trials transcripts/trials/20260514_183917`.
 - Generated-mode retest: `transcripts/trials/20260514_203736`, collected with `uv run llmfight collect-trials --mode generated` after smoke root `transcripts/trials/20260514_203355`; analyzed with `uv run llmfight analyze-trials transcripts/trials/20260514_203736`.
+- Qwen default-finalization retest: configured root `transcripts/trials/20260514_235729` after smoke root `transcripts/trials/20260514_235603`, generated root `transcripts/trials/20260515_000524` after smoke root `transcripts/trials/20260514_235636`; analyzed with `uv run llmfight analyze-trials transcripts/trials/20260514_235729 transcripts/trials/20260515_000524`, output `transcripts/trials/analysis/20260515_003931`.
 - Analyze with `uv run llmfight analyze-trials transcripts/trials/20260513_231206 transcripts/trials/20260513_233837`.
 
 The configured pilot established the first parameter signal. Its structured reviews settle at baseline 13, candidate 1, inconclusive 2, so `0.4/default` remains the provisional default for both tested models unless a cleaner multi-seed retest clears promotion flags.
@@ -26,9 +27,11 @@ The configured finalist retest produced 15 completed cells and 9 same-model/same
 
 The generated-mode retest shows the prompt reliability pass worked for profile creation but not yet for parameter promotion. A narrow profile retry fix recovered invalid profile responses during the run; the full run completed 18/18 cells and 16 same-model blind pairs with 36 generated profiles, 0 fallback profiles, 3 P2 fallback turns, and pervasive custom generated anatomy. Blind judging settled at baseline 5, candidate 5, inconclusive 6. No setting promotes from this single-seed evidence. `qwen3.6:35b` `0.4/expansive` and `0.4/focused` are single-seed `retest`; most other qwen generated settings reject or remain inconclusive. `gemma4:26b` `0.2/default`, `0.4/expansive`, and `0.7/expansive` are single-seed `retest`; other gemma generated settings reject or remain inconclusive. Reviewers repeatedly found useful generated anatomy and silhouettes, but also target conflicts, dropped successful consequences, setup/status-only successful hits, P2 fallback, and `p=0.0` UX; treat these as generated-anatomy reliability findings rather than prompt-schema fallback findings.
 
+The qwen default-finalization retest promotes `qwen3.6:35b` to `0.4/expansive`. Configured mode settled baseline 3, candidate 5, inconclusive 1; generated mode settled baseline 2, candidate 5, inconclusive 2; combined analysis settled baseline 5, candidate 10, inconclusive 3. The `0.4/expansive` setting won configured 3/3 and generated 2/3 with no review disagreement, no profile fallback, no candidate P2 fallback, and all candidate cells completed on first attempt. Generated reviewers repeatedly found useful generated anatomy and silhouettes, but reliability concerns remain for other candidates.
+
 ## Runtime Defaults
 
-Runtime model selection now uses a built-in registry with local config overrides. `[General] ollama_default_model` is required for LLM runs. Tested models currently receive provisional `0.4/default` settings with `max_tokens_fighter = 512`, `max_tokens_judge = 4096`, and `ollama_num_ctx = 90000`; unknown models use generic output/context limits and omit temperature so the provider default applies unless the local config sets a numeric temperature.
+Runtime model selection now uses a built-in registry with local config overrides. `[General] ollama_default_model` is required for LLM runs. `qwen3.6:35b` is finalized on `0.4/expansive` with `max_tokens_fighter = 768`, `max_tokens_judge = 6144`, and `ollama_num_ctx = 90000`. `gemma4:26b` remains provisional on `0.4/default` with `512/4096` output limits until its targeted retest completes. Unknown models use generic output/context limits and omit temperature so the provider default applies unless the local config sets a numeric temperature.
 
 Targeted default-finalization evidence should be collected one model at a time:
 
@@ -54,9 +57,9 @@ Use `uv run llmfight collect-profile-trials` before changing generated-profile p
 
 ## Retest Matrix
 
-- Configured `qwen3.6:35b`: treat `0.2/expansive` as promising but still `retest`, not `promote`, because the finalist run had review disagreement and baseline P2 fallback flags.
+- `qwen3.6:35b`: use `0.4/expansive` as the finalized default. `0.2/expansive` rejects in the targeted qwen retest; `0.4/focused` remains retest because of P2 fallback and review disagreement.
 - Configured `gemma4:26b`: keep `0.4/default` as the provisional start; neither `0.2/expansive` nor `0.7/focused` cleared `retest`.
-- Generated mode: profile fallback is below 20% in both the profile-only sample and the full generated retest, and generated-mode recommendations are no longer blocked by profile fallback. No generated setting promotes. For `qwen3.6:35b`, `0.4/expansive` and `0.4/focused` are single-seed `retest`; most other candidates reject or remain inconclusive. For `gemma4:26b`, `0.2/default`, `0.4/expansive`, and `0.7/expansive` are single-seed `retest`; other settings reject or remain inconclusive.
+- Earlier single-seed generated mode: profile fallback is below 20% in both the profile-only sample and the full generated retest, and generated-mode recommendations are no longer blocked by profile fallback. That earlier generated run did not promote any setting by itself. The later qwen default-finalization retest supersedes its qwen single-seed note by promoting `0.4/expansive`; gemma generated settings still await targeted finalization evidence.
 
 Use at least 3 seeds for finalist retests before changing defaults. The configured finalist support is available as:
 
