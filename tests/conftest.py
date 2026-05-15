@@ -1,6 +1,24 @@
 import os
+from pathlib import Path
 
 import pytest
+
+_TEST_CONFIG_CREATED = False
+_TEST_CONFIG_PATH = Path(__file__).resolve().parents[1] / "llmfight.ini"
+
+
+def pytest_configure(config):
+    """Provide CI with the ignored local config that developer machines often have."""
+    global _TEST_CONFIG_CREATED
+    if _TEST_CONFIG_PATH.exists():
+        return
+    _TEST_CONFIG_PATH.write_text("[General]\nollama_default_model = qwen3.6:35b\n", encoding="utf-8")
+    _TEST_CONFIG_CREATED = True
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if _TEST_CONFIG_CREATED and _TEST_CONFIG_PATH.exists():
+        _TEST_CONFIG_PATH.unlink()
 
 
 def pytest_addoption(parser):

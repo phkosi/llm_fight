@@ -1,6 +1,7 @@
 import random
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+from click import unstyle
 from typer.testing import CliRunner
 
 from llm_fight.cli import app
@@ -9,6 +10,10 @@ from llm_fight.engine.combat_log import CombatLog, CombatTurn
 from llm_fight.judge import JudgePhase2FailureError
 from llm_fight.simulation import FightEvent
 from llm_fight.utils.token_counter import PromptBudgetError
+
+
+def _plain_cli_output(result):
+    return " ".join(unstyle(result.output).split())
 
 
 def test_cli_play():
@@ -357,7 +362,7 @@ def test_cli_play_explicit_config_requires_model_before_ping(tmp_path):
         result = runner.invoke(app, ["play", "--config", str(cfg), "--simple-output"])
 
     assert result.exit_code != 0
-    assert "ollama_default_model is required" in result.output
+    assert "ollama_default_model is required" in _plain_cli_output(result)
     ping.assert_not_awaited()
 
 
@@ -369,7 +374,7 @@ def test_cli_play_without_default_config_requires_model_before_ping(tmp_path):
         result = runner.invoke(app, ["play", "--simple-output"])
 
     assert result.exit_code != 0
-    assert "ollama_default_model is required" in result.output
+    assert "ollama_default_model is required" in _plain_cli_output(result)
     ping.assert_not_awaited()
 
 
@@ -436,7 +441,7 @@ def test_cli_play_phase2_fail_closed_error_is_actionable():
         result = runner.invoke(app, ["play"])
 
     assert result.exit_code != 0
-    assert "Judge Phase 2 failed after retries under fail_closed policy" in result.output
+    assert "Judge Phase 2 failed after retries under fail_closed policy" in _plain_cli_output(result)
 
 
 def test_cli_llm_validation_failure_is_actionable():
@@ -451,8 +456,9 @@ def test_cli_llm_validation_failure_is_actionable():
         result = runner.invoke(app, ["play", "--simple-output"])
 
     assert result.exit_code != 0
-    assert "LLM output could not be parsed" in result.output
-    assert "max_tokens_judge" in result.output
+    plain_output = _plain_cli_output(result)
+    assert "LLM output could not be parsed" in plain_output
+    assert "max_tokens_judge" in plain_output
 
 
 def test_cli_prompt_budget_error_is_actionable():
@@ -473,7 +479,8 @@ def test_cli_prompt_budget_error_is_actionable():
         result = runner.invoke(app, ["play", "--simple-output"])
 
     assert result.exit_code != 0
-    assert "Prompt budget exceeded for judge phase 2" in result.output
-    assert "prompt uses about 900 tokens" in result.output
-    assert "context limit is 800" in result.output
-    assert C.CONFIG_JUDGE_LOG_WINDOW in result.output
+    plain_output = _plain_cli_output(result)
+    assert "Prompt budget exceeded for judge phase 2" in plain_output
+    assert "prompt uses about 900 tokens" in plain_output
+    assert "context limit is 800" in plain_output
+    assert C.CONFIG_JUDGE_LOG_WINDOW in plain_output

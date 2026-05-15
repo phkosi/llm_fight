@@ -22,7 +22,15 @@ No active issues.
 
 ## P1
 
-No active issues.
+### ISSUE-005: GitHub CI fails without local llmfight.ini in mocked LLM tests
+
+- Status: resolved
+- Task: TODO.md - Restore hermetic CI defaults for mocked LLM tests
+- Source: implementation review
+- Evidence: GitHub `Run tests` fails with 34 failures. Common root is `[General] ollama_default_model is required for LLM runs. Set it in llmfight.ini or pass --config with a file that sets it.` Local checkouts can pass when they contain an ignored `llmfight.ini`, while CI does not because `*.ini` files are ignored. Remaining failures assert against Rich/Typer-rendered error-panel output.
+- Impact: Main CI is red, and local test results are misleading when a developer's ignored config file supplies a model that CI does not have.
+- Suggested fix: Provide a test-only default model before test modules import `llm_fight.config`, while preserving tests that intentionally verify missing-model behavior; normalize CLI error assertions that compare Rich/Typer output.
+- Tests: Passed `uv run pytest -q tests/test_agents_endpoint.py tests/test_agents_transport.py tests/test_cli_play.py tests/test_cli_simulate.py tests/test_trials.py --cov=llm_fight`; passed `uv run ruff format --check .`; passed `uv run ruff check .`; passed `uv run mypy src/llm_fight`; passed `uv run pytest -q --cov=llm_fight`.
 
 ## P2
 

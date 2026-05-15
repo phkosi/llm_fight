@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from llm_fight import config as config_mod
@@ -26,6 +27,10 @@ from llm_fight.trials.specs import (
     parse_seed_list,
 )
 from llm_fight.trials.summaries import build_summary, render_summary_markdown
+
+
+def _plain_cli_output(result):
+    return " ".join(unstyle(result.output).split())
 
 
 def _custom_profile(part_id="left_wing"):
@@ -679,6 +684,6 @@ def test_cli_collect_trials_default_finalization_requires_model(tmp_path):
         )
 
     assert result.exit_code != 0
-    assert "requires exactly one --model" in result.output
+    assert "requires exactly one --model" in _plain_cli_output(result)
     ping.assert_not_awaited()
     collect.assert_not_awaited()

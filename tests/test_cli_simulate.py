@@ -228,8 +228,9 @@ def test_cli_simulate_exits_nonzero_for_all_error_rows(tmp_path):
         result = runner.invoke(app, ["simulate", "--runs", "2"])
 
     assert result.exit_code == 1
-    assert "Simulation saved to" in result.output
-    assert "2 error row(s)" in result.output
+    plain_output = _plain_cli_output(result)
+    assert "Simulation saved to" in plain_output
+    assert "2 error row(s)" in plain_output
 
 
 def test_cli_simulate_exits_nonzero_for_mixed_error_rows(tmp_path):
@@ -250,8 +251,9 @@ def test_cli_simulate_exits_nonzero_for_mixed_error_rows(tmp_path):
         result = runner.invoke(app, ["simulate", "--runs", "2"])
 
     assert result.exit_code == 1
-    assert "1 error row(s)" in result.output
-    assert "1 completed successfully" in result.output
+    plain_output = _plain_cli_output(result)
+    assert "1 error row(s)" in plain_output
+    assert "1 completed successfully" in plain_output
 
 
 def test_cli_simulate_continue_on_error_exits_zero_with_warning(tmp_path):
@@ -272,7 +274,7 @@ def test_cli_simulate_continue_on_error_exits_zero_with_warning(tmp_path):
         result = runner.invoke(app, ["simulate", "--runs", "2", "--continue-on-error"])
 
     assert result.exit_code == 0
-    assert "1 error row(s)" in result.output
+    assert "1 error row(s)" in _plain_cli_output(result)
 
 
 def test_cli_simulate_prompt_budget_error_is_actionable():
@@ -293,8 +295,9 @@ def test_cli_simulate_prompt_budget_error_is_actionable():
         result = runner.invoke(app, ["simulate"])
 
     assert result.exit_code != 0
-    assert "Prompt budget exceeded for fighter action" in result.output
-    assert C.CONFIG_FIGHTER_LOG_WINDOW in result.output
+    plain_output = _plain_cli_output(result)
+    assert "Prompt budget exceeded for fighter action" in plain_output
+    assert C.CONFIG_FIGHTER_LOG_WINDOW in plain_output
 
 
 def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
@@ -320,7 +323,7 @@ def test_cli_simulate_invalid_config_fails_before_ping(tmp_path):
         config_mod.CONFIG = original
 
     assert result.exit_code != 0
-    assert "concurrent_runs" in result.output
+    assert "concurrent_runs" in _plain_cli_output(result)
     ping.assert_not_awaited()
     run_batch.assert_not_awaited()
 
@@ -335,7 +338,7 @@ def test_cli_simulate_explicit_config_requires_model_before_ping(tmp_path):
         result = runner.invoke(app, ["simulate", "--config", str(cfg)])
 
     assert result.exit_code != 0
-    assert "ollama_default_model is required" in result.output
+    assert "ollama_default_model is required" in _plain_cli_output(result)
     ping.assert_not_awaited()
 
 
