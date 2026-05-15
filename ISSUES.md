@@ -56,6 +56,16 @@ No active issues.
 - Suggested fix: Tighten generated target-part canonicalization across fighter prompts, Judge Phase 1 probability text, Judge Phase 2 consequence mapping, and summaries; require successful rolls to produce a clear matching wound/effect or explicit no-effect reason; avoid `valid` actions with `p=0.0`; consider bounds or prompt guidance for early limb-severing severity.
 - Tests: Add generated-anatomy regressions for custom target acceptance, invalid/valid target consistency across turns, successful roll to consequence mapping, no-effect explanations, `p=0.0` probability handling, and high-damage generated limb outcomes.
 
+### ISSUE-004: Generated play can silently fall back to preset anatomy for one fighter
+
+- Status: open
+- Task: none
+- Source: playtest
+- Evidence: Single live play session on 2026-05-15 used a temporary copy of `llmfight.ini` with `[General] fighter_creation_mode = generated`, `save_transcripts = true`, and `transcript_dir = transcripts/generated_playtest_tmp`, then ran `uv run llmfight play --config <temp-generated-config> --simple-output --max-turns 4`. The setup trace recorded Fighter A profile generation ending with `{"mode":"fallback","nudge":"original","error":"invalid_generated_profile"}`, while Fighter B finished with `{"mode":"generated","nudge":"warrior","error":null}`. The same setup snapshot showed A on the default humanoid part set (`head, heart, left_arm, left_eye, left_leg, right_arm, right_eye, right_leg, torso`) and B on a generated custom set including `armor_core`.
+- Impact: A user can intentionally run generated mode and still get a mixed fallback/generated matchup without the session failing fast. That weakens trust in generated-mode playtests, makes one-off UX checks easy to misread, and can hide prompt-regression risk behind a superficially successful fight.
+- Suggested fix: Make generated-mode fallback much louder in `play` output and transcript summaries, and consider an opt-in strict mode that aborts or exits nonzero when either fighter falls back instead of silently continuing the fight with preset anatomy.
+- Tests: Add CLI/simulation coverage for generated-mode `play` sessions where one fighter falls back and the other generates successfully; assert that the fallback is surfaced clearly in output/metadata, and add a strict-mode test if abort-on-fallback is implemented.
+
 ## P3
 
 No active issues.
