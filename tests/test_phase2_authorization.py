@@ -1219,3 +1219,60 @@ def test_phase2_canonicalizes_effect_added_target_alias():
     effect = sanitized[C.DELTA][C.FIGHTER_B][C.EFFECTS_ADDED][0]
     assert effect[C.METADATA][C.TARGETED_PART] == "left_arm"
     assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_CANONICALIZED_EFFECT_TARGET
+
+
+def test_phase2_repairs_successful_custom_part_damage_from_unique_suffix():
+    wing_profile = {
+        C.CONFIG_FIGHTER_CLASS: "winged fighter",
+        C.LOADOUT: "profile weapon",
+        "environment": "profile arena",
+        C.BODY_PARTS: [
+            {"id": "left_wing", "layers": [{C.NAME: "feathers", C.MAX_HP: 12}]},
+            {"id": "tail", "is_vital": True, "layers": [{C.NAME: "muscle", C.MAX_HP: 8}]},
+        ],
+    }
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_profile(C.FIGHTER_B, build_fighter_profile(wing_profile)),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {C.NARRATION: "A hits but the judge omits mechanics.", C.DELTA: {}, C.FIGHT_END: False, C.WINNER: None}
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I slash B's wing with my sword.", C.FIGHTER_B: "I wait."},
+    )
+
+    wound = sanitized[C.DELTA][C.FIGHTER_B][C.WOUNDS][0]
+    assert wound[C.TARGETED_PART] == "left_wing"
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_P2_MECHANICAL_REPAIR
+
+
+def test_phase2_warns_when_successful_custom_damage_has_no_resolvable_target():
+    fighters = {
+        C.FIGHTER_A: FighterState.from_preset(C.FIGHTER_A, "humanoid"),
+        C.FIGHTER_B: FighterState.from_profile(C.FIGHTER_B, build_fighter_profile(_custom_profile("armor_core"))),
+    }
+    p1 = {f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True, f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False}
+    rolls = {C.FIGHTER_A: True, C.FIGHTER_B: False}
+    p2 = {C.NARRATION: "A lands somewhere unclear.", C.DELTA: {}, C.FIGHT_END: True, C.WINNER: C.FIGHTER_A}
+
+    sanitized = sim_module._authorize_phase2_result(
+        p2,
+        p1,
+        rolls,
+        fighters,
+        attempts={C.FIGHTER_A: "I slash wildly at B.", C.FIGHTER_B: "I wait."},
+    )
+
+    assert sanitized[C.DELTA] == {}
+    assert sanitized[C.FIGHT_END] is False
+    assert sanitized[C.WINNER] is None
+    assert sanitized[C.VALIDATION_WARNINGS][0]["code"] == C.WARNING_CODE_P2_NO_EFFECT
+    assert sanitized[C.NARRATION] == (
+        "A successful damage attempt had no resolvable target, so no mechanical effect was applied."
+    )

@@ -56,13 +56,13 @@ No active issues.
 
 ### ISSUE-003: Generated anatomy target resolution can drop successful consequences
 
-- Status: tasked
-- Task: TODO.md - Fix Generated-Anatomy Target Consequences
+- Status: resolved
+- Task: completed - Fix Generated-Anatomy Target Consequences
 - Source: playtest
 - Evidence: Clean generated-mode retest `uv run llmfight collect-trials --mode generated` wrote accepted artifacts to `transcripts/trials/20260514_203736` after smoke root `transcripts/trials/20260514_203355`. `uv run llmfight analyze-trials transcripts/trials/20260514_203736` reported 18/18 completed cells, 3 P2 fallback turns, 16 reviewed blind pairs, and 36 generated profiles with 0 profile fallbacks, but reviewers repeatedly flagged generated-anatomy target conflicts, successful rolls with missing or partial damage consequences, setup/status-only outcomes after successful attacks, `valid` actions scored at `p=0.0`, target-ownership confusion, and custom target-name drift.
 - Impact: Generated anatomy now produces useful originality and custom silhouettes, but target/consequence drift blocks clean generated-mode parameter conclusions and weakens readable causality when non-humanoid body parts enter the fight loop.
-- Suggested fix: Tighten generated target-part canonicalization across fighter prompts, Judge Phase 1 probability text, Judge Phase 2 consequence mapping, and summaries; require successful rolls to produce a clear matching wound/effect or explicit no-effect reason; avoid `valid` actions with `p=0.0`; consider bounds or prompt guidance for early limb-severing severity.
-- Tests: Add generated-anatomy regressions for custom target acceptance, invalid/valid target consistency across turns, successful roll to consequence mapping, no-effect explanations, `p=0.0` probability handling, and high-damage generated limb outcomes.
+- Suggested fix: Resolved by adding unique-token custom part normalization, expanding damage intent for sword actions, repairing missing successful damage to custom targets such as wings, adding explicit no-effect warnings when successful damage has no resolvable target, and reporting `valid=true` / `p=0.0` as `zero_probability` without consuming RNG.
+- Tests: Added generated/custom anatomy regression coverage for custom target suffix acceptance, successful roll consequence repair, explicit no-effect warning, and `valid=true` / `p=0.0` roll metadata. Verified with `uv run pytest -q tests/test_profile_generation.py tests/test_profiles.py tests/test_phase2_authorization.py tests/test_simulation.py tests/test_simulation_trace.py tests/test_simulation_probabilities.py tests/test_trials.py tests/test_trial_analysis.py tests/test_render.py tests/engine/test_fighter.py tests/engine/test_prompts.py -p no:cacheprovider` (176 passed), `uv run ruff format --check .`, `uv run ruff check .`, and `uv run mypy src/llm_fight`.
 
 ### ISSUE-004: Generated play can silently fall back to preset anatomy for one fighter
 

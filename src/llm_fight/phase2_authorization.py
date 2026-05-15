@@ -32,6 +32,7 @@ _DAMAGE_INTENT_TERMS = {
     "smash",
     "stab",
     "strike",
+    "sword",
     "swing",
     "thrust",
     "weapon",
@@ -234,6 +235,12 @@ def _mentioned_opponent_parts(
             and not _self_owned_part_mention(text, alias, source_fighter)
         ):
             mentioned.add(resolved_alias)
+    if mentioned:
+        return mentioned
+    for token in re.findall(r"[a-z0-9_-]+", text):
+        resolved_token = target_fighter.normalize_part_name(token)
+        if resolved_token is not None and not _self_owned_part_mention(text, token, source_fighter):
+            mentioned.add(resolved_token)
     return mentioned
 
 
@@ -358,6 +365,11 @@ def _wound_type_supported_by_attempt(wound: dict[str, Any], attempt: str) -> boo
 
 
 def _sanitize_phase2_narration(sanitized: dict[str, Any], warnings: list[dict[str, Any]]) -> None:
+    if any(warning.get("code") == C.WARNING_CODE_P2_NO_EFFECT for warning in warnings):
+        sanitized[C.NARRATION] = (
+            "A successful damage attempt had no resolvable target, so no mechanical effect was applied."
+        )
+        return
     invalid_target_warning_codes = {
         C.WARNING_CODE_INVALID_P2_WOUND_TARGET,
         C.WARNING_CODE_INVALID_EFFECT_REMOVAL_TARGET,
@@ -1014,6 +1026,48 @@ def _successful_damage_sources(
     return damage_sources
 
 
+def _successful_unresolved_damage_sources(
+    authorized_sources: set[str],
+    attempts: dict[str, str] | None,
+    fighters: dict[str, FighterState],
+) -> list[tuple[str, str]]:
+    if attempts is None:
+        return []
+
+    unresolved: list[tuple[str, str]] = []
+    for source_id in (C.FIGHTER_A, C.FIGHTER_B):
+        if source_id not in authorized_sources:
+            continue
+        source_attempt = attempts.get(source_id, "")
+        if not _attempt_has_damage_intent(source_attempt):
+            continue
+        target_id = _opponent_id(source_id)
+        if _repair_target_part(source_attempt, fighters[source_id], fighters[target_id]) is None:
+            unresolved.append((source_id, target_id))
+    return unresolved
+
+
+def _no_effect_warnings_for_unresolved_damage(
+    unresolved_sources: list[tuple[str, str]],
+    wound_sources_by_target: dict[str, set[str]],
+) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
+    for source_id, target_id in unresolved_sources:
+        if source_id in wound_sources_by_target.get(target_id, set()):
+            continue
+        warnings.append(
+            _phase2_validation_warning(
+                code=C.WARNING_CODE_P2_NO_EFFECT,
+                fighter_id=target_id,
+                field=f"delta.{target_id}.{C.WOUNDS}",
+                source=source_id,
+                action="none",
+                reason="successful_damage_attempt_without_resolvable_target",
+            )
+        )
+    return warnings
+
+
 def _repair_missing_successful_damage(
     *,
     sanitized_delta: dict[str, Any],
@@ -1296,12 +1350,14 @@ def authorize_phase2_result(
             sanitized_delta[fighter_id] = authorized_delta
 
     damage_sources = _successful_damage_sources(authorized_sources, attempts, fighters)
+    unresolved_damage_sources = _successful_unresolved_damage_sources(authorized_sources, attempts, fighters)
     repair_warnings, repaired_sources = _repair_missing_successful_damage(
         sanitized_delta=sanitized_delta,
         wound_sources_by_target=wound_sources_by_target,
         damage_sources=damage_sources,
         attempts=attempts,
     )
+    no_effect_warnings = _no_effect_warnings_for_unresolved_damage(unresolved_damage_sources, wound_sources_by_target)
     setup_repair_warnings, repaired_setups = _repair_missing_successful_setup(
         sanitized_delta=sanitized_delta,
         authorized_sources=authorized_sources,
@@ -1316,7 +1372,13 @@ def authorize_phase2_result(
         sanitized[C.WINNER] = None
 
     sanitized[C.DELTA] = sanitized_delta
-    warnings = _merge_phase2_warnings(warnings, invalid_target_warnings, repair_warnings, setup_repair_warnings)
+    warnings = _merge_phase2_warnings(
+        warnings,
+        invalid_target_warnings,
+        repair_warnings,
+        setup_repair_warnings,
+        no_effect_warnings,
+    )
     if warnings:
         sanitized[C.VALIDATION_WARNINGS] = warnings
         _sanitize_phase2_narration(sanitized, warnings)
@@ -1352,6 +1414,7 @@ def authorize_phase2_result(
         C.WARNING_CODE_P2_WOUND_TYPE_MISMATCH,
         C.WARNING_CODE_INVALID_EFFECT_PAYLOAD,
         C.WARNING_CODE_P2_EFFECT_SOURCE_MISMATCH,
+        C.WARNING_CODE_P2_NO_EFFECT,
     }
     if not sanitized_delta and any(warning.get("code") in terminal_suppression_warning_codes for warning in warnings):
         sanitized[C.FIGHT_END] = False

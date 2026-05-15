@@ -215,6 +215,17 @@ class FighterState:
             logger.debug("Normalized body part '%s' to '%s' for fighter %s", part_name, alias, self.id)
             return alias
 
+        raw_tokens = {token for token in normalized.split("_") if token}
+        if raw_tokens:
+            matches = [
+                known_part
+                for known_part in self.parts
+                if raw_tokens <= {token for token in known_part.lower().replace("-", "_").split("_") if token}
+            ]
+            if len(matches) == 1:
+                logger.debug("Normalized body part '%s' to '%s' for fighter %s", part_name, matches[0], self.id)
+                return matches[0]
+
         return None
 
     def normalize_damage_type(self, damage_type: C.DamageType | str) -> str:

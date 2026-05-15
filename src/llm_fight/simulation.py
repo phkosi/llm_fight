@@ -162,6 +162,10 @@ def _resolve_attempt_roll(
         metadata["reason"] = "invalid_probability"
         return metadata
 
+    if probability <= 0:
+        metadata.update({"probability": probability, "reason": "zero_probability"})
+        return metadata
+
     roll = fight_rng.random() if fight_rng is not None else rand()
     success = roll < probability
     metadata.update(

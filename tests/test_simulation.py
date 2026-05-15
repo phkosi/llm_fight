@@ -201,7 +201,7 @@ async def test_single_fight_uses_fight_rng_for_success_rolls():
         }
 
     fight_rng = MagicMock()
-    fight_rng.random.side_effect = [0.0, 0.99]
+    fight_rng.random.return_value = 0.0
 
     with (
         patch.object(sim_module, "get_fighter_attempt", new=AsyncMock(side_effect=fake_get_attempt)),
@@ -212,15 +212,15 @@ async def test_single_fight_uses_fight_rng_for_success_rolls():
         result, combat_log = await sim_module._single_fight(fight_rng=fight_rng, return_log=True)
 
     assert result[C.WINNER] == C.FIGHTER_A
-    assert fight_rng.random.call_count == 2
+    assert fight_rng.random.call_count == 1
     mock_rand.assert_not_called()
     turn_rolls = combat_log.turns[0].rolls
     assert turn_rolls[C.FIGHTER_A]["roll"] == 0.0
     assert turn_rolls[C.FIGHTER_A]["success"] is True
     assert turn_rolls[C.FIGHTER_A]["reason"] == "success"
-    assert turn_rolls[C.FIGHTER_B]["roll"] == 0.99
+    assert turn_rolls[C.FIGHTER_B]["roll"] is None
     assert turn_rolls[C.FIGHTER_B]["success"] is False
-    assert turn_rolls[C.FIGHTER_B]["reason"] == "failed"
+    assert turn_rolls[C.FIGHTER_B]["reason"] == "zero_probability"
 
 
 @pytest.mark.asyncio

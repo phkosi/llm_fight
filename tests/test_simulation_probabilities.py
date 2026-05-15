@@ -8,6 +8,22 @@ from llm_fight.engine import constants as C
 from llm_fight.state import FighterState
 
 
+def test_resolve_turn_rolls_valid_zero_probability_is_explicit_no_roll():
+    p1 = {
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_valid": True,
+        f"{C.ATTEMPT}_{C.FIGHTER_A}_prob": "0.0",
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_valid": False,
+        f"{C.ATTEMPT}_{C.FIGHTER_B}_prob": "0.0",
+    }
+
+    rolls, metadata = sim_module._resolve_turn_rolls(p1)
+
+    assert rolls[C.FIGHTER_A] is False
+    assert metadata[C.FIGHTER_A]["probability"] == 0.0
+    assert metadata[C.FIGHTER_A]["reason"] == "zero_probability"
+    assert metadata[C.FIGHTER_A]["roll"] is None
+
+
 @pytest.mark.asyncio
 async def test_single_fight_logs_invalid_probabilities(tmp_path):
     # Setup fighter mocks
