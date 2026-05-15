@@ -75,9 +75,16 @@ MODEL_DEFAULTS = {
         max_tokens_judge=DEFAULT_TOKEN_PRESET.judge_tokens,
         ollama_num_ctx=90000,
         token_preset=DEFAULT_TOKEN_PRESET_LABEL,
-        evidence_status="provisional_default",
-        evidence_root="transcripts/trials/20260514_183917; transcripts/trials/20260514_203736",
-        notes="Configured and generated retests did not promote a candidate over 0.4/default.",
+        evidence_status="finalized_default",
+        evidence_root=(
+            "transcripts/trials/20260515_005132; "
+            "transcripts/trials/20260515_010747; "
+            "transcripts/trials/analysis/20260515_014248"
+        ),
+        notes=(
+            "Kept 0.4/default after configured and generated three-seed default-finalization retests; "
+            "no candidate cleared promotion because of review disagreements and P2 fallback flags."
+        ),
     ),
 }
 

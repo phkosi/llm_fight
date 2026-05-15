@@ -360,7 +360,7 @@ def _render_markdown(payload: dict[str, Any]) -> str:
             "## Next Retest Matrix",
             "",
             "- qwen3.6:35b: default finalized at 0.4/expansive; no immediate retest unless regressions appear.",
-            "- gemma4:26b: run the default-finalization matrix before changing its provisional 0.4/default.",
+            "- gemma4:26b: default finalized at 0.4/default; no candidate cleared the promotion rule.",
             (
                 "- Generated-mode prompt work: profile fallback is unblocked; focus next on generated-anatomy "
                 "target/consequence reliability before adding new mechanics."

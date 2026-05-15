@@ -93,7 +93,7 @@ concurrent_runs = 1
 max_turns = 6
 ```
 
-`ollama_default_model` is required for LLM runs. Known tested models use the built-in registry first, then local `llmfight.ini` values override it. `qwen3.6:35b` currently defaults to `0.4/expansive` (`768` fighter tokens, `6144` judge tokens); `gemma4:26b` remains provisional on `0.4/default`. Unknown models keep generic program-managed context/output limits and leave `ollama_temperature = auto` so the provider default is used unless the local config sets a numeric value.
+`ollama_default_model` is required for LLM runs. Known tested models use the built-in registry first, then local `llmfight.ini` values override it. `qwen3.6:35b` defaults to `0.4/expansive` (`768` fighter tokens, `6144` judge tokens); `gemma4:26b` defaults to the conservative `0.4/default` (`512` fighter tokens, `4096` judge tokens). Unknown models keep generic program-managed context/output limits and leave `ollama_temperature = auto` so the provider default is used unless the local config sets a numeric value.
 
 `profile` remains accepted as a legacy alias for `anatomy_profile`, but new examples and docs should use `anatomy_profile`.
 

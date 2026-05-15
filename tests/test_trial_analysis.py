@@ -173,7 +173,9 @@ def test_analysis_markdown_next_retest_matrix_reflects_finalized_qwen(tmp_path):
     markdown = (output_dir / "analysis.md").read_text(encoding="utf-8")
 
     assert "qwen3.6:35b: default finalized at 0.4/expansive" in markdown
+    assert "gemma4:26b: default finalized at 0.4/default" in markdown
     assert "Configured qwen3.6:35b: baseline plus 0.2/expansive" not in markdown
+    assert "run the default-finalization matrix before changing its provisional 0.4/default" not in markdown
     assert "profile fallback is unblocked" in markdown
 
 
